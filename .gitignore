@@ -1,0 +1,40 @@
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+ios/
+android/
+
+# Metro
+.metro-health-check*
+
+# Environment (secrets) — never commit real env
+.env
+.env.local
+.env.*.local
+
+# Claude Code — 개인/로컬 설정만 제외 (agents·skills·settings.json은 공유 자산이라 추적)
+.claude/settings.local.json
+
+# Debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+
+# IDE
+*.tsbuildinfo

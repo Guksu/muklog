@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "muklog",
+    "slug": "muklog",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "muklog",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.muklog.app"
+    },
+    "android": {
+      "package": "com.muklog.app"
+    },
+    "plugins": [
+      "expo-dev-client",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "resizeMode": "contain"
+        }
+      ],
+      "expo-asset"
+    ]
+  }
+}
