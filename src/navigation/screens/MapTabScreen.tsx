@@ -4,7 +4,7 @@ import React from 'react';
 
 import { Screen, Text } from '@/components';
 
-export function MapTabScreen() {
+export const MapTabScreen = () => {
   return (
     <Screen center>
       <Text variant="h3" color="fgWeak" style={{ textAlign: 'center' }}>

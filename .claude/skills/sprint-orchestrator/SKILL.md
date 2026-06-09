@@ -12,6 +12,7 @@ muklog 개발을 **스프린트 단위**로 조율하는 통합 스킬. 한 스�
 설계→구현→검증의 피드백 루프가 핵심이므로 에이전트 팀으로 운영한다. QA는 모듈 완성 직후 점진적으로 개입한다(incremental QA).
 
 ## 절대 규칙
+0. **TDD가 기본.** 모든 기능은 테스트 우선(Red→Green→Refactor). planner가 인수조건을 테스트 케이스로 정의 → developer가 실패 테스트 먼저 작성 후 구현 → qa가 테스트 존재·의미·통과를 검증. **스프린트 종료 기준에 `npm test` 전체 통과 + `tsc --noEmit` 포함.** 상세: `docs/testing-strategy.md`.
 1. **1 스프린트 = 1 기능.** 여러 기능을 한 스프린트로 묶지 않는다. 사용자가 여러 기능을 요청하면 첫 기능만 진행하고 나머지는 다음 스프린트로 안내한다.
 2. **git 작업 절대 금지.** commit·push·branch·merge 등 모든 git 명령을 수행하지 않는다. 커밋과 푸시는 **사용자가 직접** 한다. 스프린트 종료 시 "이제 커밋하셔도 됩니다"로 안내만 한다.
 3. **모든 에이전트 호출에 `model: "opus"`.**
@@ -84,7 +85,7 @@ muklog 개발을 **스프린트 단위**로 조율하는 통합 스킬. 한 스�
 | qa-inspector | `docs/sprint/{slug}/qa-report.md` |
 
 ### Phase 4: 종료 판정
-1. qa-report.md의 모든 인수조건이 **통과**인지 확인. 미통과면 developer 재작업 → qa 재검증(최대 2~3회).
+1. qa-report.md의 모든 인수조건이 **통과**인지 확인 + **`npm test` 전체 통과 + `tsc --noEmit`** 확인(TDD 종료 기준). 미통과면 developer 재작업 → qa 재검증(최대 2~3회).
 2. 잔여 이슈는 `docs/sprint/{slug}/qa-report.md`에 "미해결"로 명시.
 3. 스프린트 요약을 사용자에게 보고.
 

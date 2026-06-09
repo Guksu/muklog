@@ -27,6 +27,8 @@ supabase/
 ```
 
 ## 핵심 규칙 (왜)
+- **TDD가 기본**: 테스트를 먼저 쓰고(Red) → 통과시키고(Green) → 정리(Refactor)한다. 인수조건 1개 = 사이클 1회. 스택·패턴·테스트 경계는 `references/testing.md`와 `docs/testing-strategy.md`. 구현 완료 기준은 `npm test` 전체 통과 + `tsc --noEmit`. (SQL/RPC·외부 SDK는 단위 대상 아님 → 모킹/스모크.)
+- **코드 컨벤션 100% 준수**: 구현 전 `docs/code-convention.md`를 읽고 따른다. 핵심 — **useCallback/useMemo 지양**(일반 함수/직접 계산), **컴포넌트·훅은 화살표 const**, **우리 함수 매개변수는 항상 객체(named arguments)**(배열/이벤트/setState/외부 API 콜백은 예외), **useEffect 콜백·타이머는 명명 함수**, **도메인 식별 문자열은 enum-style `as const`**, **스타일은 원티드 토큰(useTheme)만**(raw hex 금지).
 - **계약 일치**: 쿼리/Edge Function 응답 shape과 프론트 훅 타입을 동일하게. 경계면 버그의 주원인이므로 dev-notes.md에 "생산자↔소비자" 매핑을 남긴다.
 - **보안 키 비노출**: Kakao REST 키는 Edge Function 환경변수로만. 앱 번들에 넣으면 추출·쿼터 남용 위험.
 - **RLS 필수**: 모든 테이블에 활성화. 사용자는 자신이 멤버인 방만 접근.
@@ -36,6 +38,7 @@ supabase/
 - **git 절대 금지**: 커밋·푸시·브랜치 등 어떤 git 명령도 실행하지 않는다.
 
 ## 스택별 상세 (필요 시 로드)
+- **테스트/TDD(jest-expo·RTL·모킹·Red-Green-Refactor): `references/testing.md`**
 - Supabase(클라이언트·익명인증·RLS·트리거·Storage·Realtime): `references/supabase.md`
 - Kakao(Map SDK 셋업·Local API·프록시 Edge Function): `references/kakao.md`
 - 원티드 토큰 매핑(theme/tokens.ts): `references/wanted-tokens.md`

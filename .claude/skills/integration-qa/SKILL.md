@@ -55,6 +55,22 @@ description: "muklog 통합 정합성 QA 가이드. 경계면(쿼리/Edge Functi
 - [ ] 색상/타이포/스페이싱이 원티드 토큰(`theme/`)을 사용 (하드코딩 금지)
 - [ ] 미사용 코드/엔드포인트 없음 (의도적 미사용은 명시)
 
+### TDD / 테스트 (`docs/testing-strategy.md`) 준수
+- [ ] 인수조건마다 대응 테스트가 존재한다 (plan.md §테스트 케이스 ↔ `*.spec.ts(x)`)
+- [ ] `npm test` 전체 통과 + `tsc --noEmit` 통과
+- [ ] 테스트가 **의미 있다**(껍데기 단언 금지) — 핵심 단언을 일부러 깨면 빨개지는지 표본 확인(load-bearing)
+- [ ] 경계·실패 경로 테스트 포함(빈/잘못된 입력, 네트워크 실패, 정원 초과, 에러 토큰 매핑 등)
+- [ ] 단위 경계 준수: 유틸/훅/화면은 테스트, SQL·RPC·외부 SDK는 모킹/스모크로 분리
+- [ ] 훅 테스트가 계약 매핑(snake→camel)·상태 전이(loading/success/error)를 검증
+
+### 코드 컨벤션 (`docs/code-convention.md`) 준수
+- [ ] `useCallback`/`useMemo` 미사용 (`grep -rn "useCallback\|useMemo" src/` 실제 호출 0건 — 주석 제외)
+- [ ] 컴포넌트·훅이 `export const X = () => {}` 화살표 형태 (`export function` 컴포넌트/훅 0건)
+- [ ] 우리가 정의한 함수의 매개변수가 객체(named arguments) — 배열/이벤트/setState/외부 API 콜백만 예외
+- [ ] useEffect 콜백·타이머가 명명 함수 (`useEffect(() =>` 인라인 0건)
+- [ ] 도메인 식별 문자열이 enum-style `as const` 상수 (판별 유니온 status는 예외)
+- [ ] 파일명 = 대표 export 심볼명
+
 ## 작업 방식
 - **각 모듈 완성 직후 즉시 검증**(incremental). 전체 완성 후 일괄 검증 금지 — 버그 누적·전파를 막는다.
 - Grep으로 패턴을 모아 대조한다 (예: 모든 `.from('muklogs')` 쿼리 ↔ 대응 훅 타입).

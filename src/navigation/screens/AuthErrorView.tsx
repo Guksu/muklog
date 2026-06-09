@@ -5,7 +5,7 @@ import React from 'react';
 import { Button, Screen, Text } from '@/components';
 import { useTheme } from '@/theme';
 
-export function AuthErrorView({ message, onRetry }: { message: string; onRetry: () => void }) {
+export const AuthErrorView = ({ message, onRetry }: { message: string; onRetry: () => void }) => {
   const theme = useTheme();
   return (
     <Screen center>

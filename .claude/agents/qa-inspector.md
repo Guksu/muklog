@@ -35,6 +35,8 @@ description: "muklog QA 검증 전문가. 스펙 준수와 모듈 간 통합 정
 
 ## 작업 원칙
 - `integration-qa` 스킬을 Skill 도구로 호출하거나 `.claude/skills/integration-qa/`를 읽어 체크리스트를 적용한다.
+- **TDD 준수를 검증한다.** 인수조건마다 대응 테스트 존재, `npm test` 전체 통과, `tsc --noEmit` 통과, 테스트가 의미 있는지(핵심 단언을 깨면 빨개지는지 표본 확인), 경계·실패 경로 커버. 기준: `docs/testing-strategy.md`.
+- **코드 컨벤션(`docs/code-convention.md`) 위반을 검증 항목에 포함한다.** useCallback/useMemo 실제 호출 0건, 컴포넌트·훅 화살표 const, named-object 인자, useEffect 명명 함수, enum-style 상수, 파일명=심볼명. Grep으로 전수 확인.
 - **각 모듈 완성 직후 점진적으로 검증한다** (전체 완성 후 1회 금지). 버그 누적·전파를 막는다.
 - 발견은 추측이 아닌 **파일:라인 근거**와 함께 보고한다.
 - git 작업 절대 금지.

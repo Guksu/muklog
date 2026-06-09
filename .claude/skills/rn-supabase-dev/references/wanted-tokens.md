@@ -65,16 +65,19 @@ export const shadow = {
 } as const;
 
 // 타이포 [프로젝트 정의 — Pretendard 기반]. RN: rem→px(×16), lineHeight는 절대값.
-const F = (size:number, ratio:number, family:string) => ({ fontSize:size, lineHeight:Math.round(size*ratio), fontFamily:family });
+// named arguments(코드 컨벤션): size/ratio가 같은 number 두 개라 순서 실수 방지를 위해 객체로 받는다.
+const makeTypography = ({ size, ratio, family }: { size: number; ratio: number; family: string }) => ({
+  fontSize: size, lineHeight: Math.round(size * ratio), fontFamily: family,
+});
 export const typography = {
-  display: F(40, 1.2,  'Pretendard-Bold'),
-  h1:      F(32, 1.25, 'Pretendard-Bold'),
-  h2:      F(24, 1.3,  'Pretendard-Bold'),
-  h3:      F(20, 1.4,  'Pretendard-SemiBold'),
-  bodyLg:  F(18, 1.6,  'Pretendard-Regular'),
-  body:    F(16, 1.6,  'Pretendard-Regular'),
-  bodySm:  F(14, 1.55, 'Pretendard-Regular'),
-  caption: F(12, 1.4,  'Pretendard-Medium'),
+  display: makeTypography({ size: 40, ratio: 1.2, family: 'Pretendard-Bold' }),
+  h1:      makeTypography({ size: 32, ratio: 1.25, family: 'Pretendard-Bold' }),
+  h2:      makeTypography({ size: 24, ratio: 1.3, family: 'Pretendard-Bold' }),
+  h3:      makeTypography({ size: 20, ratio: 1.4, family: 'Pretendard-SemiBold' }),
+  bodyLg:  makeTypography({ size: 18, ratio: 1.6, family: 'Pretendard-Regular' }),
+  body:    makeTypography({ size: 16, ratio: 1.6, family: 'Pretendard-Regular' }),
+  bodySm:  makeTypography({ size: 14, ratio: 1.55, family: 'Pretendard-Regular' }),
+  caption: makeTypography({ size: 12, ratio: 1.4, family: 'Pretendard-Medium' }),
 } as const;
 
 export const themes = {

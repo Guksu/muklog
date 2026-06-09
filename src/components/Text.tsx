@@ -13,7 +13,7 @@ export type TextProps = RNTextProps & {
   color?: ColorToken;
 };
 
-export function Text({ variant = 'body', color = 'fg', style, ...rest }: TextProps) {
+export const Text = ({ variant = 'body', color = 'fg', style, ...rest }: TextProps) => {
   const theme = useTheme();
   const base: TextStyle = {
     ...theme.typography[variant],

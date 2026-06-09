@@ -15,12 +15,12 @@ export type ScreenProps = {
   style?: ViewStyle;
 };
 
-export function Screen({
+export const Screen = ({
   children,
   center = false,
   edges = ['top', 'bottom', 'left', 'right'],
   style,
-}: ScreenProps) {
+}: ScreenProps) => {
   const theme = useTheme();
   return (
     <SafeAreaView

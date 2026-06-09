@@ -2,17 +2,17 @@
 // 루트 게이트. useAuth()의 AuthState 3분기를 화면으로 매핑한다.
 //   loading       → SplashView
 //   error         → AuthErrorView(재시도)
-//   authenticated → AppNavigator (NavigationContainer 안)
+//   authenticated → MembershipProvider + MembershipGate (멤버십 기반 Onboarding/RoomTabs 분기)
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
 
 import { useAuth } from '@/features/auth';
+import { MembershipProvider } from '@/features/room';
 
-import { AppNavigator } from './AppNavigator';
+import { MembershipGate } from './MembershipGate';
 import { AuthErrorView } from './screens/AuthErrorView';
 import { SplashView } from './screens/SplashView';
 
-export function AuthGate() {
+export const AuthGate = () => {
   const { state, retry } = useAuth();
 
   switch (state.status) {
@@ -22,9 +22,9 @@ export function AuthGate() {
       return <AuthErrorView message={state.message} onRetry={retry} />;
     case 'authenticated':
       return (
-        <NavigationContainer>
-          <AppNavigator />
-        </NavigationContainer>
+        <MembershipProvider userId={state.userId}>
+          <MembershipGate />
+        </MembershipProvider>
       );
     default: {
       // 빠짐없는 분기 보장(컴파일 타임): 새로운 status가 추가되면 여기서 타입 에러.

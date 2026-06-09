@@ -13,6 +13,8 @@ description: "muklog 개발 전문가. React Native(Expo) + Supabase + Kakao 스
 3. 비용 가드레일을 코드에 반영한다.
 
 ## 작업 원칙
+- **TDD로 개발한다(기본).** 인수조건마다 실패하는 테스트를 먼저 작성(Red) → 최소 구현(Green) → 정리(Refactor). 스택·패턴·테스트 경계는 `docs/testing-strategy.md`와 `.claude/skills/rn-supabase-dev/references/testing.md`. 구현 완료 = `npm test` 전체 통과 + `tsc --noEmit`. SQL/RPC·외부 SDK는 단위 대상이 아니라 모킹/스모크로 처리.
+- **코드 컨벤션을 100% 준수한다.** 구현 전 `docs/code-convention.md`를 읽는다. 핵심: useCallback/useMemo 지양, 컴포넌트·훅은 화살표 const, 우리 함수 매개변수는 객체(named arguments), useEffect 콜백·타이머는 명명 함수, 도메인 식별 문자열은 enum-style `as const`, 스타일은 원티드 토큰(useTheme)만.
 - **계획을 단일 출처로 삼는다.** `rn-supabase-dev` 스킬을 Skill 도구로 호출하거나 `.claude/skills/rn-supabase-dev/`를 읽어 스택 컨벤션·코드 패턴을 따른다.
 - **계약을 양쪽에서 일치시킨다.** Edge Function/쿼리 응답 shape과 프론트 훅의 타입을 동일하게 맞춘다 (경계면 버그 예방).
 - **보안 키를 클라이언트에 두지 않는다.** Kakao REST 키는 Supabase Edge Function 환경변수로만. RLS를 모든 테이블에 적용.

@@ -5,8 +5,9 @@
 // 생산자: 이 Provider가 AuthState를 만들어 context로 노출.
 // 소비자: AuthGate가 useAuth()로 구독해 loading/authenticated/error 3분기를 렌더.
 //
-// 범위 메모: profiles 행 생성/업서트는 이번(setup) 스프린트 제외. → 아래 TODO 참고.
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+// invite-room: 익명 세션 확보 직후 profiles 본인 행을 upsert하여 FK 무결성을 선행 보장한다.
+//   (upsert 성공 후에만 authenticated로 전이 → 이후 create_room/join_room RPC의 FK 위반 0.)
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
 
@@ -23,78 +24,100 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [state, setState] = useState<AuthState>({ status: 'loading' });
   // retry 트리거. 값이 바뀌면 부트스트랩 effect 재실행.
   const [attempt, setAttempt] = useState(0);
   const mountedRef = useRef(true);
+  // 동일 userId에 대해 profiles upsert를 1회만 수행하기 위한 가드(토큰 갱신 시 중복 upsert 방지).
+  const profileEnsuredRef = useRef<string | null>(null);
 
-  const retry = useCallback(() => {
+  const retry = () => {
     setState({ status: 'loading' });
     setAttempt((n) => n + 1);
-  }, []);
+  };
 
-  useEffect(() => {
-    mountedRef.current = true;
+  useEffect(
+    function bootstrapAuth() {
+      mountedRef.current = true;
 
-    async function bootstrap() {
-      try {
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) throw sessionError;
-
-        let userId = sessionData.session?.user?.id ?? null;
-
-        if (!userId) {
-          // 세션 없음(최초 실행 또는 AsyncStorage 손실) → 익명 발급
-          const { data: signInData, error: signInError } = await supabase.auth.signInAnonymously();
-          if (signInError) throw signInError;
-          userId = signInData.user?.id ?? null;
+      // profiles 본인 행 보장 → 성공 후에만 authenticated 전이.
+      //   upsert {id} / onConflict id / ignoreDuplicates(=INSERT ... ON CONFLICT DO NOTHING) → 닉네임/아바타는 NULL 유지.
+      //   실패 시 throw → 호출부(bootstrap/listener)가 error 상태로 전이(FK 무결성 보호).
+      async function ensureProfileAndAuth({ userId }: { userId: string }) {
+        if (profileEnsuredRef.current !== userId) {
+          const { error } = await supabase
+            .from('profiles')
+            .upsert({ id: userId }, { onConflict: 'id', ignoreDuplicates: true });
+          if (error) throw error;
+          profileEnsuredRef.current = userId;
         }
-
-        if (!userId) {
-          throw new Error('익명 세션을 확보하지 못했습니다(userId 없음).');
-        }
-
-        // TODO(profile 스프린트): 여기서 profiles 행 upsert(닉네임/아바타 기본값).
-        //   이번 setup 스프린트는 인증 세션 확보까지만 책임진다.
-
         if (mountedRef.current) {
           setState({ status: 'authenticated', userId });
         }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : '알 수 없는 인증 오류';
-        if (mountedRef.current) {
-          setState({ status: 'error', message });
+      }
+
+      async function bootstrap() {
+        try {
+          const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+          if (sessionError) throw sessionError;
+
+          let userId = sessionData.session?.user?.id ?? null;
+
+          if (!userId) {
+            // 세션 없음(최초 실행 또는 AsyncStorage 손실) → 익명 발급
+            const { data: signInData, error: signInError } = await supabase.auth.signInAnonymously();
+            if (signInError) throw signInError;
+            userId = signInData.user?.id ?? null;
+          }
+
+          if (!userId) {
+            throw new Error('익명 세션을 확보하지 못했습니다(userId 없음).');
+          }
+
+          // profiles 본인 행 보장 후 authenticated 전이(FK 무결성 선행).
+          await ensureProfileAndAuth({ userId });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : '알 수 없는 인증 오류';
+          if (mountedRef.current) {
+            setState({ status: 'error', message });
+          }
         }
       }
-    }
 
-    bootstrap();
+      bootstrap();
 
-    // 세션 변화(갱신/만료/로그아웃) 반영
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mountedRef.current) return;
-      const userId = session?.user?.id;
-      if (userId) {
-        setState({ status: 'authenticated', userId });
-      }
-      // userId 없음(SIGNED_OUT 등)은 부트스트랩/재시도가 처리하므로 여기선 강제 error 전이하지 않음.
-    });
+      // 세션 변화(갱신/만료/로그아웃) 반영
+      const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (!mountedRef.current) return;
+        const userId = session?.user?.id;
+        if (userId) {
+          // 여기서도 profiles 보장 후 authenticated 전이(첫 전이가 upsert를 우회하지 않도록).
+          // profileEnsuredRef 가드로 토큰 갱신 시 중복 upsert는 발생하지 않음.
+          ensureProfileAndAuth({ userId }).catch((err) => {
+            const message = err instanceof Error ? err.message : '프로필 초기화에 실패했습니다.';
+            if (mountedRef.current) setState({ status: 'error', message });
+          });
+        }
+        // userId 없음(SIGNED_OUT 등)은 부트스트랩/재시도가 처리하므로 여기선 강제 error 전이하지 않음.
+      });
 
-    return () => {
-      mountedRef.current = false;
-      sub.subscription.unsubscribe();
-    };
-  }, [attempt]);
+      return function cleanupAuth() {
+        mountedRef.current = false;
+        sub.subscription.unsubscribe();
+      };
+    },
+    [attempt],
+  );
 
   return <AuthContext.Provider value={{ state, retry }}>{children}</AuthContext.Provider>;
-}
+};
 
 /** Provider 바깥 호출 시 명확히 throw. */
-export function useAuth(): AuthContextValue {
+export const useAuth = (): AuthContextValue => {
   const ctx = useContext(AuthContext);
   if (ctx === null) {
     throw new Error('useAuth()는 <AuthProvider> 트리 안에서만 호출할 수 있습니다.');
   }
   return ctx;
-}
+};

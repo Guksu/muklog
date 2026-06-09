@@ -11,7 +11,7 @@ import { MuklogTabScreen } from './screens/MuklogTabScreen';
 
 const Tab = createBottomTabNavigator<RoomTabParamList>();
 
-export function RoomTabs() {
+export const RoomTabs = () => {
   const theme = useTheme();
   return (
     <Tab.Navigator

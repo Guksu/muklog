@@ -24,14 +24,14 @@ export type ButtonProps = Omit<PressableProps, 'children' | 'style'> & {
   style?: ViewStyle;
 };
 
-export function Button({
+export const Button = ({
   title,
   variant = 'primary',
   loading = false,
   disabled = false,
   style,
   ...rest
-}: ButtonProps) {
+}: ButtonProps) => {
   const theme = useTheme();
   const isInactive = disabled || loading;
 

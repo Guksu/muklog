@@ -6,7 +6,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Screen, Text } from '@/components';
 import { useTheme } from '@/theme';
 
-export function SplashView() {
+export const SplashView = () => {
   const theme = useTheme();
   return (
     <Screen center>
