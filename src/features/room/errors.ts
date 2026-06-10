@@ -12,6 +12,9 @@ export const ROOM_ERROR_MESSAGES: Record<string, string> = {
   ALREADY_IN_ROOM: '이미 참여 중인 방이 있어요.',
   CODE_GENERATION_FAILED: '코드 생성에 실패했어요. 잠시 후 다시 시도해 주세요.',
   NOT_AUTHENTICATED: '세션이 만료됐어요. 앱을 다시 시작해 주세요.',
+  // room-modes 신규 토큰 (plan §3.7). create_room/join_room RPC가 raise.
+  INVALID_MODE: '방 모드 선택이 올바르지 않아요.',
+  SOLO_ROOM_NOT_JOINABLE: '혼자 쓰는 방에는 입장할 수 없어요.',
 };
 
 /** 토큰 미일치(네트워크/그 외) 시 기본 메시지. */

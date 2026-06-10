@@ -27,10 +27,30 @@ describe('mapRoomError — 토큰 정확 일치 (5종)', () => {
       '세션이 만료됐어요. 앱을 다시 시작해 주세요.',
     );
   });
+});
 
-  it('ROOM_ERROR_MESSAGES는 정확히 5개의 토큰 키를 가진다 (C2 단일 출처)', () => {
+describe('mapRoomError — room-modes 신규 토큰 (2종, C2)', () => {
+  it('INVALID_MODE', () => {
+    expect(mapRoomError({ error: new Error('INVALID_MODE') })).toBe('방 모드 선택이 올바르지 않아요.');
+  });
+
+  it('SOLO_ROOM_NOT_JOINABLE', () => {
+    expect(mapRoomError({ error: new Error('SOLO_ROOM_NOT_JOINABLE') })).toBe(
+      '혼자 쓰는 방에는 입장할 수 없어요.',
+    );
+  });
+
+  it('ROOM_ERROR_MESSAGES는 정확히 7개의 토큰 키를 가진다 (기존 5 + 신규 2, C2 단일 출처)', () => {
     expect(Object.keys(ROOM_ERROR_MESSAGES).sort()).toEqual(
-      ['ALREADY_IN_ROOM', 'CODE_GENERATION_FAILED', 'INVALID_CODE', 'NOT_AUTHENTICATED', 'ROOM_FULL'].sort(),
+      [
+        'ALREADY_IN_ROOM',
+        'CODE_GENERATION_FAILED',
+        'INVALID_CODE',
+        'INVALID_MODE',
+        'NOT_AUTHENTICATED',
+        'ROOM_FULL',
+        'SOLO_ROOM_NOT_JOINABLE',
+      ].sort(),
     );
   });
 });

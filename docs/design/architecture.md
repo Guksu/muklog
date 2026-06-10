@@ -162,6 +162,7 @@ Profile (Room 헤더 진입)
 | `muklog-editor` | 먹로그 작성/편집 (장소검색 + 사진5 + 메모 + 위치) | #4 데이터 입력 | 예정 |
 | `muklog-detail` | 먹로그 상세 (사진 캐러셀 + 메모 + 위치 미니맵) | #4 | 예정 |
 | `map-tab` | 지도 탭 (현재위치 + 먹로그 핀 + 일반 음식점 핀) | #5, #6 | 예정 |
+| `room-promote` (추후) | 솔로방 → 커플방 전환 (초대코드 사후 노출 + 모드 변경 + 정원 1→2). 진입점은 Room 헤더(room-tabs 이후 의존) | #1 신규 | **분리(설계만)** |
 | `room-lifecycle` (추후) | 예약 삭제 cron: 커플방 24h 미입장 자동삭제(#2) + 나가기 24h 유예/취소(#5). Supabase pg_cron 또는 스케줄 Edge Function | #2·#5 신규 | **보류(설계만)** |
 
 각 스프린트는 `planner → developer → qa` 순으로 진행하며, 오케스트레이터(`sprint-orchestrator` 스킬)가 조율한다.

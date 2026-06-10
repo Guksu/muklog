@@ -6,11 +6,13 @@ import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
-// @/features/room: code.ts의 실 유틸은 사용하고(정규화 반영 검증), 훅 3종만 모킹.
+// @/features/room: code.ts·modes.ts의 실 유틸/상수는 사용하고(정규화·모드 분기 검증), 훅 3종만 모킹.
 jest.mock('@/features/room', () => {
   const code = jest.requireActual('@/features/room/code');
+  const modes = jest.requireActual('@/features/room/modes');
   return {
     ...code,
+    ...modes,
     useCreateRoom: jest.fn(),
     useJoinRoom: jest.fn(),
     useMembershipContext: jest.fn(),
@@ -77,11 +79,75 @@ describe('OnboardingScreen — choose step', () => {
     expect(screen.getByText('초대코드 입력')).toBeTruthy();
   });
 
+  it('"방 만들기"를 누르면 select-mode step(솔로/커플 선택)으로 전이한다', () => {
+    renderWithTheme(<OnboardingScreen />);
+    fireEvent.press(screen.getByText('방 만들기'));
+    expect(screen.getByText('혼자 기록할래요')).toBeTruthy();
+    expect(screen.getByText('둘이 함께 기록할래요')).toBeTruthy();
+  });
+
   it('"초대코드 입력"을 누르면 join step(입장 버튼)으로 전이한다', () => {
     renderWithTheme(<OnboardingScreen />);
     fireEvent.press(screen.getByText('초대코드 입력'));
     expect(screen.getByText('입장')).toBeTruthy();
     expect(screen.getByText('받은 6자리 초대코드를 입력하세요')).toBeTruthy();
+  });
+});
+
+describe('OnboardingScreen — select-mode step (C7)', () => {
+  const goToSelectMode = () => {
+    renderWithTheme(<OnboardingScreen />);
+    fireEvent.press(screen.getByText('방 만들기'));
+  };
+
+  it('"뒤로"를 누르면 choose step으로 복귀한다', () => {
+    goToSelectMode();
+    fireEvent.press(screen.getByText('뒤로'));
+    expect(screen.getByText('초대코드 입력')).toBeTruthy();
+  });
+
+  it('커플 선택 성공 → createRoom({mode:"couple"}) 호출 + 코드 화면(create-result) 노출', async () => {
+    createRoom.mockResolvedValueOnce({ roomId: 'r1', inviteCode: 'ABCDEF', mode: 'couple' });
+    goToSelectMode();
+    fireEvent.press(screen.getByText('둘이 함께 기록할래요'));
+
+    await waitFor(() => {
+      expect(createRoom).toHaveBeenCalledWith({ mode: 'couple' });
+    });
+    expect(screen.getByText('ABCDEF')).toBeTruthy();
+    expect(screen.getByText('방으로 가기')).toBeTruthy();
+    // 커플은 코드 화면을 거치므로 아직 reset 안 됨
+    expect(mockNavReset).not.toHaveBeenCalled();
+  });
+
+  it('솔로 선택 성공 → createRoom({mode:"solo"}) 호출 + 코드 화면 생략하고 즉시 reset(RoomTabs)+refresh', async () => {
+    createRoom.mockResolvedValueOnce({ roomId: 'r2', inviteCode: 'GHJKLM', mode: 'solo' });
+    goToSelectMode();
+    fireEvent.press(screen.getByText('혼자 기록할래요'));
+
+    await waitFor(() => {
+      expect(createRoom).toHaveBeenCalledWith({ mode: 'solo' });
+    });
+    expect(mockNavReset).toHaveBeenCalledWith({ index: 0, routes: [{ name: 'RoomTabs' }] });
+    expect(refresh).toHaveBeenCalled();
+    // 솔로는 코드 화면(create-result)을 거치지 않음
+    expect(screen.queryByText('GHJKLM')).toBeNull();
+    expect(screen.queryByText('방으로 가기')).toBeNull();
+  });
+
+  it('생성 실패 시 createError 인라인 노출 + select-mode step 유지', async () => {
+    createRoom.mockRejectedValueOnce(new Error('CODE_GENERATION_FAILED'));
+    setupHooks({ create: { error: '코드 생성에 실패했어요. 잠시 후 다시 시도해 주세요.' } });
+    renderWithTheme(<OnboardingScreen />);
+    fireEvent.press(screen.getByText('방 만들기'));
+    fireEvent.press(screen.getByText('혼자 기록할래요'));
+
+    await waitFor(() => {
+      expect(screen.getByText('코드 생성에 실패했어요. 잠시 후 다시 시도해 주세요.')).toBeTruthy();
+    });
+    // step 유지(모드 버튼 여전히 노출), 코드 화면 미진입
+    expect(screen.getByText('둘이 함께 기록할래요')).toBeTruthy();
+    expect(screen.queryByText('방으로 가기')).toBeNull();
   });
 });
 
@@ -130,24 +196,24 @@ describe('OnboardingScreen — join step', () => {
   });
 });
 
-describe('OnboardingScreen — create-result step', () => {
-  it('"방 만들기" 성공 시 코드 표시 + "방으로 가기" 노출', async () => {
-    createRoom.mockResolvedValueOnce({ roomId: 'r1', inviteCode: 'ABCDEF' });
+describe('OnboardingScreen — create-result step (커플, 회귀 보존)', () => {
+  // 커플 생성 경로: 방 만들기 → 커플 선택 → 코드 표시.
+  const createCoupleRoom = async () => {
+    createRoom.mockResolvedValueOnce({ roomId: 'r1', inviteCode: 'ABCDEF', mode: 'couple' });
     renderWithTheme(<OnboardingScreen />);
     fireEvent.press(screen.getByText('방 만들기'));
+    fireEvent.press(screen.getByText('둘이 함께 기록할래요'));
+    await waitFor(() => screen.getByText('방으로 가기'));
+  };
 
-    await waitFor(() => {
-      expect(screen.getByText('ABCDEF')).toBeTruthy();
-    });
+  it('커플 생성 성공 시 코드 표시 + "방으로 가기" 노출', async () => {
+    await createCoupleRoom();
+    expect(screen.getByText('ABCDEF')).toBeTruthy();
     expect(screen.getByText('방으로 가기')).toBeTruthy();
   });
 
   it('"코드 복사" → Clipboard.setStringAsync(코드) 호출 + 라벨 "복사됨"으로 전환', async () => {
-    createRoom.mockResolvedValueOnce({ roomId: 'r1', inviteCode: 'ABCDEF' });
-    renderWithTheme(<OnboardingScreen />);
-    fireEvent.press(screen.getByText('방 만들기'));
-    await waitFor(() => screen.getByText('코드 복사'));
-
+    await createCoupleRoom();
     fireEvent.press(screen.getByText('코드 복사'));
     await waitFor(() => {
       expect(setStringAsync).toHaveBeenCalledWith('ABCDEF');
@@ -156,26 +222,9 @@ describe('OnboardingScreen — create-result step', () => {
   });
 
   it('create-result에서 "방으로 가기" → reset(RoomTabs)+refresh', async () => {
-    createRoom.mockResolvedValueOnce({ roomId: 'r1', inviteCode: 'ABCDEF' });
-    renderWithTheme(<OnboardingScreen />);
-    fireEvent.press(screen.getByText('방 만들기'));
-    await waitFor(() => screen.getByText('방으로 가기'));
-
+    await createCoupleRoom();
     fireEvent.press(screen.getByText('방으로 가기'));
     expect(mockNavReset).toHaveBeenCalledWith({ index: 0, routes: [{ name: 'RoomTabs' }] });
     expect(refresh).toHaveBeenCalled();
-  });
-
-  it('create 실패 시 createError 메시지를 노출하고 choose step을 유지한다', async () => {
-    createRoom.mockRejectedValueOnce(new Error('CODE_GENERATION_FAILED'));
-    setupHooks({ create: { error: '코드 생성에 실패했어요. 잠시 후 다시 시도해 주세요.' } });
-    renderWithTheme(<OnboardingScreen />);
-    fireEvent.press(screen.getByText('방 만들기'));
-
-    await waitFor(() => {
-      expect(screen.getByText('코드 생성에 실패했어요. 잠시 후 다시 시도해 주세요.')).toBeTruthy();
-    });
-    // choose step 유지(코드 표시 안 됨)
-    expect(screen.queryByText('방으로 가기')).toBeNull();
   });
 });
