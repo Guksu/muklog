@@ -16,6 +16,8 @@
 | 사진 저장 | **Supabase Storage** | 먹로그당 최대 5장. CDN 포함 |
 | 인증 | **Supabase 익명 인증 + 초대코드** | 회원가입 마찰 없음. 앱 실행 시 익명 세션 자동 발급 |
 | 프로필 | **닉네임 + 아바타 편집 가능** | 사용자 추가 요청 |
+| 방 모드 | **솔로방 / 커플방 (생성 시 선택)** | 1인 기록도 허용. 솔로방=영구 유지, 커플방=파트너 대기 + 24h 내 미입장 시 자동삭제 대상. 솔로방은 나중에 초대코드로 파트너를 초대해 커플방으로 전환 가능 |
+| 미디어 | **사진(최대 5장) + 2초 영상 1개(옵션)** | 셋로그(Setlog)식 짧은 영상 기록. 카메라 권한 필요, 영상은 용량 가드레일(길이·해상도·압축) 필수 |
 | 실시간 동기화 | **Supabase Realtime** | 커플 두 명이 같은 방의 먹로그를 실시간으로 공유 |
 | 디자인 시스템 | **원티드 디자인 시스템 토큰 참조** | git import 없이 토큰 값만 `theme/`로 매핑. 값은 builbook 프로젝트(`wanted-design-system`)의 실측 토큰을 RN용으로 변환해 사용 |
 
@@ -54,10 +56,14 @@ profiles
 rooms
   id          uuid PK
   invite_code text UNIQUE        -- 6자리 영숫자 (대문자+숫자, 혼동문자 0/O/1/I 제외)
+  mode        text NOT NULL      -- 'solo' | 'couple' (생성 시 확정). solo=정원 1, couple=정원 2
   created_by  uuid → profiles
   created_at  timestamptz
+  -- 예약 삭제 라이프사이클 (구현은 room-lifecycle 스프린트, 추후)
+  delete_scheduled_at  timestamptz   -- NULL=삭제 예약 없음. 설정 시 이 시각 이후 cron이 방 삭제
+  delete_requested_by  uuid → profiles  -- 나가기를 누른 사람(=취소 권한자). #5
 
-room_members                     -- 방당 최대 2명
+room_members                     -- 방당 최대 인원 = 모드별 (solo 1 / couple 2)
   room_id     uuid → rooms
   user_id     uuid → profiles
   joined_at   timestamptz
@@ -76,11 +82,13 @@ muklogs
   memo         text
   rating       smallint            -- 1~5 (옵션)
   visited_at   date
+  video_path   text                -- 2초 영상 1개(옵션). muklog-media/{room_id}/{muklog_id}/video.mp4 (NULL 가능)
+  video_duration_ms integer        -- 영상 길이(ms). ≤ 2000 (앱 1차 + 트리거 2차 검증)
   created_by   uuid → profiles
   created_at   timestamptz
   updated_at   timestamptz
 
-muklog_photos                    -- 먹로그당 최대 5장
+muklog_photos                    -- 먹로그당 최대 5장 (영상 1개와는 별개)
   id          uuid PK
   muklog_id   uuid → muklogs ON DELETE CASCADE
   storage_path text             -- muklog-photos/{room_id}/{muklog_id}/{uuid}.jpg
@@ -88,9 +96,15 @@ muklog_photos                    -- 먹로그당 최대 5장
   created_at  timestamptz
 ```
 
+> **미디어 구성**: 먹로그당 사진 0~5장(`muklog_photos`) + 2초 영상 0~1개(`muklogs.video_path`). 사진과 영상은 독립 슬롯이며 영상은 항상 옵션이다. 영상 버킷은 `muklog-media`(또는 `muklog-photos`와 분리 운영)로 두고 RLS는 사진과 동일하게 상위 방 멤버십으로 검증한다.
+
 **제약 / 정책**
-- **방 인원 2명 제한**: `room_members` INSERT 시 트리거로 현재 인원 < 2 검증.
+- **방 인원 제한(모드별)**: `room_members` INSERT 시 트리거로 현재 인원 < 정원 검증. 정원 = `rooms.mode`가 `solo`면 1, `couple`면 2.
 - **사진 5장 제한**: 앱에서 1차 차단 + `muklog_photos` INSERT 트리거로 2차 검증(`order_index 0~4`).
+- **영상 제한**: 먹로그당 1개 + 길이 ≤ 2000ms. 앱에서 1차 차단(촬영 2초 컷·압축) + `muklogs` 트리거로 `video_duration_ms ≤ 2000` 2차 검증.
+- **방 삭제 라이프사이클(구현 추후 — room-lifecycle 스프린트)**:
+  - **커플방 자동삭제(#2)**: `mode='couple'` 이고 멤버 1명인 채로 `created_at` 후 24h 경과 시 삭제. 예약-삭제 cron(Supabase pg_cron 또는 스케줄 Edge Function)이 주기 점검.
+  - **나가기 유예(#5)**: 커플방에서 한 명이 나가기 → `delete_scheduled_at = now()+24h`, `delete_requested_by = 나간 사람`. 24h 내 **나간 사람만** 취소(두 필드 NULL로) 가능. 미취소 시 cron이 방+데이터 전체 삭제(남은 멤버 데이터 포함). 솔로방에는 나가기 유예 미적용.
 - **RLS(Row Level Security)**: 모든 테이블에 활성화. 사용자는 **자신이 멤버인 방**의 데이터만 read/write. 핵심 정책:
   - `muklogs`: `room_id IN (select room_id from room_members where user_id = auth.uid())`
   - `muklog_photos`: 상위 `muklog`의 room 멤버십으로 검증
@@ -107,14 +121,19 @@ AuthGate (앱 진입)
   └─ 방 있음 → [Room]
 
 Onboarding
-  ├─ "방 만들기"  → invite_code 생성, room + 본인 멤버십 생성 → Room
-  └─ "초대코드 입력" → 코드로 방 조인(2명 미만일 때) → Room
+  ├─ "방 만들기"  → 모드 선택(솔로 / 커플)
+  │     ├─ 솔로방 → mode='solo', room + 본인 멤버십 생성 → Room (영구 유지)
+  │     └─ 커플방 → mode='couple', invite_code 생성, room + 본인 멤버십 → Room (파트너 대기, 24h 미입장 시 자동삭제 — 추후)
+  └─ "초대코드 입력" → 코드로 커플방 조인(정원 미만일 때) → Room
+
+Room 헤더(커플방 한정)
+  └─ "방 나가기" → 24h 후 삭제 예약 + 안내 배너. "나가기 취소"로 되돌림 (나간 사람만) — 구현 추후
 
 Room (Tab Navigator, 디폴트 = Muklog)
   ├─ Tab1: Muklog (먹로그)
   │    ├─ MuklogList     카드 리스트 (대표사진 + 가게명 + 위치 + 날짜)
   │    ├─ MuklogDetail   사진 캐러셀(최대5) + 메모 + 위치 미니맵
-  │    └─ MuklogEditor   장소검색(Kakao Local) + 사진(최대5) + 메모 + 별점 + 방문일
+  │    └─ MuklogEditor   장소검색(Kakao Local) + 사진(최대5) + 2초 영상(옵션, 카메라 권한) + 메모 + 별점 + 방문일
   └─ Tab2: Map (지도)
        └─ 현재위치 디폴트
           + 저장된 먹로그 핀(강조 스타일)
@@ -131,16 +150,19 @@ Profile (Room 헤더 진입)
 
 > 원칙: **1 스프린트 = 1 기능.** 여러 기능을 한 스프린트로 묶지 않는다. 각 스프린트 산출물은 `docs/sprint/sprint-YYYYMMDD-{name}/`에 기록.
 
-| 스프린트 | 기능 | 대응 요구사항 |
-|---------|------|--------------|
-| `setup` | 프로젝트 기반: Expo+RN 셋업, Supabase 연결, 원티드 토큰 `theme/`, 네비게이션 뼈대 | 기반 |
-| `invite-room` | 익명 인증 + 초대코드 방 생성/입장 | #1 |
-| `profile` | 프로필 편집 (닉네임 + 아바타) | 추가 요청 |
-| `room-tabs` | 방 진입 + 탭 네비게이션(muklog 디폴트 / 지도) | #2 |
-| `muklog-list` | 먹로그 카드 리스트 | #3 |
-| `muklog-editor` | 먹로그 작성/편집 (장소검색 + 사진5 + 메모 + 위치) | #4 데이터 입력 |
-| `muklog-detail` | 먹로그 상세 (사진 캐러셀 + 메모 + 위치 미니맵) | #4 |
-| `map-tab` | 지도 탭 (현재위치 + 먹로그 핀 + 일반 음식점 핀) | #5, #6 |
+| 스프린트 | 기능 | 대응 요구사항 | 상태 |
+|---------|------|--------------|------|
+| `setup` | 프로젝트 기반: Expo+RN 셋업, Supabase 연결, 원티드 토큰 `theme/`, 네비게이션 뼈대 | 기반 | ✅ 완료 |
+| `invite-room` | 익명 인증 + 초대코드 방 생성/입장 | #1 | ✅ 완료 |
+| `profile` | 프로필 편집 (닉네임 + 아바타) | 추가 요청 | ✅ 완료 |
+| `room-modes` | 솔로/커플 방 모드 (생성 흐름 모드 선택 + 정원 트리거 모드화 + `rooms.mode`/삭제 라이프사이클 스키마 필드) | #1 확장 | 예정 |
+| `muklog-video` | 2초 영상 캡처/업로드 (카메라 권한 + `muklogs.video_*` + 용량 가드레일). muklog-editor 이후 의존 | #4 확장 | 예정 |
+| `room-tabs` | 방 진입 + 탭 네비게이션(muklog 디폴트 / 지도) | #2 | 예정 |
+| `muklog-list` | 먹로그 카드 리스트 | #3 | 예정 |
+| `muklog-editor` | 먹로그 작성/편집 (장소검색 + 사진5 + 메모 + 위치) | #4 데이터 입력 | 예정 |
+| `muklog-detail` | 먹로그 상세 (사진 캐러셀 + 메모 + 위치 미니맵) | #4 | 예정 |
+| `map-tab` | 지도 탭 (현재위치 + 먹로그 핀 + 일반 음식점 핀) | #5, #6 | 예정 |
+| `room-lifecycle` (추후) | 예약 삭제 cron: 커플방 24h 미입장 자동삭제(#2) + 나가기 24h 유예/취소(#5). Supabase pg_cron 또는 스케줄 Edge Function | #2·#5 신규 | **보류(설계만)** |
 
 각 스프린트는 `planner → developer → qa` 순으로 진행하며, 오케스트레이터(`sprint-orchestrator` 스킬)가 조율한다.
 
@@ -152,6 +174,7 @@ Profile (Room 헤더 진입)
 - Kakao Local 호출은 Edge Function 프록시 + **클라이언트 디바운스/캐싱**으로 쿼터 절약.
 - Storage 업로드 전 **이미지 리사이즈/압축**(예: 장변 1280px, JPEG q0.7)으로 용량·전송량 절감.
 - 지도 일반 음식점 핀은 **현재 보이는 영역(viewport) 기준 + 디바운스**로만 조회(전체 조회 금지).
+- **2초 영상**(셋로그식): 길이 **2초 상한**(촬영 시 하드컷) + 해상도 상한(예: 720p) + 업로드 전 압축으로 용량·전송량 최소화. 먹로그당 **1개**로 제한. 영상은 사진보다 훨씬 무거우므로 Storage 무료 티어 보호를 위해 길이·개수·해상도 3중 가드레일을 둔다.
 
 ---
 
@@ -159,4 +182,6 @@ Profile (Room 헤더 진입)
 
 - ~~원티드 토큰 실제 값 확보~~ → **해결.** 별도 builbook 프로젝트의 `wanted-design-system` 토큰을 RN용 `theme/tokens.ts`로 변환. 상세는 `.claude/skills/rn-supabase-dev/references/wanted-tokens.md` (컬러·스페이싱=원티드 실값, 타이포·radius·shadow=프로젝트 정의). 폰트는 Pretendard를 `expo-font`로 로드.
 - 푸시 알림(상대가 먹로그 추가 시) — MVP 이후.
-- 방 나가기 / 재초대 흐름 — MVP 이후.
+- ~~방 나가기 / 재초대 흐름~~ → **결정됨.** 나가기는 24h 유예 + 나간 사람만 취소(#5). 솔로↔커플 모드 도입(#1). **단, 예약 삭제 cron 구현은 `room-lifecycle` 스프린트로 보류**(스키마 필드만 선반영).
+- **예약 삭제 인프라 미정 사항**: pg_cron(확장 활성화 필요) vs 스케줄 Edge Function 중 택1, cron 주기(예: 매시 vs 매일), 삭제 시 Storage 파일 정리 방식 — `room-lifecycle` 스프린트 착수 시 확정.
+- 솔로방의 커플 전환(초대코드 사후 발급) 상세 흐름 — `room-modes` 스프린트에서 구체화.
