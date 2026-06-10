@@ -1,16 +1,15 @@
 // src/navigation/screens/ProfileScreen.tsx
-// 프로필 편집 화면 (plan §4, T9 / P1·P5·P6). Room 헤더에서 진입.
+// 프로필 편집 화면 (plan §4.8, P1·P5·P6). HomeTabs 헤더에서 진입.
 //   - 현재 닉네임/아바타 표시(useProfile), 닉네임 편집·저장(useUpdateProfile.saveNickname),
 //     아바타 변경(useUpdateProfile.changeAvatar). 저장/업로드 성공 후 refresh()로 즉시 반영.
-//   - 방 나가기(room-leave, plan §4): 하단 "방 나가기" + Alert 확인 → leaveRoom() →
-//     성공 시 membership.refresh() + navigation.reset(Onboarding). OnboardingScreen.goToRoom의 거울(C-NAV).
+//   - ⚠️ 멀티 로그 전환(multi-log-home): "방 나가기" 섹션 제거(plan ★(2)).
+//     멀티 로그에서 단일 나가기는 의미 상실 → 로그별 나가기는 차기 LogScreen 내부로 이전.
+//     leave_room RPC는 dormant(미호출)로 유지. Onboarding 라우트 삭제로 reset 흐름 제거(크래시 방지).
 //
-// 생산자: useProfile(조회) / useUpdateProfile(저장·업로드) / useLeaveRoom(나가기 RPC).
-// 소비자: 이 화면의 상태별 UX + MembershipGate(refresh로 in-room→no-room 정합).
-// 스타일은 원티드 토큰만(raw hex 0).
+// 생산자: useProfile(조회) / useUpdateProfile(저장·업로드).
+// 소비자: 이 화면의 상태별 UX. 스타일은 원티드 토큰만(raw hex 0).
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, TextInput, View } from 'react-native';
-import { useNavigation, type NavigationProp } from '@react-navigation/native';
+import { ActivityIndicator, StyleSheet, TextInput, View } from 'react-native';
 
 import { Avatar, Button, Screen, Text } from '@/components';
 import { useAuth } from '@/features/auth';
@@ -22,14 +21,11 @@ import {
   useUpdateProfile,
   validateNickname,
 } from '@/features/profile';
-import { useLeaveRoom, useMembershipContext } from '@/features/room';
 import { useTheme } from '@/theme';
-
-import { Routes, type AppStackParamList } from '../routes';
 
 export const ProfileScreen = () => {
   const { state } = useAuth();
-  // 이 화면은 인증 완료 트리(RoomTabs) 하위에서만 진입하지만, 방어적으로 분기.
+  // 이 화면은 인증 완료 트리(HomeTabs) 하위에서만 진입하지만, 방어적으로 분기.
   if (state.status !== 'authenticated') {
     return (
       <Screen center>
@@ -44,13 +40,10 @@ export const ProfileScreen = () => {
 
 const ProfileContent = ({ userId }: { userId: string }) => {
   const theme = useTheme();
-  const navigation = useNavigation<NavigationProp<AppStackParamList>>();
-  const membership = useMembershipContext();
   const { state, refresh } = useProfile({ userId });
   const { saveNickname, changeAvatar, savingNickname, uploadingAvatar, error } = useUpdateProfile({
     userId,
   });
-  const { leaveRoom, loading: leaving, error: leaveError } = useLeaveRoom();
 
   const [draft, setDraft] = useState('');
 
@@ -118,26 +111,6 @@ const ProfileContent = ({ userId }: { userId: string }) => {
     }
   };
 
-  // 나가기 확정: 멤버십 갱신(in-room→no-room) + 스택 리셋으로 Onboarding 진입(goToRoom 거울, C-NAV).
-  //   MembershipGate가 no-room/in-room을 동일 NavigationContainer 노드로 렌더 → 언마운트 없이 reset 유지.
-  const handleLeave = async () => {
-    try {
-      await leaveRoom();
-      void membership.refresh();
-      navigation.reset({ index: 0, routes: [{ name: Routes.Onboarding }] });
-    } catch {
-      // 실패는 useLeaveRoom.error(인라인)로 표시. 전이 없음(화면 유지). 멱등이라 재시도 안전.
-    }
-  };
-
-  // 파괴적 액션 → 네이티브 확인 다이얼로그. "나가기"(destructive) 확인 시에만 handleLeave.
-  const confirmLeave = () => {
-    Alert.alert('방을 나갈까요?', '이 방에서 나가면 다시 입장하려면 초대코드가 필요해요.', [
-      { text: '취소', style: 'cancel' },
-      { text: '나가기', style: 'destructive', onPress: () => void handleLeave() },
-    ]);
-  };
-
   return (
     <Screen>
       <View style={[styles.avatarSection, { marginTop: theme.spacing[12] }]}>
@@ -194,16 +167,6 @@ const ProfileContent = ({ userId }: { userId: string }) => {
           {error}
         </Text>
       ) : null}
-
-      {/* 방 나가기 — 파괴적 액션. 편집 영역과 시각적으로 분리(상단 여백 크게). */}
-      <View style={{ marginTop: theme.spacing[40], gap: theme.spacing[8] }}>
-        <Button title="방 나가기" variant="secondary" loading={leaving} onPress={confirmLeave} />
-        {leaveError ? (
-          <Text variant="bodySm" color="error" style={styles.center}>
-            {leaveError}
-          </Text>
-        ) : null}
-      </View>
     </Screen>
   );
 };

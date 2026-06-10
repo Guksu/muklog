@@ -1,6 +1,7 @@
 // src/features/room/useLeaveRoom.spec.ts
-// 방 나가기 훅 — 무인자 RPC 호출, snake→camel 매핑, 멱등 성공, BAD_RESPONSE 가드,
-// 토큰 에러, loading 전이, error 리셋 (plan §3.5·§5 T2, C1·C2·C-IDEM).
+// 방 나가기 훅 — roomId 인자 RPC 호출, snake→camel 매핑, 멱등 성공, BAD_RESPONSE 가드,
+// 토큰 에러, loading 전이, error 리셋 (plan §3.7-leave·§5 T3c, C-LEAVE).
+//   ⚠️ 多로그 전환: leave_room(p_room_id) 인자화 → leaveRoom({ roomId }) → rpc('leave_room', { p_room_id }).
 import { act, renderHook } from '@testing-library/react-native';
 
 jest.mock('@/lib/supabase', () => ({ supabase: { rpc: jest.fn() } }));
@@ -14,17 +15,17 @@ beforeEach(() => {
 });
 
 describe('useLeaveRoom', () => {
-  it('성공(방 삭제) 시 leave_room을 인자 없이 호출하고 {roomDeleted,roomId}로 매핑한다 (C1·C2)', async () => {
+  it('성공(방 삭제) 시 leave_room을 { p_room_id } 인자로 호출하고 {roomDeleted,roomId}로 매핑한다 (C-LEAVE)', async () => {
     rpc.mockResolvedValueOnce({ data: { room_deleted: true, room_id: 'r1' }, error: null });
     const { result } = renderHook(() => useLeaveRoom());
 
     let res: { roomDeleted: boolean; roomId: string | null } | undefined;
     await act(async () => {
-      res = await result.current.leaveRoom();
+      res = await result.current.leaveRoom({ roomId: 'r1' });
     });
 
-    // C2: 무인자 호출(오버로드 없음, create_room 무인자 함정 교훈)
-    expect(rpc).toHaveBeenCalledWith('leave_room');
+    // C-LEAVE: 인자화(p_room_id 정확 일치). 多로그에서 어느 로그를 나갈지 명시.
+    expect(rpc).toHaveBeenCalledWith('leave_room', { p_room_id: 'r1' });
     expect(res).toEqual({ roomDeleted: true, roomId: 'r1' });
   });
 
@@ -34,7 +35,7 @@ describe('useLeaveRoom', () => {
 
     let res: { roomDeleted: boolean; roomId: string | null } | undefined;
     await act(async () => {
-      res = await result.current.leaveRoom();
+      res = await result.current.leaveRoom({ roomId: 'r1' });
     });
 
     expect(res).toEqual({ roomDeleted: false, roomId: 'r2' });
@@ -46,7 +47,7 @@ describe('useLeaveRoom', () => {
 
     let res: { roomDeleted: boolean; roomId: string | null } | undefined;
     await act(async () => {
-      res = await result.current.leaveRoom();
+      res = await result.current.leaveRoom({ roomId: 'r1' });
     });
 
     expect(res).toEqual({ roomDeleted: false, roomId: null });
@@ -59,7 +60,7 @@ describe('useLeaveRoom', () => {
 
     expect(result.current.loading).toBe(false);
     await act(async () => {
-      await result.current.leaveRoom();
+      await result.current.leaveRoom({ roomId: 'r1' });
     });
     expect(result.current.loading).toBe(false);
   });
@@ -69,7 +70,7 @@ describe('useLeaveRoom', () => {
     const { result } = renderHook(() => useLeaveRoom());
 
     await act(async () => {
-      await expect(result.current.leaveRoom()).rejects.toBeTruthy();
+      await expect(result.current.leaveRoom({ roomId: 'r1' })).rejects.toBeTruthy();
     });
     expect(result.current.error).toBe('세션이 만료됐어요. 앱을 다시 시작해 주세요.');
   });
@@ -79,7 +80,7 @@ describe('useLeaveRoom', () => {
     const { result } = renderHook(() => useLeaveRoom());
 
     await act(async () => {
-      await expect(result.current.leaveRoom()).rejects.toBeTruthy();
+      await expect(result.current.leaveRoom({ roomId: 'r1' })).rejects.toBeTruthy();
     });
     expect(result.current.error).toBe('연결에 실패했어요. 다시 시도해 주세요.');
   });
@@ -89,7 +90,7 @@ describe('useLeaveRoom', () => {
     const { result } = renderHook(() => useLeaveRoom());
 
     await act(async () => {
-      await expect(result.current.leaveRoom()).rejects.toThrow('LEAVE_ROOM_BAD_RESPONSE');
+      await expect(result.current.leaveRoom({ roomId: 'r1' })).rejects.toThrow('LEAVE_ROOM_BAD_RESPONSE');
     });
     expect(result.current.error).toBe('연결에 실패했어요. 다시 시도해 주세요.');
   });
@@ -99,7 +100,7 @@ describe('useLeaveRoom', () => {
     const { result } = renderHook(() => useLeaveRoom());
 
     await act(async () => {
-      await expect(result.current.leaveRoom()).rejects.toThrow('LEAVE_ROOM_BAD_RESPONSE');
+      await expect(result.current.leaveRoom({ roomId: 'r1' })).rejects.toThrow('LEAVE_ROOM_BAD_RESPONSE');
     });
   });
 
@@ -108,7 +109,7 @@ describe('useLeaveRoom', () => {
     const { result } = renderHook(() => useLeaveRoom());
 
     await act(async () => {
-      await expect(result.current.leaveRoom()).rejects.toThrow('LEAVE_ROOM_BAD_RESPONSE');
+      await expect(result.current.leaveRoom({ roomId: 'r1' })).rejects.toThrow('LEAVE_ROOM_BAD_RESPONSE');
     });
   });
 
@@ -117,13 +118,13 @@ describe('useLeaveRoom', () => {
     const { result } = renderHook(() => useLeaveRoom());
 
     await act(async () => {
-      await expect(result.current.leaveRoom()).rejects.toBeTruthy();
+      await expect(result.current.leaveRoom({ roomId: 'r1' })).rejects.toBeTruthy();
     });
     expect(result.current.error).toBe('세션이 만료됐어요. 앱을 다시 시작해 주세요.');
 
     rpc.mockResolvedValueOnce({ data: { room_deleted: true, room_id: 'r1' }, error: null });
     await act(async () => {
-      await result.current.leaveRoom();
+      await result.current.leaveRoom({ roomId: 'r1' });
     });
     expect(result.current.error).toBeNull();
   });

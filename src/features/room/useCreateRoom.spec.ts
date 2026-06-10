@@ -30,6 +30,23 @@ describe('useCreateRoom', () => {
     expect(res).toEqual({ roomId: 'r1', inviteCode: 'ABCDEF', mode: 'solo' });
   });
 
+  it('무인자 createRoom(): p_mode 없이 create_room을 호출한다 (멀티 로그 생성, RPC default couple)', async () => {
+    rpc.mockResolvedValueOnce({
+      data: { room_id: 'r3', invite_code: 'NPQRST', mode: 'couple' },
+      error: null,
+    });
+    const { result } = renderHook(() => useCreateRoom());
+
+    let res: { roomId: string; inviteCode: string; mode: string } | undefined;
+    await act(async () => {
+      res = await result.current.createRoom();
+    });
+
+    // 인자 미전달 → rpc 2번째 인자 없음(RPC default 'couple' 적용)
+    expect(rpc).toHaveBeenCalledWith('create_room');
+    expect(res).toEqual({ roomId: 'r3', inviteCode: 'NPQRST', mode: 'couple' });
+  });
+
   it('couple 생성: { p_mode: "couple" } 호출 + mode:"couple" 매핑', async () => {
     rpc.mockResolvedValueOnce({
       data: { room_id: 'r2', invite_code: 'GHJKLM', mode: 'couple' },

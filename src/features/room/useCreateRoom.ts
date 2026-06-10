@@ -1,10 +1,11 @@
 // src/features/room/useCreateRoom.ts
-// 방 만들기 훅 (plan §3.6, C1·C3).
+// 로그 만들기 훅 (plan §3.6, C1·C3).
 //
-// 생산자: create_room(p_mode) RPC → jsonb { room_id, invite_code, mode } (snake_case).
-// 소비자: OnboardingScreen(select-mode → solo: 즉시 RoomTabs / couple: create-result).
-// ⚠️ C3: rpc 인자명은 RPC 시그니처(p_mode)와 정확히 일치해야 한다.
+// 생산자: create_room(p_mode default 'couple') RPC → jsonb { room_id, invite_code, mode } (snake_case).
+// 소비자: PlusHeaderButton(멀티 로그 생성 — 무인자 createRoom() → 정원2 기본).
+// ⚠️ C3: mode 지정 시 rpc 인자명은 RPC 시그니처(p_mode)와 정확히 일치해야 한다.
 //    오타 시 서버가 default 'couple'로 조용히 커플방을 만들어 solo 선택이 무시되는 함정.
+//    멀티 로그 전환 후 기본 호출은 무인자 createRoom() → rpc('create_room')을 p_mode 없이 호출(default 'couple').
 import { useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
@@ -23,12 +24,15 @@ export const useCreateRoom = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const createRoom = async ({ mode }: { mode: RoomMode }): Promise<CreateRoomResult> => {
+  const createRoom = async ({ mode }: { mode?: RoomMode } = {}): Promise<CreateRoomResult> => {
     setLoading(true);
     setError(null);
     try {
-      // 인자명 p_mode는 RPC 시그니처와 일치(C3). snake_case jsonb 반환.
-      const { data, error: rpcError } = await supabase.rpc('create_room', { p_mode: mode });
+      // mode 미지정 → p_mode 없이 호출(RPC default 'couple' → 정원2). 지정 시 인자명 p_mode 일치(C3).
+      const { data, error: rpcError } =
+        mode === undefined
+          ? await supabase.rpc('create_room')
+          : await supabase.rpc('create_room', { p_mode: mode });
       if (rpcError) throw rpcError;
 
       const obj = (data ?? {}) as { room_id?: string; invite_code?: string; mode?: RoomMode };

@@ -2,7 +2,7 @@
 // RPC 에러 토큰 → 사용자용 한국어 메시지 매핑 (plan §3.7, C2).
 //
 // 생산자: create_room/join_room RPC가 `raise exception '<TOKEN>'` → Supabase JS error.message에 토큰.
-// 소비자: useCreateRoom/useJoinRoom, OnboardingScreen이 이 유틸로 사용자 메시지를 만든다.
+// 소비자: useCreateRoom/useJoinRoom, PlusHeaderButton이 이 유틸로 사용자 메시지를 만든다(join UI는 차기 log-invite).
 // ⚠️ 토큰 문자열은 RPC(SQL) ↔ 이 매핑이 단일 출처여야 한다. 토큰 추가/변경 시 양쪽 동기화.
 
 /** RPC가 발생시키는 에러 토큰 → 한국어 메시지. */

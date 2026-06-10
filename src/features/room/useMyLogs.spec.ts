@@ -1,0 +1,121 @@
+// src/features/room/useMyLogs.spec.ts
+// 내 로그 목록 훅 — list_my_rooms RPC 호출 계약, rows(snake)→MyLog[](camel) 매핑,
+// 빈 배열→ready(에러 아님), error 전이, 초기 loading, refresh 재조회(폴링 없음).
+// (plan §3.5 / §5 T2, C1·C9) SQL/RPC는 단위 대상 아님 → supabase.rpc 모킹으로 클라 계약만 검증.
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+
+jest.mock('@/lib/supabase', () => ({ supabase: { rpc: jest.fn() } }));
+import { supabase } from '@/lib/supabase';
+import { useMyLogs } from './useMyLogs';
+
+const rpc = supabase.rpc as jest.Mock;
+
+const row = (over?: Partial<{
+  room_id: string;
+  mode: string;
+  member_count: number;
+  created_at: string;
+  joined_at: string;
+}>) => ({
+  room_id: 'r1',
+  mode: 'couple',
+  member_count: 2,
+  created_at: '2026-06-10T00:00:00.000Z',
+  joined_at: '2026-06-10T01:00:00.000Z',
+  ...over,
+});
+
+beforeEach(() => {
+  rpc.mockReset();
+});
+
+describe('useMyLogs', () => {
+  it('rows를 받으면 ready로 전이하고 snake→camel로 매핑한다 (C1)', async () => {
+    rpc.mockResolvedValueOnce({
+      data: [
+        row({ room_id: 'r1', mode: 'couple', member_count: 2 }),
+        row({ room_id: 'r2', mode: 'solo', member_count: 1, joined_at: '2026-06-09T00:00:00.000Z' }),
+      ],
+      error: null,
+    });
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('ready');
+    });
+    // 인자 없이 호출(C: list_my_rooms는 무인자 RPC)
+    expect(rpc).toHaveBeenCalledWith('list_my_rooms');
+    expect(result.current.state).toEqual({
+      status: 'ready',
+      logs: [
+        {
+          roomId: 'r1',
+          mode: 'couple',
+          memberCount: 2,
+          createdAt: '2026-06-10T00:00:00.000Z',
+          joinedAt: '2026-06-10T01:00:00.000Z',
+        },
+        {
+          roomId: 'r2',
+          mode: 'solo',
+          memberCount: 1,
+          createdAt: '2026-06-10T00:00:00.000Z',
+          joinedAt: '2026-06-09T00:00:00.000Z',
+        },
+      ],
+    });
+  });
+
+  it('빈 배열이면 ready + logs:[] 로 전이한다 (빈 상태=정상, 에러 아님) (C9)', async () => {
+    rpc.mockResolvedValueOnce({ data: [], error: null });
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'ready', logs: [] });
+    });
+  });
+
+  it('data가 null이어도(행 없음) ready + logs:[] 로 흡수한다', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: null });
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'ready', logs: [] });
+    });
+  });
+
+  it('조회 에러면 error 상태와 한국어 메시지로 전이한다', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: new Error('boom') });
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        status: 'error',
+        message: '로그 목록을 불러오지 못했어요. 다시 시도해 주세요.',
+      });
+    });
+  });
+
+  it('초기 상태는 loading이다 (resolve 전)', () => {
+    rpc.mockReturnValueOnce(new Promise(() => {})); // 영원히 pending
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+    expect(result.current.state.status).toBe('loading');
+  });
+
+  it('refresh() 명시 호출로만 재조회한다 (폴링 없음) — 빈 목록 → 로그 1개', async () => {
+    rpc.mockResolvedValueOnce({ data: [], error: null });
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ status: 'ready', logs: [] });
+    });
+
+    rpc.mockResolvedValueOnce({ data: [row({ room_id: 'r9', member_count: 1 })], error: null });
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.state.status).toBe('ready');
+    expect(rpc).toHaveBeenCalledTimes(2);
+  });
+});

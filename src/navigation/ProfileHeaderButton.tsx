@@ -1,5 +1,5 @@
 // src/navigation/ProfileHeaderButton.tsx
-// RoomTabs 헤더 우측의 프로필 진입 버튼 (plan §4, T11 / P8).
+// HomeTabs 헤더 우측의 프로필 진입 버튼 (plan §4 / P8).
 //   탭 화면 헤더에서 누르면 부모 스택의 Profile 라우트로 이동한다(새 탭 만들지 않음 — 헤더 진입).
 import React from 'react';
 import { Pressable, StyleSheet } from 'react-native';

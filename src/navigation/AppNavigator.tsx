@@ -1,41 +1,42 @@
 // src/navigation/AppNavigator.tsx
-// 인증·멤버십 완료 후 스택. Onboarding ↔ RoomTabs.
-// 초기 라우트는 멤버십 게이트가 결정해 prop으로 주입(no-room→Onboarding / in-room→RoomTabs).
-//   두 화면 모두 등록 → Onboarding 성공 시 navigation.reset(RoomTabs)로 같은 네비게이터 내 전이 가능.
+// 인증 완료 후 스택. 멀티 로그 전환(multi-log-home): 게이트 제거로 항상 HomeTabs로 직행한다.
+//   HomeTabs(탭, headerShown false) / Profile(헤더 표시) / LogScreen(헤더 "로그").
+//   ⚠️ Onboarding 라우트 제거(게이트 삭제). JoinLog(로그 입장)는 join UI 트리밍으로 미등록(차기 log-invite).
+//   initialRouteName prop 불필요(항상 HomeTabs).
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { useTheme } from '@/theme';
 
-import { RoomTabs } from './RoomTabs';
+import { HomeTabs } from './HomeTabs';
 import { Routes, type AppStackParamList } from './routes';
-import { OnboardingScreen } from './screens/OnboardingScreen';
+import { LogScreen } from './screens/LogScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
-export const AppNavigator = ({
-  initialRouteName,
-}: {
-  initialRouteName: keyof AppStackParamList;
-}) => {
+export const AppNavigator = () => {
   const theme = useTheme();
+  // 헤더 표시 상세 화면 공통 옵션(뒤로가기 표시). 토큰만 사용.
+  const detailHeaderOptions = {
+    headerShown: true,
+    headerStyle: { backgroundColor: theme.color.bg },
+    headerTitleStyle: { color: theme.color.fg, fontFamily: theme.typography.h3.fontFamily },
+    headerTintColor: theme.color.fg,
+    headerShadowVisible: false,
+  };
   return (
-    <Stack.Navigator initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>
-      <Stack.Screen name={Routes.Onboarding} component={OnboardingScreen} />
-      <Stack.Screen name={Routes.RoomTabs} component={RoomTabs} />
+    <Stack.Navigator initialRouteName={Routes.HomeTabs} screenOptions={{ headerShown: false }}>
+      <Stack.Screen name={Routes.HomeTabs} component={HomeTabs} />
       <Stack.Screen
         name={Routes.Profile}
         component={ProfileScreen}
-        // Room 헤더에서 진입하는 상세 화면 → 헤더(뒤로가기) 표시.
-        options={{
-          headerShown: true,
-          title: '프로필',
-          headerStyle: { backgroundColor: theme.color.bg },
-          headerTitleStyle: { color: theme.color.fg, fontFamily: theme.typography.h3.fontFamily },
-          headerTintColor: theme.color.fg,
-          headerShadowVisible: false,
-        }}
+        options={{ ...detailHeaderOptions, title: '프로필' }}
+      />
+      <Stack.Screen
+        name={Routes.LogScreen}
+        component={LogScreen}
+        options={{ ...detailHeaderOptions, title: '로그' }}
       />
     </Stack.Navigator>
   );

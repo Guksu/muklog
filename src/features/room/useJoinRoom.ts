@@ -2,7 +2,7 @@
 // 방 입장 훅 (plan §3.6, C1·C2).
 //
 // 생산자: join_room(p_code) RPC → jsonb { room_id } (snake_case).
-// 소비자: OnboardingScreen(join step). 토큰별 에러는 mapRoomError로 한국어 매핑.
+// 소비자: ⚠️ 이번 슬라이스 미사용(보존). 차기 log-invite의 로그 입장 UI가 사용. 토큰별 에러는 mapRoomError로 매핑.
 import { useState } from 'react';
 
 import { supabase } from '@/lib/supabase';

@@ -16,7 +16,7 @@
 | 사진 저장 | **Supabase Storage** | 먹로그당 최대 5장. CDN 포함 |
 | 인증 | **Supabase 익명 인증 + 초대코드** | 회원가입 마찰 없음. 앱 실행 시 익명 세션 자동 발급 |
 | 프로필 | **닉네임 + 아바타 편집 가능** | 사용자 추가 요청 |
-| 방 모드 | **솔로방 / 커플방 (생성 시 선택)** | 1인 기록도 허용. 솔로방=영구 유지, 커플방=파트너 대기 + 24h 내 미입장 시 자동삭제 대상. 솔로방은 나중에 초대코드로 파트너를 초대해 커플방으로 전환 가능 |
+| ~~방 모드~~ → **로그 멤버십 모델** | **1인 多로그(멀티룸) + 솔로 시작·초대로 커플화** | 한 사용자가 **여러 로그(=방)**에 동시 소속 가능. 로그는 1명으로 시작(솔로), 로그 안에서 초대코드로 파트너 합류 시 2명(커플). 생성 시 솔로/커플 선택 제거 — 커플 여부는 멤버 수에서 파생. **"1인 1방" 불변식·온보딩 게이트 폐기.** (구 `room-modes`의 생성 시 모드 선택을 대체) |
 | 미디어 | **사진(최대 5장) + 2초 영상 1개(옵션)** | 셋로그(Setlog)식 짧은 영상 기록. 카메라 권한 필요, 영상은 용량 가드레일(길이·해상도·압축) 필수 |
 | 실시간 동기화 | **Supabase Realtime** | 커플 두 명이 같은 방의 먹로그를 실시간으로 공유 |
 | 디자인 시스템 | **원티드 디자인 시스템 토큰 참조** | git import 없이 토큰 값만 `theme/`로 매핑. 값은 builbook 프로젝트(`wanted-design-system`)의 실측 토큰을 RN용으로 변환해 사용 |
@@ -99,7 +99,8 @@ muklog_photos                    -- 먹로그당 최대 5장 (영상 1개와는 
 > **미디어 구성**: 먹로그당 사진 0~5장(`muklog_photos`) + 2초 영상 0~1개(`muklogs.video_path`). 사진과 영상은 독립 슬롯이며 영상은 항상 옵션이다. 영상 버킷은 `muklog-media`(또는 `muklog-photos`와 분리 운영)로 두고 RLS는 사진과 동일하게 상위 방 멤버십으로 검증한다.
 
 **제약 / 정책**
-- **방 인원 제한(모드별)**: `room_members` INSERT 시 트리거로 현재 인원 < 정원 검증. 정원 = `rooms.mode`가 `solo`면 1, `couple`면 2.
+- **멀티 로그 멤버십**: 한 사용자가 **여러 로그에 동시 소속** 가능(`room_members`는 user당 다수 행 허용). 앱은 "내 로그 목록"을 조회한다(구 `useMembership`의 단일 `maybeSingle` 폐기). "1인 1방" 불변식 제거.
+- **로그 정원 = 2 (고정)**: 모든 로그는 최대 2명(생성자 + 초대로 합류한 1명). `room_members` INSERT 트리거로 현재 인원 < 2 검증. **솔로/커플은 멤버 수에서 파생**(1명=솔로, 2명=커플)하며 생성 시 선택하지 않는다. → 구 `room-modes`의 모드별 정원(solo 1) 로직은 정원 2로 통일, `join_room`의 솔로 거부(`SOLO_ROOM_NOT_JOINABLE`)는 **제거**(솔로 로그도 초대코드로 조인해 커플화). `rooms.mode` 컬럼은 호환을 위해 보존하되 신규 생성은 기본값 처리.
 - **사진 5장 제한**: 앱에서 1차 차단 + `muklog_photos` INSERT 트리거로 2차 검증(`order_index 0~4`).
 - **영상 제한**: 먹로그당 1개 + 길이 ≤ 2000ms. 앱에서 1차 차단(촬영 2초 컷·압축) + `muklogs` 트리거로 `video_duration_ms ≤ 2000` 2차 검증.
 - **방 나가기 — 즉시판(출시: `room-leave` 스프린트)**: `leave_room()` RPC가 호출자 멤버십을 **즉시 해지**한다(예약/유예/cron 없음). 나간 뒤 방 멤버가 **0명이면 방+하위 데이터 삭제**, **1명 이상이면 방 보존**(남은 멤버 데이터 손실 0, invite_code 유지로 재입장 가능). 진입점은 **Profile 화면**(솔로·커플 공통). 상세는 `docs/sprint/sprint-20260610-room-leave/plan.md`.
@@ -116,36 +117,35 @@ muklog_photos                    -- 먹로그당 최대 5장 (영상 1개와는 
 
 ## 4. 화면 / 네비게이션
 
+> **용어**: **로그(log) = 기존 "방(room)"의 새 이름**. 한 사용자는 여러 로그에 동시 소속. 각 로그 안에 맛집 기록(먹로그 = muklog 엔트리)이 담긴다. (DB 테이블명 `rooms`/`room_members`는 유지, UI 용어만 "로그".)
+
 ```
 AuthGate (앱 진입)
-  ├─ 익명 세션 확보 → 방 멤버십 확인
-  ├─ 방 없음 → [Onboarding]
-  └─ 방 있음 → [Room]
+  └─ 익명 세션 확보 → 곧바로 [HomeTabs]  (※ Onboarding/멤버십 게이트 폐기)
 
-Onboarding
-  ├─ "방 만들기"  → 모드 선택(솔로 / 커플)
-  │     ├─ 솔로방 → mode='solo', room + 본인 멤버십 생성 → Room (영구 유지)
-  │     └─ 커플방 → mode='couple', invite_code 생성, room + 본인 멤버십 → Room (파트너 대기, 24h 미입장 시 자동삭제 — 추후)
-  └─ "초대코드 입력" → 코드로 커플방 조인(정원 미만일 때) → Room
+HomeTabs (Tab Navigator, 디폴트 = 먹로그)
+  ├─ 헤더 우측: [+ 버튼] · [프로필 버튼]
+  │     └─ + 버튼 → 액션시트 "로그 생성 / 로그 입장"
+  │           ├─ 로그 생성 → 솔로 로그 생성(create_room, 1명) → 목록에 추가
+  │           └─ 로그 입장 → 초대코드 입력 → 해당 로그 조인(정원 2 미만) → 목록에 추가
+  ├─ Tab1: 먹로그 (LogList)  ── 내가 속한 로그들을 카드 리스트로 표시
+  │     · 카드: 로그 이름/대표 + 멤버 수(솔로/커플) + 생성일 등
+  │     · 빈 상태: "아직 로그가 없어요" + 가이드(+ 버튼 안내)
+  │     · 카드 탭 → [LogScreen]
+  └─ Tab2: 지도 (Map)  ── (추후 map-tab) 현재위치 + 핀
 
-방 나가기
-  ├─ 즉시판(출시, `room-leave`): Profile 화면 하단 "방 나가기" + 확인 다이얼로그
-  │     → leave_room() 즉시 해지(0명 시 방 삭제) → Onboarding 복귀 (솔로·커플 공통)
-  │     ※ 진입점은 현재 Profile로 확정. `room-tabs`/`room-lifecycle` 진행 시 Room 헤더 진입점 추가/이전 여부 재검토 여지(헤더 안정화·유예 배너 도입 시점에).
-  └─ 24h 유예 배너/취소(추후, `room-lifecycle`): Room 헤더(커플방 한정) "방 나가기" → 24h 후 삭제 예약 + 안내 배너. "나가기 취소"로 되돌림 (나간 사람만)
+LogScreen (로그 진입 — 한 로그의 공간)
+  ├─ 초대 UI: 이 로그의 6자리 초대코드 표시 + 복사 → 파트너 초대(= 커플화). (log-invite 스프린트)
+  ├─ MuklogList   맛집 카드 리스트 (대표사진 + 가게명 + 위치 + 날짜)  ── muklog-list 스프린트
+  ├─ MuklogDetail 사진 캐러셀(최대5) + 영상 + 메모 + 위치 미니맵
+  └─ MuklogEditor 장소검색(Kakao Local) + 사진5 + 2초 영상(옵션) + 메모 + 별점 + 방문일
 
-Room (Tab Navigator, 디폴트 = Muklog)
-  ├─ Tab1: Muklog (먹로그)
-  │    ├─ MuklogList     카드 리스트 (대표사진 + 가게명 + 위치 + 날짜)
-  │    ├─ MuklogDetail   사진 캐러셀(최대5) + 메모 + 위치 미니맵
-  │    └─ MuklogEditor   장소검색(Kakao Local) + 사진(최대5) + 2초 영상(옵션, 카메라 권한) + 메모 + 별점 + 방문일
-  └─ Tab2: Map (지도)
-       └─ 현재위치 디폴트
-          + 저장된 먹로그 핀(강조 스타일)
-          + 주변 일반 음식점 핀(Kakao Local 카테고리검색 FD6)
-          + 일반 핀 탭 → "이 가게 먹로그로 저장" 바로가기 (MuklogEditor 프리필)
+로그 나가기 (기존 room-leave 재배치)
+  ├─ 즉시판(출시): leave_room() 즉시 해지(0명 시 로그 삭제 / 1명 잔존 시 보존) → 목록에서 사라짐
+  │     ※ 진입점: `multi-log-home`에서 Profile 나가기 버튼 제거 확정 → 차기 LogScreen 내부(로그별 나가기, `leave_room(p_room_id)` 재설계)로 이전. 현재 `leave_room()`는 dormant.
+  └─ 24h 유예/취소(추후 `room-lifecycle`)
 
-Profile (Room 헤더 진입)
+Profile (헤더 진입)
   └─ 닉네임 편집 + 아바타 이미지 업로드(Storage)
 ```
 
@@ -161,14 +161,16 @@ Profile (Room 헤더 진입)
 | `invite-room` | 익명 인증 + 초대코드 방 생성/입장 | #1 | ✅ 완료 |
 | `profile` | 프로필 편집 (닉네임 + 아바타) | 추가 요청 | ✅ 완료 |
 | `room-modes` | 솔로/커플 방 모드 (생성 흐름 모드 선택 + 정원 트리거 모드화 + `rooms.mode`/삭제 라이프사이클 스키마 필드) | #1 확장 | ✅ 완료 |
-| `room-leave` (경량) | 방 나가기(즉시): `leave_room()` RPC + Profile 화면 진입 + 0명 시 방 삭제 / 1명 잔존 시 보존 → Onboarding 복귀 | #5 일부(즉시판) | 진행 |
+| `room-leave` (경량) | 방 나가기(즉시): `leave_room()` RPC + Profile 화면 진입 + 0명 시 방 삭제 / 1명 잔존 시 보존 | #5 일부(즉시판) | ✅ 완료 |
+| `multi-log-home` | **멀티 로그 전환**: 온보딩/멤버십 게이트 제거 → HomeTabs 직행. 먹로그탭=내 로그 목록(카드·memberCount 배지) + 빈 상태. 헤더 +버튼=**로그 생성 단일 액션**(액션시트 없음 — 로그 입장 UI는 log-invite로 트리밍). `list_my_rooms` DEFINER RPC. 마이그레이션 `20260610150000_multi_log_home.sql`(create/join ALREADY_IN_ROOM 가드 제거·join 솔로 조인 허용·정원 2 통일·modes.ts 동기화·**`leave_room(p_room_id)` 인자화 선반영**). 로그 카드 탭 → LogScreen(최소 stub). Profile 나가기 제거. | 구조 전환 | ✅ 완료 |
+| `log-invite` | 로그 진입(LogScreen) 후 초대코드 표시·복사 + **로그 입장(join) UI**(`JoinLogScreen` + +버튼 액션시트 "로그 입장"). join으로 2번째 멤버 합류 시 커플화. (구 `room-promote` 흡수 + multi-log-home에서 트리밍한 join UI. `join_room` RPC·`useJoinRoom`·`code.ts`는 multi-log-home에서 선반영/보존됨) | #1 신규 | 예정 |
 | `muklog-video` | 2초 영상 캡처/업로드 (카메라 권한 + `muklogs.video_*` + 용량 가드레일). muklog-editor 이후 의존 | #4 확장 | 예정 |
-| `room-tabs` | 방 진입 + 탭 네비게이션(muklog 디폴트 / 지도) | #2 | 예정 |
-| `muklog-list` | 먹로그 카드 리스트 | #3 | 예정 |
+| ~~`room-tabs`~~ | (대체됨) 멀티 로그 전환으로 HomeTabs/LogScreen 구조가 됨 → `multi-log-home`로 흡수 | #2 | ~~폐기~~ |
+| `muklog-list` | LogScreen 내 먹로그 카드 리스트 | #3 | 예정 |
 | `muklog-editor` | 먹로그 작성/편집 (장소검색 + 사진5 + 메모 + 위치) | #4 데이터 입력 | 예정 |
 | `muklog-detail` | 먹로그 상세 (사진 캐러셀 + 메모 + 위치 미니맵) | #4 | 예정 |
 | `map-tab` | 지도 탭 (현재위치 + 먹로그 핀 + 일반 음식점 핀) | #5, #6 | 예정 |
-| `room-promote` (추후) | 솔로방 → 커플방 전환 (초대코드 사후 노출 + 모드 변경 + 정원 1→2). 진입점은 Room 헤더(room-tabs 이후 의존) | #1 신규 | **분리(설계만)** |
+| ~~`room-promote`~~ | (흡수됨) 솔로→커플 전환이 멀티 로그 모델에서 "초대코드로 조인 시 자동 커플화"로 단순화 → `log-invite`로 흡수 | #1 | ~~폐기~~ |
 | `room-lifecycle` (추후) | 예약 삭제 cron: 커플방 24h 미입장 자동삭제(#2) + 나가기 24h 유예/취소(#5). Supabase pg_cron 또는 스케줄 Edge Function. (즉시 나가기는 `room-leave`로 분리 출시) | #2·#5 신규 | **보류(설계만)** |
 
 각 스프린트는 `planner → developer → qa` 순으로 진행하며, 오케스트레이터(`sprint-orchestrator` 스킬)가 조율한다.
@@ -191,4 +193,10 @@ Profile (Room 헤더 진입)
 - 푸시 알림(상대가 먹로그 추가 시) — MVP 이후.
 - ~~방 나가기 / 재초대 흐름~~ → **결정됨.** 나가기는 24h 유예 + 나간 사람만 취소(#5). 솔로↔커플 모드 도입(#1). **단, 예약 삭제 cron 구현은 `room-lifecycle` 스프린트로 보류**(스키마 필드만 선반영). → **즉시판은 `room-leave` 스프린트로 우선 출시**(유예 없이 즉시 해지 + 0명 시 방 삭제, 남은 멤버 보존). 유예/취소/cron만 `room-lifecycle` 보류(사용자 승인 divergence).
 - **예약 삭제 인프라 미정 사항**: pg_cron(확장 활성화 필요) vs 스케줄 Edge Function 중 택1, cron 주기(예: 매시 vs 매일), 삭제 시 Storage 파일 정리 방식 — `room-lifecycle` 스프린트 착수 시 확정.
-- 솔로방의 커플 전환(초대코드 사후 발급) 상세 흐름 — `room-modes` 스프린트에서 구체화.
+- ~~솔로방의 커플 전환(초대코드 사후 발급)~~ → **멀티 로그 모델로 흡수.** 모든 로그는 솔로로 시작, 로그 내 초대코드로 조인 시 자동 커플화(`log-invite`).
+- **멀티 로그 전환(2026-06-10 결정 → `multi-log-home` ✅ 완료)**: 1인 多로그 + 온보딩 폐기 + HomeTabs(로그 목록)/LogScreen 2단 구조. 후속 미정 사항:
+  - **로그 식별/이름**: 이번엔 **미도입(자동/생략)으로 결정** — 카드는 멤버 배지(혼자/둘이) + 생성일(YYYY.MM.DD)만 표시. 사용자 지정 이름·대표 이미지는 별도 "로그 이름" 슬라이스로 추후.
+  - **지도 탭(HomeTabs 레벨)**: 모든 로그의 핀 통합 표시 vs 로그별 — `map-tab` 시 확정.
+  - **Realtime**: 다수 로그 동시 구독 비용/방식 — 콘텐츠 스프린트 시 검토(비용 가드레일).
+  - **나가기 진입점**: **확정 — Profile 나가기 버튼 제거**, 로그별 나가기는 차기 LogScreen 내부(`leave_room(p_room_id)` 재설계 동반)로 이전. `leave_room()` RPC는 dormant 유지.
+  - 기존 `room-modes` 산출물(mode 컬럼/모드별 정원/솔로 조인 거부)의 정원 2 통일·솔로 조인 허용 마이그레이션 — **`multi-log-home`에서 처리 완료**(`20260610150000_multi_log_home.sql`). `rooms.mode`/`ROOM_CAPACITY.solo`는 stale·미사용으로 잔존(무해).

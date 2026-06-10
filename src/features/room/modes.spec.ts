@@ -13,20 +13,20 @@ describe('ROOM_MODES — enum-style 상수', () => {
   });
 });
 
-describe('ROOM_CAPACITY — 모드별 정원 (C4: DB 트리거 정원식과 일치)', () => {
-  it('solo 정원은 1', () => {
-    expect(ROOM_CAPACITY.solo).toBe(1);
+describe('ROOM_CAPACITY — 정원 2 통일 (C6: DB 트리거 정원식과 일치)', () => {
+  // 多로그 전환(multi-log-home): enforce_room_capacity가 모드 무관 정원2로 통일 → solo도 2로 동기화.
+  it('solo 정원도 2 (정원 통일, stale solo=1 폐기)', () => {
+    expect(ROOM_CAPACITY.solo).toBe(2);
   });
 
   it('couple 정원은 2', () => {
     expect(ROOM_CAPACITY.couple).toBe(2);
   });
 
-  it('모든 RoomMode에 정원이 정의돼 있다', () => {
+  it('모든 RoomMode 정원이 트리거 정원식(2)과 일치한다', () => {
     const modes: RoomMode[] = [ROOM_MODES.solo, ROOM_MODES.couple];
     modes.forEach((mode) => {
-      expect(typeof ROOM_CAPACITY[mode]).toBe('number');
-      expect(ROOM_CAPACITY[mode]).toBeGreaterThanOrEqual(1);
+      expect(ROOM_CAPACITY[mode]).toBe(2);
     });
   });
 });
