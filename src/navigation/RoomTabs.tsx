@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
 import { useTheme } from '@/theme';
 
+import { ProfileHeaderButton } from './ProfileHeaderButton';
 import { Routes, type RoomTabParamList } from './routes';
 import { MapTabScreen } from './screens/MapTabScreen';
 import { MuklogTabScreen } from './screens/MuklogTabScreen';
@@ -21,6 +22,8 @@ export const RoomTabs = () => {
         headerStyle: { backgroundColor: theme.color.bg },
         headerTitleStyle: { color: theme.color.fg, fontFamily: theme.typography.h3.fontFamily },
         headerShadowVisible: false,
+        // Room 헤더 우측에서 Profile 진입(새 탭 만들지 않음, plan §4).
+        headerRight: () => <ProfileHeaderButton />,
         tabBarActiveTintColor: theme.color.primary,
         tabBarInactiveTintColor: theme.color.fgWeak,
         tabBarStyle: { backgroundColor: theme.color.bg, borderTopColor: theme.color.border },

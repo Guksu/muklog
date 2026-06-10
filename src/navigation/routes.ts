@@ -5,12 +5,14 @@ export const Routes = {
   RoomTabs: 'RoomTabs',
   MuklogTab: 'MuklogTab',
   MapTab: 'MapTab',
+  Profile: 'Profile',
 } as const;
 
 // 루트(인증 후) 스택 파라미터 목록
 export type AppStackParamList = {
   [Routes.Onboarding]: undefined;
   [Routes.RoomTabs]: undefined;
+  [Routes.Profile]: undefined;
 };
 
 // 방 탭 네비게이터 파라미터 목록 (디폴트 = Muklog)

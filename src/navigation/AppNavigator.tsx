@@ -5,9 +5,12 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
+import { useTheme } from '@/theme';
+
 import { RoomTabs } from './RoomTabs';
 import { Routes, type AppStackParamList } from './routes';
 import { OnboardingScreen } from './screens/OnboardingScreen';
+import { ProfileScreen } from './screens/ProfileScreen';
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
@@ -16,10 +19,24 @@ export const AppNavigator = ({
 }: {
   initialRouteName: keyof AppStackParamList;
 }) => {
+  const theme = useTheme();
   return (
     <Stack.Navigator initialRouteName={initialRouteName} screenOptions={{ headerShown: false }}>
       <Stack.Screen name={Routes.Onboarding} component={OnboardingScreen} />
       <Stack.Screen name={Routes.RoomTabs} component={RoomTabs} />
+      <Stack.Screen
+        name={Routes.Profile}
+        component={ProfileScreen}
+        // Room 헤더에서 진입하는 상세 화면 → 헤더(뒤로가기) 표시.
+        options={{
+          headerShown: true,
+          title: '프로필',
+          headerStyle: { backgroundColor: theme.color.bg },
+          headerTitleStyle: { color: theme.color.fg, fontFamily: theme.typography.h3.fontFamily },
+          headerTintColor: theme.color.fg,
+          headerShadowVisible: false,
+        }}
+      />
     </Stack.Navigator>
   );
 }
