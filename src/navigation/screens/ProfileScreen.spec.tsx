@@ -1,7 +1,9 @@
 // src/navigation/screens/ProfileScreen.spec.tsx
 // 화면 핵심 흐름 — prefill, 닉네임 검증(저장 disabled+메시지), 사진 변경→changeAvatar, 에러 표시, 저장 성공→refresh.
-// (plan §5-1, T9 / P1·P5·P6) 훅/auth는 모킹, validateNickname 등 유틸은 실 구현 사용.
+// + 방 나가기(room-leave): 버튼 렌더·Alert 확인 콜백 전이·실패 인라인 (plan §4·§5 T4, C-NAV).
+// (plan §5-1, T9 / P1·P5·P6) 훅/auth/room/네비/Alert는 모킹, validateNickname 등 유틸은 실 구현 사용.
 import React from 'react';
+import { Alert } from 'react-native';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
@@ -15,17 +17,31 @@ jest.mock('@/features/profile', () => {
 });
 jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
 
+// 방 나가기: useLeaveRoom·useMembershipContext만 사용. 배럴 전체 모킹(supabase 비유입).
+jest.mock('@/features/room', () => ({ useLeaveRoom: jest.fn(), useMembershipContext: jest.fn() }));
+
+// 네비게이션: reset만 필요(type import는 런타임 소거). 팩토리 호이스팅 → mock 프리픽스.
+const mockNavReset = jest.fn();
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({ reset: mockNavReset }),
+}));
+
 import { useProfile, useUpdateProfile } from '@/features/profile';
 import { useAuth } from '@/features/auth';
+import { useLeaveRoom, useMembershipContext } from '@/features/room';
 import { ProfileScreen } from './ProfileScreen';
 
 const useProfileMock = useProfile as jest.Mock;
 const useUpdateProfileMock = useUpdateProfile as jest.Mock;
 const useAuthMock = useAuth as jest.Mock;
+const useLeaveRoomMock = useLeaveRoom as jest.Mock;
+const useMembershipContextMock = useMembershipContext as jest.Mock;
 
 const refresh = jest.fn();
 const saveNickname = jest.fn();
 const changeAvatar = jest.fn();
+const leaveRoom = jest.fn();
+const membershipRefresh = jest.fn();
 
 const setupProfile = (state: unknown) => {
   useProfileMock.mockReturnValue({ state, refresh });
@@ -43,12 +59,30 @@ const setupUpdate = (overrides?: {
     error: overrides?.error ?? null,
   });
 };
+const setupLeave = (overrides?: { leaving?: boolean; error?: string | null }) => {
+  useLeaveRoomMock.mockReturnValue({
+    leaveRoom,
+    loading: overrides?.leaving ?? false,
+    error: overrides?.error ?? null,
+  });
+};
+
+// Alert.alert 모킹 → "나가기"(destructive) 버튼 onPress 콜백을 직접 호출.
+const pressLeaveConfirm = async () => {
+  const lastCall = (Alert.alert as jest.Mock).mock.calls.at(-1);
+  const buttons = (lastCall?.[2] ?? []) as Array<{ text?: string; style?: string; onPress?: () => void }>;
+  const confirm = buttons.find((b) => b.style === 'destructive');
+  await (confirm?.onPress as () => Promise<void> | void)?.();
+};
 
 beforeEach(() => {
   jest.clearAllMocks();
   useAuthMock.mockReturnValue({ state: { status: 'authenticated', userId: 'u1' }, retry: jest.fn() });
   setupProfile({ status: 'ready', profile: { nickname: '민수', avatarUrl: null } });
   setupUpdate();
+  setupLeave();
+  useMembershipContextMock.mockReturnValue({ state: { status: 'in-room', roomId: 'r1' }, refresh: membershipRefresh });
+  jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 });
 
 describe('ProfileScreen — 상태 분기', () => {
@@ -116,5 +150,66 @@ describe('ProfileScreen — ready(편집)', () => {
     setupProfile({ status: 'ready', profile: { nickname: null, avatarUrl: null } });
     renderWithTheme(<ProfileScreen />);
     expect(screen.getByTestId('avatar-placeholder')).toBeTruthy();
+  });
+});
+
+describe('ProfileScreen — 방 나가기 (room-leave, C-NAV)', () => {
+  it('하단에 "방 나가기" 버튼을 렌더한다', () => {
+    renderWithTheme(<ProfileScreen />);
+    expect(screen.getByText('방 나가기')).toBeTruthy();
+  });
+
+  it('"방 나가기"를 누르면 확인 다이얼로그(Alert.alert)를 띄운다', () => {
+    renderWithTheme(<ProfileScreen />);
+    fireEvent.press(screen.getByText('방 나가기'));
+    expect(Alert.alert).toHaveBeenCalled();
+    const [title, message, buttons] = (Alert.alert as jest.Mock).mock.calls.at(-1);
+    expect(title).toBe('방을 나갈까요?');
+    expect(typeof message).toBe('string');
+    // 취소(cancel) + 나가기(destructive) 2버튼
+    expect((buttons as Array<{ style?: string }>).some((b) => b.style === 'cancel')).toBe(true);
+    expect((buttons as Array<{ style?: string }>).some((b) => b.style === 'destructive')).toBe(true);
+  });
+
+  it('확인 시 leaveRoom() 호출 → 성공하면 membership.refresh() + reset(Onboarding) (C-NAV)', async () => {
+    leaveRoom.mockResolvedValueOnce({ roomDeleted: true, roomId: 'r1' });
+    renderWithTheme(<ProfileScreen />);
+    fireEvent.press(screen.getByText('방 나가기'));
+
+    await pressLeaveConfirm();
+
+    await waitFor(() => {
+      expect(leaveRoom).toHaveBeenCalled();
+    });
+    expect(membershipRefresh).toHaveBeenCalled();
+    expect(mockNavReset).toHaveBeenCalledWith({ index: 0, routes: [{ name: 'Onboarding' }] });
+  });
+
+  it('멱등 성공(roomDeleted:false, roomId:null)도 동일하게 Onboarding으로 전이한다', async () => {
+    leaveRoom.mockResolvedValueOnce({ roomDeleted: false, roomId: null });
+    renderWithTheme(<ProfileScreen />);
+    fireEvent.press(screen.getByText('방 나가기'));
+
+    await pressLeaveConfirm();
+
+    await waitFor(() => {
+      expect(mockNavReset).toHaveBeenCalledWith({ index: 0, routes: [{ name: 'Onboarding' }] });
+    });
+  });
+
+  it('나가기 실패 시 전이 없이(reset/refresh 미호출) 인라인 에러를 표시한다', async () => {
+    leaveRoom.mockRejectedValueOnce(new Error('NOT_AUTHENTICATED'));
+    setupLeave({ error: '세션이 만료됐어요. 앱을 다시 시작해 주세요.' });
+    renderWithTheme(<ProfileScreen />);
+    fireEvent.press(screen.getByText('방 나가기'));
+
+    await pressLeaveConfirm();
+
+    await waitFor(() => {
+      expect(leaveRoom).toHaveBeenCalled();
+    });
+    expect(mockNavReset).not.toHaveBeenCalled();
+    expect(membershipRefresh).not.toHaveBeenCalled();
+    expect(screen.getByText('세션이 만료됐어요. 앱을 다시 시작해 주세요.')).toBeTruthy();
   });
 });

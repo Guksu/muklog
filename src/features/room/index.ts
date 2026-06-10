@@ -3,6 +3,7 @@ export { MembershipProvider, useMembershipContext } from './MembershipProvider';
 export { useMembership, type MembershipState } from './useMembership';
 export { useCreateRoom, type CreateRoomResult } from './useCreateRoom';
 export { useJoinRoom, type JoinRoomResult } from './useJoinRoom';
+export { useLeaveRoom, type LeaveRoomResult } from './useLeaveRoom';
 export { mapRoomError, ROOM_ERROR_MESSAGES, DEFAULT_ROOM_ERROR_MESSAGE } from './errors';
 export { ROOM_MODES, ROOM_CAPACITY, type RoomMode } from './modes';
 export {

@@ -102,9 +102,11 @@ muklog_photos                    -- 먹로그당 최대 5장 (영상 1개와는 
 - **방 인원 제한(모드별)**: `room_members` INSERT 시 트리거로 현재 인원 < 정원 검증. 정원 = `rooms.mode`가 `solo`면 1, `couple`면 2.
 - **사진 5장 제한**: 앱에서 1차 차단 + `muklog_photos` INSERT 트리거로 2차 검증(`order_index 0~4`).
 - **영상 제한**: 먹로그당 1개 + 길이 ≤ 2000ms. 앱에서 1차 차단(촬영 2초 컷·압축) + `muklogs` 트리거로 `video_duration_ms ≤ 2000` 2차 검증.
+- **방 나가기 — 즉시판(출시: `room-leave` 스프린트)**: `leave_room()` RPC가 호출자 멤버십을 **즉시 해지**한다(예약/유예/cron 없음). 나간 뒤 방 멤버가 **0명이면 방+하위 데이터 삭제**, **1명 이상이면 방 보존**(남은 멤버 데이터 손실 0, invite_code 유지로 재입장 가능). 진입점은 **Profile 화면**(솔로·커플 공통). 상세는 `docs/sprint/sprint-20260610-room-leave/plan.md`.
 - **방 삭제 라이프사이클(구현 추후 — room-lifecycle 스프린트)**:
   - **커플방 자동삭제(#2)**: `mode='couple'` 이고 멤버 1명인 채로 `created_at` 후 24h 경과 시 삭제. 예약-삭제 cron(Supabase pg_cron 또는 스케줄 Edge Function)이 주기 점검.
-  - **나가기 유예(#5)**: 커플방에서 한 명이 나가기 → `delete_scheduled_at = now()+24h`, `delete_requested_by = 나간 사람`. 24h 내 **나간 사람만** 취소(두 필드 NULL로) 가능. 미취소 시 cron이 방+데이터 전체 삭제(남은 멤버 데이터 포함). 솔로방에는 나가기 유예 미적용.
+  - **나가기 24h 유예(#5)**: 커플방에서 한 명이 나가기 → `delete_scheduled_at = now()+24h`, `delete_requested_by = 나간 사람`. 24h 내 **나간 사람만** 취소(두 필드 NULL로) 가능. 미취소 시 cron이 방+데이터 전체 삭제(남은 멤버 데이터 포함). 솔로방에는 나가기 유예 미적용.
+    > ⚠️ **즉시 나가기(`room-leave`)와의 관계(사용자 승인된 divergence)**: 위 유예/취소/cron은 무거워 `room-lifecycle`로 **보류**한다. 1차 출시는 §위 "즉시판"(유예 없이 즉시 해지 + 0명 시 삭제, **남은 멤버는 보존**)이다. `delete_scheduled_at`/`delete_requested_by` 컬럼은 선반영돼 있어 추후 `leave_room` 본문만 교체하면 유예 모델로 확장된다.
 - **RLS(Row Level Security)**: 모든 테이블에 활성화. 사용자는 **자신이 멤버인 방**의 데이터만 read/write. 핵심 정책:
   - `muklogs`: `room_id IN (select room_id from room_members where user_id = auth.uid())`
   - `muklog_photos`: 상위 `muklog`의 room 멤버십으로 검증
@@ -126,8 +128,11 @@ Onboarding
   │     └─ 커플방 → mode='couple', invite_code 생성, room + 본인 멤버십 → Room (파트너 대기, 24h 미입장 시 자동삭제 — 추후)
   └─ "초대코드 입력" → 코드로 커플방 조인(정원 미만일 때) → Room
 
-Room 헤더(커플방 한정)
-  └─ "방 나가기" → 24h 후 삭제 예약 + 안내 배너. "나가기 취소"로 되돌림 (나간 사람만) — 구현 추후
+방 나가기
+  ├─ 즉시판(출시, `room-leave`): Profile 화면 하단 "방 나가기" + 확인 다이얼로그
+  │     → leave_room() 즉시 해지(0명 시 방 삭제) → Onboarding 복귀 (솔로·커플 공통)
+  │     ※ 진입점은 현재 Profile로 확정. `room-tabs`/`room-lifecycle` 진행 시 Room 헤더 진입점 추가/이전 여부 재검토 여지(헤더 안정화·유예 배너 도입 시점에).
+  └─ 24h 유예 배너/취소(추후, `room-lifecycle`): Room 헤더(커플방 한정) "방 나가기" → 24h 후 삭제 예약 + 안내 배너. "나가기 취소"로 되돌림 (나간 사람만)
 
 Room (Tab Navigator, 디폴트 = Muklog)
   ├─ Tab1: Muklog (먹로그)
@@ -155,7 +160,8 @@ Profile (Room 헤더 진입)
 | `setup` | 프로젝트 기반: Expo+RN 셋업, Supabase 연결, 원티드 토큰 `theme/`, 네비게이션 뼈대 | 기반 | ✅ 완료 |
 | `invite-room` | 익명 인증 + 초대코드 방 생성/입장 | #1 | ✅ 완료 |
 | `profile` | 프로필 편집 (닉네임 + 아바타) | 추가 요청 | ✅ 완료 |
-| `room-modes` | 솔로/커플 방 모드 (생성 흐름 모드 선택 + 정원 트리거 모드화 + `rooms.mode`/삭제 라이프사이클 스키마 필드) | #1 확장 | 예정 |
+| `room-modes` | 솔로/커플 방 모드 (생성 흐름 모드 선택 + 정원 트리거 모드화 + `rooms.mode`/삭제 라이프사이클 스키마 필드) | #1 확장 | ✅ 완료 |
+| `room-leave` (경량) | 방 나가기(즉시): `leave_room()` RPC + Profile 화면 진입 + 0명 시 방 삭제 / 1명 잔존 시 보존 → Onboarding 복귀 | #5 일부(즉시판) | 진행 |
 | `muklog-video` | 2초 영상 캡처/업로드 (카메라 권한 + `muklogs.video_*` + 용량 가드레일). muklog-editor 이후 의존 | #4 확장 | 예정 |
 | `room-tabs` | 방 진입 + 탭 네비게이션(muklog 디폴트 / 지도) | #2 | 예정 |
 | `muklog-list` | 먹로그 카드 리스트 | #3 | 예정 |
@@ -163,7 +169,7 @@ Profile (Room 헤더 진입)
 | `muklog-detail` | 먹로그 상세 (사진 캐러셀 + 메모 + 위치 미니맵) | #4 | 예정 |
 | `map-tab` | 지도 탭 (현재위치 + 먹로그 핀 + 일반 음식점 핀) | #5, #6 | 예정 |
 | `room-promote` (추후) | 솔로방 → 커플방 전환 (초대코드 사후 노출 + 모드 변경 + 정원 1→2). 진입점은 Room 헤더(room-tabs 이후 의존) | #1 신규 | **분리(설계만)** |
-| `room-lifecycle` (추후) | 예약 삭제 cron: 커플방 24h 미입장 자동삭제(#2) + 나가기 24h 유예/취소(#5). Supabase pg_cron 또는 스케줄 Edge Function | #2·#5 신규 | **보류(설계만)** |
+| `room-lifecycle` (추후) | 예약 삭제 cron: 커플방 24h 미입장 자동삭제(#2) + 나가기 24h 유예/취소(#5). Supabase pg_cron 또는 스케줄 Edge Function. (즉시 나가기는 `room-leave`로 분리 출시) | #2·#5 신규 | **보류(설계만)** |
 
 각 스프린트는 `planner → developer → qa` 순으로 진행하며, 오케스트레이터(`sprint-orchestrator` 스킬)가 조율한다.
 
@@ -183,6 +189,6 @@ Profile (Room 헤더 진입)
 
 - ~~원티드 토큰 실제 값 확보~~ → **해결.** 별도 builbook 프로젝트의 `wanted-design-system` 토큰을 RN용 `theme/tokens.ts`로 변환. 상세는 `.claude/skills/rn-supabase-dev/references/wanted-tokens.md` (컬러·스페이싱=원티드 실값, 타이포·radius·shadow=프로젝트 정의). 폰트는 Pretendard를 `expo-font`로 로드.
 - 푸시 알림(상대가 먹로그 추가 시) — MVP 이후.
-- ~~방 나가기 / 재초대 흐름~~ → **결정됨.** 나가기는 24h 유예 + 나간 사람만 취소(#5). 솔로↔커플 모드 도입(#1). **단, 예약 삭제 cron 구현은 `room-lifecycle` 스프린트로 보류**(스키마 필드만 선반영).
+- ~~방 나가기 / 재초대 흐름~~ → **결정됨.** 나가기는 24h 유예 + 나간 사람만 취소(#5). 솔로↔커플 모드 도입(#1). **단, 예약 삭제 cron 구현은 `room-lifecycle` 스프린트로 보류**(스키마 필드만 선반영). → **즉시판은 `room-leave` 스프린트로 우선 출시**(유예 없이 즉시 해지 + 0명 시 방 삭제, 남은 멤버 보존). 유예/취소/cron만 `room-lifecycle` 보류(사용자 승인 divergence).
 - **예약 삭제 인프라 미정 사항**: pg_cron(확장 활성화 필요) vs 스케줄 Edge Function 중 택1, cron 주기(예: 매시 vs 매일), 삭제 시 Storage 파일 정리 방식 — `room-lifecycle` 스프린트 착수 시 확정.
 - 솔로방의 커플 전환(초대코드 사후 발급) 상세 흐름 — `room-modes` 스프린트에서 구체화.
