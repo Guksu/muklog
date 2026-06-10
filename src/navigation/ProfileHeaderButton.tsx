@@ -5,7 +5,7 @@ import React from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { useNavigation, type NavigationProp } from '@react-navigation/native';
 
-import { Text } from '@/components';
+import { Icon, IconName } from '@/components';
 import { useTheme } from '@/theme';
 
 import { Routes, type AppStackParamList } from './routes';
@@ -25,9 +25,7 @@ export const ProfileHeaderButton = () => {
         pressed ? styles.pressed : null,
       ]}
     >
-      <Text variant="bodySm" color="primary">
-        프로필
-      </Text>
+      <Icon name={IconName.Person} size={22} color="primary" />
     </Pressable>
   );
 };

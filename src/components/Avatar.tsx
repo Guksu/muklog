@@ -2,7 +2,7 @@
 // 원형 아바타 — url 있으면 이미지, 없으면 닉네임 이니셜/플레이스홀더 (plan §4 / §5-1, T8 / P4).
 // 공용 컴포넌트(추후 먹로그 작성자 표시 등 재사용). 스타일은 원티드 토큰만(raw hex 0).
 import React from 'react';
-import { Image, StyleSheet, View, type ImageStyle, type ViewStyle } from 'react-native';
+import { Image, View, type ImageStyle, type ViewStyle } from 'react-native';
 
 import { useTheme } from '@/theme';
 
@@ -26,13 +26,14 @@ const initialOf = ({ nickname }: { nickname?: string | null }): string => {
 export const Avatar = ({ url, nickname, size = 64 }: AvatarProps) => {
   const theme = useTheme();
 
+  // muklog MkAvatar 정합: inset ring 2px(RN 미지원 → borderWidth 2 + tinted border)로 근사.
   const base: ViewStyle = {
     width: size,
     height: size,
     borderRadius: theme.radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.color.border,
-    backgroundColor: theme.color.surface,
+    borderWidth: 2,
+    borderColor: theme.color.hairline,
+    backgroundColor: theme.color.surfaceAlt,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',

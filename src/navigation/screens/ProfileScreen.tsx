@@ -132,7 +132,7 @@ const ProfileContent = ({ userId }: { userId: string }) => {
           value={draft}
           onChangeText={(t) => setDraft(t)}
           placeholder="닉네임을 입력하세요"
-          placeholderTextColor={theme.color.fgMuted}
+          placeholderTextColor={theme.color.fgAssistive}
           maxLength={NICKNAME_MAX_LENGTH}
           editable={!savingNickname}
           style={[
@@ -140,9 +140,9 @@ const ProfileContent = ({ userId }: { userId: string }) => {
             theme.typography.body,
             {
               color: theme.color.fg,
-              backgroundColor: theme.color.surface,
-              borderColor: theme.color.border,
-              borderRadius: theme.radius.lg,
+              backgroundColor: theme.color.surfaceAlt,
+              borderColor: theme.color.hairline,
+              borderRadius: theme.radius.control,
               paddingVertical: theme.spacing[12],
               paddingHorizontal: theme.spacing[16],
             },

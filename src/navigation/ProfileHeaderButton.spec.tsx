@@ -29,4 +29,11 @@ describe('ProfileHeaderButton', () => {
     fireEvent.press(screen.getByLabelText('프로필'));
     expect(mockNavigate).toHaveBeenCalledWith(Routes.Profile);
   });
+
+  it('텍스트 라벨 대신 person 아이콘을 렌더한다(접근성 라벨 유지) (AC-8)', () => {
+    renderWithTheme(<ProfileHeaderButton />);
+    expect(screen.getByTestId('icon-person')).toBeTruthy();
+    // 텍스트 "프로필"은 시각 텍스트로는 더 이상 표시하지 않음(접근성 라벨로만 존재)
+    expect(screen.queryByText('프로필')).toBeNull();
+  });
 });

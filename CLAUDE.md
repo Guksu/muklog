@@ -6,6 +6,7 @@
 **설계 단일 출처:** `docs/design/architecture.md` (데이터 모델·화면·스프린트 백로그·비용 가드레일).
 **코드 컨벤션 단일 출처:** `docs/code-convention.md` — 모든 코드가 100% 준수(useCallback/useMemo 지양, 화살표 함수, named-object 인자, useEffect 명명 함수, enum-style 상수, 원티드 토큰 스타일링). 위반은 즉시 수정 대상.
 **테스트 전략 단일 출처:** `docs/testing-strategy.md` — TDD(Red→Green→Refactor), **jest-expo + @testing-library/react-native**, 단위 테스트 경계(유틸·훅·화면 ✅ / SQL·RPC·외부 SDK는 모킹·스모크, 네이티브 동작은 디바이스 스모크).
+**UI 디자인 단일 출처:** `.claude/skills/ui-design` 스킬(원티드 디자인 시스템 + `ui_kits/muklog` 킷이 muklog 화면 레퍼런스). **모든 UI 구현·수정은 이 스킬을 최우선 기준으로 따른다.** 브랜드 규칙: 파랑 `#3366FF`, 그림자 대신 헤어라인 보더, 10px(컨트롤)/16px(카드) radius, 4px 스페이싱 그리드, Pretendard(UI) + Wanted Sans(브랜드 헤드라인), 해요체·구체 숫자. 스킬은 웹(CSS/JSX)이므로 RN에서는 토큰·패턴을 `src/theme/`로 **번역**해 적용(직접 CSS 사용 아님). **muklog는 `ui_kits/muklog` 변형을 정확히 따른다 — 일반 원티드의 "이모지 금지"와 달리 muklog 킷의 음식 이모지/음식커버·플레이풀 요소는 허용(킷이 곧 디자인 기준).** 화면 레이아웃(헤더 워드마크, 카드, 하단 CTA 등)은 `ui_kits/muklog/mk-*.jsx`를 충실히 재현한다.
 
 ## 절대 규칙
 - **TDD가 기본.** 모든 기능은 테스트 우선(Red→Green→Refactor)으로 개발한다. 상세·스택·테스트 경계는 `docs/testing-strategy.md`. 스프린트 완료 기준에 `npm test` 통과가 포함된다.

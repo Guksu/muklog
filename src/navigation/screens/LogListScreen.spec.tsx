@@ -1,24 +1,40 @@
 // src/navigation/screens/LogListScreen.spec.tsx
-// 내 로그 목록 화면 — loading/error/empty/list 4분기, 빈 상태(에러 아님), 카드(배지·생성일·탭→LogScreen).
-// (plan §4.5 / §5 T8, C2·C9·C10·C11) useMyLogsContext·useNavigation 모킹. formatLogDate 등 유틸은 실 구현.
+// 내 로그 목록 화면 — loading/error/empty/list 4분기 + ui-redesign 충실화(카드 골격·하단 CTA·빈상태).
+// (plan §4.5 / §5 T8, C2·C9·C10·C11) useMyLogsContext·useCreateRoom·useNavigation 모킹. formatLogDate 등 유틸은 실 구현.
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
-jest.mock('@/features/room', () => ({ useMyLogsContext: jest.fn() }));
+// 배럴 모킹: 순수 errors는 실 구현(mapRoomError) 사용, 훅/컨텍스트만 모킹(supabase 비유입).
+jest.mock('@/features/room', () => {
+  const errors = jest.requireActual('@/features/room/errors');
+  return { ...errors, useMyLogsContext: jest.fn(), useCreateRoom: jest.fn() };
+});
+
+// 본인 프로필(카드/CTA 닉네임 표시)
+jest.mock('@/features/profile', () => ({ useProfile: jest.fn() }));
+jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
 
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),
 }));
 
-import { useMyLogsContext } from '@/features/room';
+import { useMyLogsContext, useCreateRoom } from '@/features/room';
+import { useProfile } from '@/features/profile';
+import { useAuth } from '@/features/auth';
 import { LogListScreen } from './LogListScreen';
 import { Routes } from '../routes';
 
 const useMyLogsContextMock = useMyLogsContext as jest.Mock;
+const useCreateRoomMock = useCreateRoom as jest.Mock;
+const useProfileMock = useProfile as jest.Mock;
+const useAuthMock = useAuth as jest.Mock;
+
 const refresh = jest.fn();
+const createRoom = jest.fn();
 
 const log = (over?: Partial<{
   roomId: string;
@@ -35,9 +51,21 @@ const log = (over?: Partial<{
   ...over,
 });
 
+const setupCommon = () => {
+  useAuthMock.mockReturnValue({ state: { status: 'authenticated', userId: 'u1' }, retry: jest.fn() });
+  useProfileMock.mockReturnValue({
+    state: { status: 'ready', profile: { nickname: '민지', avatarUrl: null } },
+    refresh: jest.fn(),
+  });
+  useCreateRoomMock.mockReturnValue({ createRoom, loading: false, error: null });
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   refresh.mockReset();
+  createRoom.mockReset();
+  setupCommon();
+  jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 });
 
 describe('LogListScreen — 상태 분기', () => {
@@ -62,8 +90,17 @@ describe('LogListScreen — 상태 분기', () => {
     useMyLogsContextMock.mockReturnValue({ state: { status: 'ready', logs: [] }, refresh });
     renderWithTheme(<LogListScreen />);
     expect(screen.getByText('아직 로그가 없어요')).toBeTruthy();
-    // 가이드 문구(+ 버튼 안내) 노출
-    expect(screen.getByText(/\+ 버튼/)).toBeTruthy();
+    // mk-home EmptyLogs 재현: "로그 만들기" primary 버튼 노출
+    expect(screen.getByText('로그 만들기')).toBeTruthy();
+  });
+
+  it('빈 상태의 "로그 만들기"를 누르면 createRoom→refresh를 호출한다', async () => {
+    createRoom.mockResolvedValueOnce({ roomId: 'r1', inviteCode: 'ABCDEF', mode: 'couple' });
+    useMyLogsContextMock.mockReturnValue({ state: { status: 'ready', logs: [] }, refresh });
+    renderWithTheme(<LogListScreen />);
+    fireEvent.press(screen.getByText('로그 만들기'));
+    await waitFor(() => expect(createRoom).toHaveBeenCalledWith());
+    expect(refresh).toHaveBeenCalled();
   });
 });
 
@@ -84,13 +121,13 @@ describe('LogListScreen — 카드(list)', () => {
     expect(screen.getByText('혼자')).toBeTruthy();
   });
 
-  it('생성일을 YYYY.MM.DD로 표기한다', () => {
+  it('생성일을 YYYY.MM.DD 시작으로 표기한다', () => {
     useMyLogsContextMock.mockReturnValue({
       state: { status: 'ready', logs: [log({ createdAt: '2026-06-10T00:00:00.000Z' })] },
       refresh,
     });
     renderWithTheme(<LogListScreen />);
-    expect(screen.getByText('2026.06.10')).toBeTruthy();
+    expect(screen.getByText('2026.06.10 시작')).toBeTruthy();
   });
 
   it('카드를 누르면 LogScreen으로 roomId를 전달하며 이동한다 (C10)', () => {
@@ -101,5 +138,36 @@ describe('LogListScreen — 카드(list)', () => {
     renderWithTheme(<LogListScreen />);
     fireEvent.press(screen.getByLabelText('로그 열기'));
     expect(mockNavigate).toHaveBeenCalledWith(Routes.LogScreen, { roomId: 'r-tap' });
+  });
+
+  it('카드에 텍스트 글리프(›) 대신 chevron-right 아이콘을 쓴다 (AC-9)', () => {
+    useMyLogsContextMock.mockReturnValue({
+      state: { status: 'ready', logs: [log({ roomId: 'r1' })] },
+      refresh,
+    });
+    renderWithTheme(<LogListScreen />);
+    expect(screen.getByTestId('icon-chevron-right')).toBeTruthy();
+    expect(screen.queryByText('›')).toBeNull();
+  });
+
+  it('맛집 데이터 플레이스홀더(0곳)를 정직하게 표시한다', () => {
+    useMyLogsContextMock.mockReturnValue({
+      state: { status: 'ready', logs: [log({ roomId: 'r1' })] },
+      refresh,
+    });
+    renderWithTheme(<LogListScreen />);
+    expect(screen.getByText('아직 기록한 맛집이 없어요')).toBeTruthy();
+  });
+
+  it('카드 하단에 "새 로그 시작하기" CTA가 있고, 누르면 createRoom→refresh를 호출한다', async () => {
+    createRoom.mockResolvedValueOnce({ roomId: 'r2', inviteCode: 'ZZZZZZ', mode: 'couple' });
+    useMyLogsContextMock.mockReturnValue({
+      state: { status: 'ready', logs: [log({ roomId: 'r1' })] },
+      refresh,
+    });
+    renderWithTheme(<LogListScreen />);
+    fireEvent.press(screen.getByText('새 로그 시작하기'));
+    await waitFor(() => expect(createRoom).toHaveBeenCalledWith());
+    expect(refresh).toHaveBeenCalled();
   });
 });

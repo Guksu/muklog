@@ -40,18 +40,30 @@ export const Button = ({
   const fg =
     variant === 'primary' ? theme.color.primaryFg : theme.color.fg;
   const borderColor =
-    variant === 'primary' ? theme.color.primary : theme.color.border;
+    variant === 'primary' ? theme.color.primary : theme.color.hairline;
 
+  // muklog primary 버튼: accent bg + 그림자(0 6px 16px accentShadow) 근사. secondary는 헤어라인 보더.
+  const primaryShadow: ViewStyle =
+    variant === 'primary' && !isInactive
+      ? {
+          shadowColor: theme.color.accentShadow,
+          shadowOpacity: 1,
+          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 4,
+        }
+      : {};
   const container: ViewStyle = {
     backgroundColor: bg,
     borderColor,
     borderWidth: variant === 'secondary' ? StyleSheet.hairlineWidth : 0,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.control,
     paddingVertical: theme.spacing[14],
     paddingHorizontal: theme.spacing[20],
     opacity: isInactive ? 0.5 : 1,
     alignItems: 'center',
     justifyContent: 'center',
+    ...primaryShadow,
   };
 
   return (
@@ -67,7 +79,7 @@ export const Button = ({
           <ActivityIndicator color={fg} />
         </View>
       ) : (
-        <Text variant="body" color={variant === 'primary' ? 'primaryFg' : 'fg'}>
+        <Text variant="button" color={variant === 'primary' ? 'primaryFg' : 'fg'}>
           {title}
         </Text>
       )}

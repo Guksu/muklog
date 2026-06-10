@@ -11,7 +11,7 @@ muklog의 스택 컨벤션. plan.md를 구현할 때 따른다. 스택별 상세
 - **앱**: React Native + **Expo Dev Client**(Kakao Map 네이티브 모듈 때문에 Expo Go 불가). TypeScript.
 - **백엔드**: Supabase — Postgres(RLS), Auth(익명), Storage, Realtime, Edge Functions.
 - **지도/장소**: Kakao Map SDK(렌더링·핀) + Kakao Local REST API(장소검색, **Edge Function 프록시 경유**).
-- **디자인**: 원티드 디자인 시스템 토큰을 `theme/`로 매핑해 사용.
+- **디자인**: **`ui-design` 스킬(`.claude/skills/ui-design`)이 UI 단일 출처·최우선.** 원티드 디자인 시스템 + `ui_kits/muklog` 킷(화면 레퍼런스)을 따른다. 브랜드 규칙(파랑 #3366FF, 헤어라인 보더, 10/16px radius, 4px 그리드, Pretendard, 해요체, 이모지 금지)을 `theme/`로 **번역**해 적용(스킬은 웹 CSS/JSX → RN StyleSheet+토큰으로 변환). 어떤 UI 작업이든 ui-design을 먼저 읽는다.
 
 ## 폴더 컨벤션 (제안)
 ```

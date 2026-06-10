@@ -46,6 +46,12 @@ describe('PlusHeaderButton — 로그 생성 단일 액션', () => {
     expect(screen.getByLabelText('로그 만들기')).toBeTruthy();
   });
 
+  it('텍스트 글리프(+) 대신 plus 아이콘을 렌더한다 (AC-8)', () => {
+    renderWithTheme(<PlusHeaderButton />);
+    expect(screen.getByTestId('icon-plus')).toBeTruthy();
+    expect(screen.queryByText('+')).toBeNull();
+  });
+
   it('누르면 액션시트 없이 바로 createRoom()을 호출하고 성공 시 refresh()한다 (C11)', async () => {
     createRoom.mockResolvedValueOnce({ roomId: 'r1', inviteCode: 'ABCDEF', mode: 'couple' });
     renderWithTheme(<PlusHeaderButton />);

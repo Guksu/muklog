@@ -8,7 +8,7 @@
 import React from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet } from 'react-native';
 
-import { Text } from '@/components';
+import { Icon, IconName } from '@/components';
 import { mapRoomError, useCreateRoom, useMyLogsContext } from '@/features/room';
 import { useTheme } from '@/theme';
 
@@ -36,24 +36,23 @@ export const PlusHeaderButton = () => {
       disabled={creating}
       onPress={() => void handleCreate()}
       hitSlop={theme.spacing[8]}
+      // mk-home HomeHeader 재현: 액센트-weak 버블 배경 + 액센트 아이콘(원형 40 버블).
       style={({ pressed }) => [
         styles.button,
-        { paddingHorizontal: theme.spacing[12] },
+        { backgroundColor: theme.color.primaryWeak, borderRadius: theme.radius.full },
         pressed && !creating ? styles.pressed : null,
       ]}
     >
       {creating ? (
         <ActivityIndicator color={theme.color.primary} />
       ) : (
-        <Text variant="h3" color="primary">
-          +
-        </Text>
+        <Icon name={IconName.Plus} size={24} color="primary" />
       )}
     </Pressable>
   );
 };
 
 const styles = StyleSheet.create({
-  button: { alignItems: 'center', justifyContent: 'center' },
+  button: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.6 },
 });
