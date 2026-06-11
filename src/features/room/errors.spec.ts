@@ -39,8 +39,24 @@ describe('mapRoomError — room-modes 신규 토큰 (2종, C2)', () => {
       '혼자 쓰는 방에는 입장할 수 없어요.',
     );
   });
+});
 
-  it('ROOM_ERROR_MESSAGES는 정확히 7개의 토큰 키를 가진다 (기존 5 + 신규 2, C2 단일 출처)', () => {
+describe('mapRoomError — log-invite 신규 토큰 (2종, get_room, C2)', () => {
+  it('NOT_A_MEMBER', () => {
+    expect(mapRoomError({ error: new Error('NOT_A_MEMBER') })).toBe('이 로그에 접근할 권한이 없어요.');
+  });
+
+  it('ROOM_NOT_FOUND', () => {
+    expect(mapRoomError({ error: new Error('ROOM_NOT_FOUND') })).toBe('로그를 찾을 수 없어요.');
+  });
+
+  it('Postgres가 NOT_A_MEMBER 토큰을 텍스트로 감싸도 포함 매칭한다', () => {
+    expect(mapRoomError({ error: new Error('ERROR: NOT_A_MEMBER (SQLSTATE P0001)') })).toBe(
+      '이 로그에 접근할 권한이 없어요.',
+    );
+  });
+
+  it('ROOM_ERROR_MESSAGES는 정확히 9개의 토큰 키를 가진다 (기존 7 + log-invite 2, C2 단일 출처)', () => {
     expect(Object.keys(ROOM_ERROR_MESSAGES).sort()).toEqual(
       [
         'ALREADY_IN_ROOM',
@@ -48,7 +64,9 @@ describe('mapRoomError — room-modes 신규 토큰 (2종, C2)', () => {
         'INVALID_CODE',
         'INVALID_MODE',
         'NOT_AUTHENTICATED',
+        'NOT_A_MEMBER',
         'ROOM_FULL',
+        'ROOM_NOT_FOUND',
         'SOLO_ROOM_NOT_JOINABLE',
       ].sort(),
     );

@@ -1,54 +1,77 @@
 // src/navigation/PlusHeaderButton.tsx
-// HomeTabs 헤더 우측의 +버튼 (plan §4.4). 멀티 로그 전환: 이번엔 "로그 생성" 단일 액션.
-//   누르면 액션시트 없이 바로 createRoom()(무인자, 정원2 기본) → myLogs.refresh()(목록 즉시 +1).
-//   실패 시 Alert로 매핑 메시지. creating(loading) 중 비활성(중복 생성 1차 방지).
-//   ⚠️ "로그 입장"(액션시트 확장)은 차기 log-invite 슬라이스에서 도입.
+// HomeTabs 헤더 우측의 +버튼 (plan §6.3 / §5 T7). log-invite: 단일 생성 → 액션시트(AddSheet) 분기로 갱신.
+//   + 탭 → AddSheet 오픈. "새 로그 만들기" → createRoom() → 성공 시 그 로그 LogScreen navigate + refresh()(D2).
+//   "초대코드로 입장" → JoinLog 라우트 navigate. 생성 실패 시 Alert(매핑 메시지)·navigate/refresh 미발생.
+//   creating(loading) 중 +버튼 비활성(중복 1차 방지). ⚠️ 기존 "생성=화면 전환 없음" spec은 의도적으로 갱신됨.
 //
-// 생산자(소비): useCreateRoom(RPC) + useMyLogsContext(refresh).
+// 생산자(소비): useCreateRoom(RPC) + useMyLogsContext(refresh) + useNavigation(navigate).
 import React from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet } from 'react-native';
+import { useNavigation, type NavigationProp } from '@react-navigation/native';
 
 import { Icon, IconName } from '@/components';
 import { mapRoomError, useCreateRoom, useMyLogsContext } from '@/features/room';
 import { useTheme } from '@/theme';
 
+import { AddSheet } from './AddSheet';
+import { Routes, type AppStackParamList } from './routes';
+
 export const PlusHeaderButton = () => {
   const theme = useTheme();
+  const navigation = useNavigation<NavigationProp<AppStackParamList>>();
   const { createRoom, loading: creating } = useCreateRoom();
   const myLogs = useMyLogsContext();
+  const [sheetOpen, setSheetOpen] = React.useState(false);
 
   const handleCreate = async () => {
+    setSheetOpen(false);
     try {
-      await createRoom();
-      // 생성은 화면 전환이 없으므로 목록을 직접 refresh → 카드 즉시 +1.
+      const { roomId } = await createRoom();
+      // D2: 생성자가 코드를 바로 보도록 그 로그의 LogScreen으로 이동 + 목록 갱신(+1).
       await myLogs.refresh();
+      navigation.navigate(Routes.LogScreen, { roomId });
     } catch (err) {
-      // 헤더 버튼이라 인라인 영역이 없음 → 네이티브 Alert로 매핑된 메시지 표시.
+      // 헤더 버튼이라 인라인 영역이 없음 → 네이티브 Alert로 매핑된 메시지 표시(navigate/refresh 없음).
       Alert.alert('로그를 만들지 못했어요', mapRoomError({ error: err }));
     }
   };
 
+  const handleJoin = () => {
+    setSheetOpen(false);
+    navigation.navigate(Routes.JoinLog);
+  };
+
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="로그 만들기"
-      accessibilityState={{ disabled: creating, busy: creating }}
-      disabled={creating}
-      onPress={() => void handleCreate()}
-      hitSlop={theme.spacing[8]}
-      // mk-home HomeHeader 재현: 액센트-weak 버블 배경 + 액센트 아이콘(원형 40 버블).
-      style={({ pressed }) => [
-        styles.button,
-        { backgroundColor: theme.color.primaryWeak, borderRadius: theme.radius.full },
-        pressed && !creating ? styles.pressed : null,
-      ]}
-    >
-      {creating ? (
-        <ActivityIndicator color={theme.color.primary} />
-      ) : (
-        <Icon name={IconName.Plus} size={24} color="primary" />
-      )}
-    </Pressable>
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="로그 만들기"
+        accessibilityState={{ disabled: creating, busy: creating }}
+        disabled={creating}
+        onPress={() => setSheetOpen(true)}
+        hitSlop={theme.spacing[8]}
+        // mk-home HomeHeader 재현: 액센트-weak 버블 배경 + 액센트 아이콘(원형 40 버블).
+        style={({ pressed }) => [
+          styles.button,
+          { backgroundColor: theme.color.primaryWeak, borderRadius: theme.radius.full },
+          pressed && !creating ? styles.pressed : null,
+        ]}
+      >
+        {creating ? (
+          <ActivityIndicator color={theme.color.primary} />
+        ) : (
+          <Icon name={IconName.Plus} size={24} color="primary" />
+        )}
+      </Pressable>
+
+      <AddSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onCreate={() => void handleCreate()}
+        onJoin={handleJoin}
+        creating={creating}
+      />
+    </>
   );
 };
 
