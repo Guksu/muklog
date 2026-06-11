@@ -25,6 +25,10 @@ export const IconName = {
   StarFill: 'star-fill',
   Close: 'close',
   Setting: 'setting',
+  Bell: 'bell',
+  Heart: 'heart',
+  CircleInfo: 'circle-info',
+  Link: 'link',
 } as const;
 export type IconName = (typeof IconName)[keyof typeof IconName];
 

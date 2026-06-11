@@ -1,6 +1,8 @@
 // src/features/profile — 공개 표면 (plan §5 T12)
 export { useProfile, type Profile, type ProfileState } from './useProfile';
 export { useUpdateProfile } from './useUpdateProfile';
+export { defaultAvatar, AVATAR_EMOJIS, AVATAR_COLORS } from './avatarDefault';
+export { computeProfileStats, SPOT_COUNT_UNAVAILABLE, type ProfileStats } from './profileStats';
 export {
   validateNickname,
   NICKNAME_MIN_LENGTH,

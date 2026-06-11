@@ -37,7 +37,7 @@ const SheetAction = ({
   const theme = useTheme();
   const row: ViewStyle = {
     borderColor: theme.color.hairline,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.action, // 킷 SheetAction radius 18(plan B5)
     backgroundColor: theme.color.surface,
     padding: theme.spacing[14],
     gap: theme.spacing[14],

@@ -1,14 +1,16 @@
 // src/components/InviteCodeCard.tsx
 // 초대코드 카드(복사) — mk-home InviteCodeCard 재현 (plan §6.2, AC1·AC2·C10).
 //   accent-weak(primaryWeak) 배경 + "초대코드" 라벨(accentStrong) + 대형 코드(letterSpacing 넓게) + "복사" 버튼.
-//   ⚠️ D4: 아이콘셋에 link/copy 글리프 없음 → 복사 버튼은 텍스트 라벨("복사"). 텍스트 글리프 아이콘 금지(아이콘 위치 한정).
+//   복사 버튼은 킷 mk-home InviteCodeCard(`leftIcon="link"`)대로 link 아이콘을 단다(assets/icons link 글리프 존재).
 //   복사: expo-clipboard.setStringAsync(code)(네트워크 0, 권한 불필요). 성공 시 "복사됨" 2초 노출.
 import React from 'react';
-import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type ViewStyle } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 
 import { useTheme } from '@/theme';
 
+import { Button } from './Button';
+import { IconName } from './Icon';
 import { Text } from './Text';
 
 const COPIED_FEEDBACK_MS = 2000;
@@ -63,25 +65,15 @@ export const InviteCodeCard = ({ code }: InviteCodeCardProps) => {
           {code}
         </Text>
       </View>
-      <Pressable
-        accessibilityRole="button"
+      {/* 복사 버튼 — 공용 Button(primary)로 통일(accentShadow 그림자 포함, plan B5). 킷 leftIcon="link". */}
+      <Button
+        title={copied ? '복사됨' : '복사'}
+        variant="primary"
+        size="sm"
+        leftIcon={IconName.Link}
         accessibilityLabel="초대코드 복사"
         onPress={() => void handleCopy()}
-        style={({ pressed }) => [
-          styles.copyButton,
-          {
-            backgroundColor: theme.color.primary,
-            borderRadius: theme.radius.control,
-            paddingVertical: theme.spacing[10],
-            paddingHorizontal: theme.spacing[16],
-          },
-          pressed ? styles.pressed : null,
-        ]}
-      >
-        <Text variant="button" color="primaryFg">
-          {copied ? '복사됨' : '복사'}
-        </Text>
-      </Pressable>
+      />
     </View>
   );
 };
@@ -89,6 +81,4 @@ export const InviteCodeCard = ({ code }: InviteCodeCardProps) => {
 const styles = StyleSheet.create({
   card: { flexDirection: 'row', alignItems: 'center' },
   codeBlock: { flex: 1 },
-  copyButton: { alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.85 },
 });

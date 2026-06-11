@@ -25,7 +25,8 @@ export const HomeTabs = () => {
         header: () => <HomeHeader />,
         headerShadowVisible: false,
         tabBarActiveTintColor: theme.color.primary,
-        tabBarInactiveTintColor: theme.color.fgWeak,
+        // 킷 MkTabBar 비활성 라벨 = text-alternative(fgMuted).
+        tabBarInactiveTintColor: theme.color.fgMuted,
         tabBarStyle: { backgroundColor: theme.color.bg, borderTopColor: theme.color.hairline },
         tabBarLabelStyle: {
           fontFamily: theme.typography.caption.fontFamily,
@@ -43,7 +44,7 @@ export const HomeTabs = () => {
             <Icon
               name={focused ? IconName.BubbleFill : IconName.Bubble}
               size={size}
-              color={focused ? 'primary' : 'fgWeak'}
+              color={focused ? 'primary' : 'fgAssistive'}
             />
           ),
         }}

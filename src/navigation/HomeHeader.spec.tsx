@@ -79,13 +79,14 @@ describe('HomeHeader', () => {
     expect(mockNavigate).toHaveBeenCalledWith(Routes.Profile);
   });
 
-  it('아바타 URL이 있으면 이미지로, 없으면 플레이스홀더(이니셜)로 표시한다', () => {
+  it('아바타 URL이 있으면 이미지로, 없으면 userId 디폴트(이모지)로 표시한다 (B6)', () => {
     setup({ avatarUrl: 'https://example.com/a.png', nickname: '민지' });
     const { rerender } = renderWithTheme(<HomeHeader />);
     expect(screen.getByTestId('avatar-image')).toBeTruthy();
 
     setup({ avatarUrl: null, nickname: '민지' });
     rerender(<HomeHeader />);
-    expect(screen.getByTestId('avatar-placeholder')).toBeTruthy();
+    // url 없음 + userId(u1) → 결정적 디폴트 이모지 아바타.
+    expect(screen.getByTestId('avatar-default')).toBeTruthy();
   });
 });

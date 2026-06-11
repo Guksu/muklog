@@ -41,7 +41,17 @@ export const JoinLogScreen = () => {
 
   return (
     <Screen edges={['left', 'right', 'bottom']} style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.content, { padding: theme.spacing[24] }]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          // 킷 JoinScreen 상단 padding 12(plan B5), 좌우/하단 24 유지.
+          {
+            paddingTop: theme.spacing[12],
+            paddingHorizontal: theme.spacing[24],
+            paddingBottom: theme.spacing[24],
+          },
+        ]}
+      >
         <Text variant="display" style={[styles.center, { marginTop: theme.spacing[20] }]}>
           {HEART_EMOJI}
         </Text>

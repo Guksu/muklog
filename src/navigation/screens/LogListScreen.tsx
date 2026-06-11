@@ -3,9 +3,9 @@
 //   loading → 스피너 / error → 메시지+다시 시도(refresh) / ready+[] → 빈 상태(EmptyLogs) / ready+logs → 카드 리스트 + 하단 CTA.
 //
 // 카드 골격(mk-home LogCard 재현, 데이터 없는 부분은 정직한 플레이스홀더):
-//   상단 = 아바타(본인; 커플이면 익명 아바타 겹침) + 이름("{닉}의 기록"/"{닉} ♥ 짝꿍") + 멤버 배지 + 날짜("YYYY.MM.DD 시작") + chevron
-//   중간 = 미리보기 사진 4슬롯(사진 데이터 없음 → 빈 점선 슬롯, 가짜 이모지 미사용)
-//   하단 = location 아이콘 + "아직 기록한 맛집이 없어요"(맛집 0 placeholder)
+//   상단 = 아바타(본인 userId 디폴트; 커플이면 익명 아바타 겹침) + 이름("{닉}의 기록"/"{닉} ♥ 짝꿍") + MemberBadge + 날짜("YYYY.MM.DD 시작") + chevron
+//   중간 = 미리보기 사진 4슬롯(사진/집계 데이터 없음 → 빈 점선 슬롯, 가짜 이모지 미사용)
+//   하단 = location 아이콘 + count-free 중립 카피("맛집을 기록해보세요" — 거짓 카운트 단언 금지, QA Q9)
 //   탭 → LogScreen({roomId}) 유지.
 // 하단 CTA: 2px dashed 보더 "새 로그 시작하기"(PlusHeaderButton과 동일 — createRoom→refresh, 로딩 중 비활성).
 //
@@ -15,7 +15,7 @@ import React from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, View } from 'react-native';
 import { useNavigation, type NavigationProp } from '@react-navigation/native';
 
-import { Avatar, Badge, Button, Card, Icon, IconName, Screen, Text } from '@/components';
+import { Avatar, Button, Card, Icon, IconName, MemberBadge, Screen, Text } from '@/components';
 import { useAuth } from '@/features/auth';
 import { useProfile } from '@/features/profile';
 import { mapRoomError, useCreateRoom, useMyLogsContext, type MyLog } from '@/features/room';
@@ -27,19 +27,17 @@ import { formatLogDate } from './formatLogDate';
 const PREVIEW_SLOT_COUNT = 4;
 const CARD_AVATAR_SIZE = 42;
 
-// 멤버 배지 문구: 2명=둘이 / 그 외(1)=혼자. mode 컬럼이 아니라 멤버 수에서 파생(plan 함정3).
-const memberBadgeLabel = ({ memberCount }: { memberCount: number }): string =>
-  memberCount >= 2 ? '둘이' : '혼자';
-
 // 카드 타이틀: 솔로="{닉}의 기록" / 커플="{닉} ♥ 짝꿍"(짝꿍 실데이터 미존재 → 익명 표기).
 const cardTitle = ({ nickname, isCouple }: { nickname: string; isCouple: boolean }): string =>
   isCouple ? `${nickname} ♥ 짝꿍` : `${nickname}의 기록`;
 
 // 본인 닉네임/아바타. userId가 있을 때만 useProfile을 마운트해야 하므로 상위에서 분기.
+//   userId도 함께 노출 → Avatar가 url 없을 때 결정적 디폴트(이모지+컬러)를 파생(plan §3.3).
 const useSelfDisplay = ({ userId }: { userId: string }) => {
   const { state } = useProfile({ userId });
   const profile = state.status === 'ready' ? state.profile : null;
   return {
+    userId,
     nickname: profile?.nickname && profile.nickname.length > 0 ? profile.nickname : '나',
     avatarUrl: profile?.avatarUrl ?? null,
   };
@@ -51,7 +49,7 @@ const LogCard = ({
   onPress,
 }: {
   log: MyLog;
-  self: { nickname: string; avatarUrl: string | null };
+  self: { userId: string; nickname: string; avatarUrl: string | null };
   onPress: () => void;
 }) => {
   const theme = useTheme();
@@ -61,11 +59,16 @@ const LogCard = ({
       {/* 상단: 아바타 + 이름/배지/날짜 + chevron */}
       <View style={styles.cardHeader}>
         <View style={styles.avatarStack}>
-          <Avatar url={self.avatarUrl} nickname={self.nickname} size={CARD_AVATAR_SIZE} />
+          <Avatar
+            url={self.avatarUrl}
+            userId={self.userId}
+            nickname={self.nickname}
+            size={CARD_AVATAR_SIZE}
+          />
           {isCouple ? (
-            // 짝꿍 실데이터 미존재 → 익명 아바타 플레이스홀더를 겹쳐 커플 골격만 재현.
+            // 짝꿍 실데이터 미존재 → 익명 아바타(🙂)를 겹쳐 커플 골격만 재현(plan §3.3 익명 파트너).
             <View style={{ marginLeft: -theme.spacing[12] }}>
-              <Avatar url={null} nickname={null} size={CARD_AVATAR_SIZE} />
+              <Avatar url={null} userId={null} nickname={null} size={CARD_AVATAR_SIZE} />
             </View>
           ) : null}
         </View>
@@ -74,7 +77,7 @@ const LogCard = ({
             {cardTitle({ nickname: self.nickname, isCouple })}
           </Text>
           <View style={[styles.cardMeta, { gap: theme.spacing[8], marginTop: theme.spacing[4] }]}>
-            <Badge label={memberBadgeLabel({ memberCount: log.memberCount })} tone="primary" />
+            <MemberBadge memberCount={log.memberCount} />
             <Text variant="meta" color="fgMuted">
               {`${formatLogDate({ iso: log.createdAt })} 시작`}
             </Text>
@@ -100,11 +103,11 @@ const LogCard = ({
         ))}
       </View>
 
-      {/* 하단: 맛집 수 — 데이터 미존재 → 0곳 플레이스홀더(정직 표기) */}
+      {/* 하단: 위치핀 + count-free 중립 카피(맛집 집계 미보유 → 카운트 단언 금지, QA Q9/plan §B4). */}
       <View style={[styles.cardFooter, { gap: theme.spacing[6], marginTop: theme.spacing[12] }]}>
         <Icon name={IconName.Location} size={15} color="primary" />
         <Text variant="spotCount" color="fgWeak">
-          아직 기록한 맛집이 없어요
+          맛집을 기록해보세요
         </Text>
       </View>
     </Card>
@@ -116,9 +119,8 @@ const EmptyLogs = ({ onCreate, creating }: { onCreate: () => void; creating: boo
   const theme = useTheme();
   return (
     <Screen center>
-      <Text variant="display" style={{ marginBottom: theme.spacing[8] }}>
-        🍜
-      </Text>
+      {/* 킷 빈상태 이모지 64px(plan B4). */}
+      <Text style={[styles.emptyEmoji, { marginBottom: theme.spacing[8] }]}>🍜</Text>
       <Text variant="emptyTitle" color="fg" style={styles.center}>
         아직 로그가 없어요
       </Text>
@@ -235,6 +237,7 @@ const CreateLogCta = ({ onPress, disabled }: { onPress: () => void; disabled: bo
 
 const styles = StyleSheet.create({
   center: { textAlign: 'center' },
+  emptyEmoji: { fontSize: 64, lineHeight: 72, textAlign: 'center' },
   listScreen: { padding: 0 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatarStack: { flexDirection: 'row', alignItems: 'center' },

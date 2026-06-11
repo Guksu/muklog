@@ -60,6 +60,17 @@ describe('tokens — radius (muklog 킷)', () => {
     expect(radius.card).toBe(22);
     expect(radius.sheet).toBe(20);
   });
+
+  it('action=18(AddSheet 액션 카드)가 정의된다', () => {
+    expect(radius.action).toBe(18);
+  });
+});
+
+describe('tokens — starFill (Stars 채움색, A6)', () => {
+  it('채운 별 색이 킷 #FFB23E다(warning #FF9200과 구분)', () => {
+    expect(themes.light.color.starFill).toBe('#FFB23E');
+    expect(themes.light.color.starFill).not.toBe(themes.light.color.warning);
+  });
 });
 
 describe('tokens — shadow.card (muklog 소프트 웜 섀도우)', () => {
@@ -91,6 +102,16 @@ describe('tokens — typography (AC-5)', () => {
     expect(typography.emptyTitle.fontSize).toBe(21);
     expect(typography.badge.fontSize).toBe(12);
   });
+
+  it('sectionTitle이 킷 섹션 헤더 800/19(Bold)다 (LogScreen "우리 맛집 N")', () => {
+    expect(typography.sectionTitle.fontSize).toBe(19);
+    expect(typography.sectionTitle.fontFamily).toBe('Pretendard-Bold');
+  });
+
+  it('navTitle이 킷 로그 헤더 700/16(Bold)다 (LogScreen 헤더 로그명, 킷 mk-log:25)', () => {
+    expect(typography.navTitle.fontSize).toBe(16);
+    expect(typography.navTitle.fontFamily).toBe('Pretendard-Bold');
+  });
 });
 
 describe('tokens — spacing 보강', () => {
@@ -98,5 +119,12 @@ describe('tokens — spacing 보강', () => {
     // 동적 import로 spacing 참조 — 28 보강 확인.
     const { spacing } = require('./tokens');
     expect(spacing[28]).toBe(28);
+  });
+
+  it('킷 보강 spacing 7·18·26이 포함된다(plan A8)', () => {
+    const { spacing } = require('./tokens');
+    expect(spacing[7]).toBe(7);
+    expect(spacing[18]).toBe(18);
+    expect(spacing[26]).toBe(26);
   });
 });

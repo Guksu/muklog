@@ -5,6 +5,7 @@ import {
   MUKLOG_CATEGORY_KEYS,
   categoryLabel,
   categoryEmoji,
+  categoryColors,
   type MuklogCategoryKey,
 } from './categories';
 
@@ -34,6 +35,18 @@ describe('MUKLOG_CATEGORIES', () => {
     expect(MUKLOG_CATEGORIES.cafe).toMatchObject({ label: '카페·디저트', emoji: '☕' });
     expect(MUKLOG_CATEGORIES.izakaya).toMatchObject({ label: '이자카야', emoji: '🍶' });
   });
+
+  it('각 카테고리는 [from,to] 그라데이션 colors를 가진다 (A1, FoodCover)', () => {
+    MUKLOG_CATEGORY_KEYS.forEach((key) => {
+      expect(MUKLOG_CATEGORIES[key].colors).toHaveLength(2);
+    });
+  });
+
+  it('mk-data.js CAT.grad와 그라데이션 색이 일치한다(드리프트 방지)', () => {
+    expect(MUKLOG_CATEGORIES.pasta.colors).toEqual(['#FFD9A8', '#FF9E7D']);
+    expect(MUKLOG_CATEGORIES.sushi.colors).toEqual(['#FFC7C2', '#FF7E8A']);
+    expect(MUKLOG_CATEGORIES.izakaya.colors).toEqual(['#FFCBB8', '#E8806B']);
+  });
 });
 
 describe('categoryLabel / categoryEmoji', () => {
@@ -47,5 +60,18 @@ describe('categoryLabel / categoryEmoji', () => {
     expect(categoryEmoji({ key: null })).toBe('');
     expect(categoryLabel({ key: 'unknown' as MuklogCategoryKey })).toBe('');
     expect(categoryEmoji({ key: 'unknown' as MuklogCategoryKey })).toBe('');
+  });
+});
+
+describe('categoryColors (FoodCover 그라데이션, A1)', () => {
+  it('알려진 key는 [from,to] 그라데이션을 반환한다', () => {
+    expect(categoryColors({ key: 'pasta' })).toEqual(['#FFD9A8', '#FF9E7D']);
+  });
+
+  it('null/미존재 key는 cafe 그라데이션으로 폴백한다(킷 CAT[cat]||CAT.cafe)', () => {
+    expect(categoryColors({ key: null })).toEqual(MUKLOG_CATEGORIES.cafe.colors);
+    expect(categoryColors({ key: 'unknown' as MuklogCategoryKey })).toEqual(
+      MUKLOG_CATEGORIES.cafe.colors,
+    );
   });
 });

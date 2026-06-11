@@ -19,3 +19,4 @@ export {
   MuklogErrorToken,
 } from './errors';
 export { type Muklog, type MuklogsState, type CreateMuklogInput } from './types';
+export { muklogCategoriesInUse, filterMuklogsByCategory } from './filterByCategory';

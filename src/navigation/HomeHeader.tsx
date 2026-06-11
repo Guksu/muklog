@@ -23,12 +23,14 @@ const WORDMARK = '먹로그';
 const WORDMARK_EMOJI = '🍽️';
 
 // 본인 프로필(닉네임/아바타)을 조회해 헤더 아바타로 렌더. userId가 있을 때만 마운트(useProfile 보장).
+//   url 없으면 userId 결정적 디폴트(이모지+컬러)로 표시(plan §3.3).
 const HomeHeaderAvatar = ({ userId }: { userId: string }) => {
   const { state } = useProfile({ userId });
   const profile = state.status === 'ready' ? state.profile : null;
   return (
     <Avatar
       url={profile?.avatarUrl ?? null}
+      userId={userId}
       nickname={profile?.nickname ?? null}
       size={HEADER_AVATAR_SIZE}
     />
@@ -54,11 +56,12 @@ export const HomeHeader = () => {
         },
       ]}
     >
-      <View style={[styles.left, { gap: theme.spacing[6] }]}>
+      <View style={[styles.left, { gap: theme.spacing[7] }]}>
         <Text variant="wordmark" color="fg" style={styles.wordmark}>
           {WORDMARK}
         </Text>
-        <Text variant="bodyLg">{WORDMARK_EMOJI}</Text>
+        {/* 킷 워드마크 이모지 19px, 베이스라인 정렬. */}
+        <Text style={styles.wordmarkEmoji}>{WORDMARK_EMOJI}</Text>
       </View>
 
       <View style={[styles.right, { gap: theme.spacing[4] }]}>
@@ -87,9 +90,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  left: { flexDirection: 'row', alignItems: 'center' },
+  // 킷: 워드마크/이모지 베이스라인 정렬(alignItems baseline).
+  left: { flexDirection: 'row', alignItems: 'baseline' },
   // 워드마크 = muklog 킷 800/26 (typography.wordmark). 음수 letterSpacing(-0.5)으로 밀착.
   wordmark: { letterSpacing: -0.5 },
+  wordmarkEmoji: { fontSize: 19 },
   right: { flexDirection: 'row', alignItems: 'center' },
   avatarButton: { padding: 2 },
   pressed: { opacity: 0.6 },

@@ -43,4 +43,10 @@ describe('Stars', () => {
     fireEvent.press(screen.getByLabelText('별점 4점'));
     expect(onChange).toHaveBeenCalledWith(4);
   });
+
+  it('채운 별은 킷 starFill(#FFB23E)로 칠한다 (A6)', () => {
+    renderWithTheme(<Stars value={3} />);
+    const filledIcons = screen.getAllByTestId('icon-star-fill');
+    expect(filledIcons[0].props.color).toBe('#FFB23E');
+  });
 });

@@ -25,12 +25,36 @@ const base: Muklog = {
 const renderCard = (over?: Partial<Muklog>, meId = 'me-uid') =>
   renderWithTheme(<MuklogCard muklog={{ ...base, ...over }} meId={meId} />);
 
+const flatStyle = (node: { props: { style: unknown } }) =>
+  Object.assign({}, ...[].concat(node.props.style as never).filter(Boolean)) as Record<string, unknown>;
+
 describe('MuklogCard', () => {
   it('장소명·카테고리 칩(emoji+label)·위치줄(area · 날짜)을 표시한다', () => {
     renderCard();
     expect(screen.getByText('트라토리아 보나')).toBeTruthy();
     expect(screen.getByText('🍝 파스타·양식')).toBeTruthy();
     expect(screen.getByText('연남동 · 2026.02.14')).toBeTruthy();
+  });
+
+  it('카테고리 칩 텍스트에 fontSize보다 큰 lineHeight를 줘 이모지 세로 클리핑을 막는다', () => {
+    renderCard();
+    const chipText = screen.getByText('🍝 파스타·양식');
+    const flat = Object.assign(
+      {},
+      ...[].concat(chipText.props.style as never).filter(Boolean),
+    ) as { fontSize: number; lineHeight: number };
+    expect(flat.lineHeight).toBeGreaterThan(flat.fontSize);
+  });
+
+  it('커버를 FoodCover로 그리고 aspectRatio 16/10이다 (B1)', () => {
+    renderCard();
+    const cover = screen.getByTestId('food-cover-gradient');
+    expect(flatStyle(cover).aspectRatio).toBe(16 / 10);
+  });
+
+  it('작성자 행에 createdBy 디폴트 아바타(22px)를 렌더한다 (B1)', () => {
+    renderCard({ createdBy: 'author-uid' });
+    expect(screen.getByTestId('avatar-default')).toBeTruthy();
   });
 
   it('별점 5개를 채운다 (AC9 표시)', () => {

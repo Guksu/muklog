@@ -58,9 +58,10 @@ export const PlusHeaderButton = () => {
         ]}
       >
         {creating ? (
-          <ActivityIndicator color={theme.color.primary} />
+          <ActivityIndicator color={theme.color.accentStrong} />
         ) : (
-          <Icon name={IconName.Plus} size={24} color="primary" />
+          // 킷 IBTN: accent-strong(#1F4FE0) 아이콘 + accent-weak 버블.
+          <Icon name={IconName.Plus} size={24} color="accentStrong" />
         )}
       </Pressable>
 

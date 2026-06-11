@@ -121,13 +121,35 @@ describe('LogListScreen — 카드(list)', () => {
     expect(screen.getByText('혼자')).toBeTruthy();
   });
 
-  it('생성일을 YYYY.MM.DD 시작으로 표기한다', () => {
+  it('커플 로그면 본인 디폴트 아바타 + 익명 파트너 아바타(🙂)를 겹쳐 보인다 (B4)', () => {
     useMyLogsContextMock.mockReturnValue({
-      state: { status: 'ready', logs: [log({ createdAt: '2026-06-10T00:00:00.000Z' })] },
+      state: { status: 'ready', logs: [log({ roomId: 'r1', memberCount: 2 })] },
+      refresh,
+    });
+    renderWithTheme(<LogListScreen />);
+    // 본인=userId 디폴트 아바타(url 없음), 파트너=익명.
+    expect(screen.getByTestId('avatar-default')).toBeTruthy();
+    expect(screen.getByTestId('avatar-anonymous')).toBeTruthy();
+  });
+
+  it('솔로 로그면 파트너 아바타가 없다 (B4)', () => {
+    useMyLogsContextMock.mockReturnValue({
+      state: { status: 'ready', logs: [log({ roomId: 'r1', memberCount: 1 })] },
+      refresh,
+    });
+    renderWithTheme(<LogListScreen />);
+    expect(screen.queryByTestId('avatar-anonymous')).toBeNull();
+  });
+
+  it('커플 카드도 "YYYY.MM.DD 시작" 고정 포맷이다(sinceLabel Date.now 비결정 회피, 솔로와 통일)', () => {
+    useMyLogsContextMock.mockReturnValue({
+      // memberCount 2 = 커플. 킷은 "함께한 지 N일"이나 RN은 결정적 "시작" 포맷으로 통일.
+      state: { status: 'ready', logs: [log({ memberCount: 2, createdAt: '2026-06-10T00:00:00.000Z' })] },
       refresh,
     });
     renderWithTheme(<LogListScreen />);
     expect(screen.getByText('2026.06.10 시작')).toBeTruthy();
+    expect(screen.queryByText(/함께한 지/)).toBeNull();
   });
 
   it('카드를 누르면 LogScreen으로 roomId를 전달하며 이동한다 (C10)', () => {
@@ -150,13 +172,15 @@ describe('LogListScreen — 카드(list)', () => {
     expect(screen.queryByText('›')).toBeNull();
   });
 
-  it('맛집 데이터 플레이스홀더(0곳)를 정직하게 표시한다', () => {
+  it('카드 푸터에 count-free 중립 카피를 표시한다(거짓 카운트 단언 없음, QA Q9)', () => {
     useMyLogsContextMock.mockReturnValue({
       state: { status: 'ready', logs: [log({ roomId: 'r1' })] },
       refresh,
     });
     renderWithTheme(<LogListScreen />);
-    expect(screen.getByText('아직 기록한 맛집이 없어요')).toBeTruthy();
+    expect(screen.getByText('맛집을 기록해보세요')).toBeTruthy();
+    // 거짓 음성("없어요") 카피는 제거됨.
+    expect(screen.queryByText('아직 기록한 맛집이 없어요')).toBeNull();
   });
 
   it('카드 하단에 "새 로그 시작하기" CTA가 있고, 누르면 createRoom→refresh를 호출한다', async () => {

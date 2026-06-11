@@ -1,6 +1,6 @@
 // src/components/Stars.tsx
-// 별점 표시/입력 컴포넌트 — mk-ui Stars 재현 (plan §6.2 / §5 T7, AC4).
-//   value(1~5)만큼 채운 별(warning=앰버 근사) + 나머지 빈 별(borderStrong). editable이면 별 탭→onChange(n).
+// 별점 표시/입력 컴포넌트 — mk-ui Stars 재현 (plan §6.2 / §5 T7, AC4 / A6).
+//   value(1~5)만큼 채운 별(starFill=킷 #FFB23E) + 나머지 빈 별(borderStrong=--line-strong). editable이면 별 탭→onChange(n).
 //   0/null = 모두 빈 별(미평가). 카드(표시)·입력 시트(editable) 양쪽에서 재사용. 스타일은 토큰만(raw hex 0).
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -32,7 +32,7 @@ export const Stars = ({ value, size = 14, editable = false, onChange }: StarsPro
           <Icon
             name={filled ? IconName.StarFill : IconName.Star}
             size={size}
-            color={filled ? 'warning' : 'borderStrong'}
+            color={filled ? 'starFill' : 'borderStrong'}
           />
         );
         if (!editable) {

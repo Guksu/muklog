@@ -8,9 +8,11 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { Button, Icon, IconName, Text } from '@/components';
+import { Button, Chip, Icon, IconName, Text } from '@/components';
 import { useTheme } from '@/theme';
 
+import { categoryEmoji, categoryLabel } from './categories';
+import { filterMuklogsByCategory, muklogCategoriesInUse } from './filterByCategory';
 import { MuklogCard } from './MuklogCard';
 import { MuklogEntrySheet } from './MuklogEntrySheet';
 import { useMuklogs } from './useMuklogs';
@@ -26,8 +28,10 @@ export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
   const theme = useTheme();
   const { state, refresh } = useMuklogs({ roomId });
   const [sheetOpen, setSheetOpen] = useState(false);
+  // 카테고리 필터(B2) — null="전체". 선택 상태만 화면 보유, 도출/필터는 순수 유틸(filterByCategory).
+  const [category, setCategory] = useState<string | null>(null);
 
-  // 섹션 헤더의 N(D7) — ready일 때만 실제 개수, 그 외 0.
+  // 섹션 헤더의 N(D7) — ready일 때만 실제 개수, 그 외 0. N은 필터 무관 전체 수(킷 mk-log.jsx:55).
   const count = state.status === 'ready' ? state.muklogs.length : 0;
 
   const handleSaved = async () => {
@@ -42,10 +46,10 @@ export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
       >
         {/* 섹션 헤더 */}
         <View style={[styles.headerRow, { marginBottom: theme.spacing[10] }]}>
-          <Text variant="h3" color="fg">
+          <Text variant="sectionTitle" color="fg">
             우리 맛집 {count}
           </Text>
-          <Text variant="sectionCaption" color="fgMuted">
+          <Text variant="meta" color="fgMuted">
             최근 순
           </Text>
         </View>
@@ -87,10 +91,42 @@ export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
         ) : null}
 
         {state.status === 'ready' && state.muklogs.length > 0 ? (
-          <View style={{ gap: theme.spacing[14] }}>
-            {state.muklogs.map((item) => (
-              <MuklogCard key={item.id} muklog={item} meId={meId} />
-            ))}
+          <View>
+            {/* 카테고리 필터 칩 행 — "전체" + 리스트에 존재하는 카테고리(가로 스크롤, gap 7). */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={[
+                styles.chipRow,
+                { gap: theme.spacing[7], paddingHorizontal: theme.spacing[20] },
+              ]}
+              // 칩이 화면 좌우 끝까지 스크롤(edge-bleed) — 바깥 padding20 상쇄 후 contentContainer로 첫 칩 들여쓰기(킷 mk-log:60-64).
+              style={{ marginHorizontal: -theme.spacing[20], marginBottom: theme.spacing[14] }}
+            >
+              <Chip
+                testID="chip-all"
+                label="전체"
+                selected={category === null}
+                onPress={() => setCategory(null)}
+              />
+              {muklogCategoriesInUse({ muklogs: state.muklogs }).map((key) => (
+                <Chip
+                  key={key}
+                  testID={`chip-${key}`}
+                  label={categoryLabel({ key })}
+                  emoji={categoryEmoji({ key })}
+                  selected={category === key}
+                  onPress={() => setCategory(key)}
+                />
+              ))}
+            </ScrollView>
+
+            {/* 필터된 카드 리스트(category=null이면 전체). */}
+            <View style={{ gap: theme.spacing[14] }}>
+              {filterMuklogsByCategory({ muklogs: state.muklogs, category }).map((item) => (
+                <MuklogCard key={item.id} muklog={item} meId={meId} />
+              ))}
+            </View>
           </View>
         ) : null}
       </ScrollView>
@@ -105,8 +141,8 @@ export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
           {
             backgroundColor: theme.color.primary,
             borderRadius: theme.radius.full,
-            bottom: theme.spacing[24],
-            right: theme.spacing[20],
+            bottom: theme.spacing[26],
+            right: theme.spacing[18],
           },
           theme.shadow.md,
         ]}
@@ -129,9 +165,13 @@ const FAB_SIZE = 58;
 const styles = StyleSheet.create({
   container: { flex: 1 },
   headerRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  // 필터 칩 행 — 가로 스크롤, 칩이 세로 중앙 정렬되도록 alignItems center(gap은 인라인 토큰).
+  chipRow: { flexDirection: 'row', alignItems: 'center' },
   center: { alignItems: 'center', justifyContent: 'center' },
   centerText: { textAlign: 'center' },
-  emptyEmoji: { fontSize: 44 },
+  // 큰 이모지는 RN에서 fontSize==lineHeight면 위/아래가 잘린다 → ×1.27 헤드룸(44→56)으로 클리핑 방지.
+  //   textAlignVertical center로 잘림 시 상하 균형(Android). 디바이스 기준 56이면 🍽️ 글리프가 온전히 보인다.
+  emptyEmoji: { fontSize: 44, lineHeight: 56, textAlignVertical: 'center' },
   fab: {
     position: 'absolute',
     width: FAB_SIZE,

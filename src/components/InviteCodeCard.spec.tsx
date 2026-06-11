@@ -8,6 +8,7 @@ import { renderWithTheme } from '@/test/renderWithTheme';
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn().mockResolvedValue(true) }));
 import * as Clipboard from 'expo-clipboard';
 
+import { IconName } from './Icon';
 import { InviteCodeCard } from './InviteCodeCard';
 
 const setStringAsync = Clipboard.setStringAsync as jest.Mock;
@@ -38,5 +39,10 @@ describe('InviteCodeCard', () => {
     await waitFor(() => {
       expect(screen.getByText('복사됨')).toBeTruthy();
     });
+  });
+
+  it('복사 버튼에 link 아이콘(leftIcon)을 표시한다 (킷 mk-home InviteCodeCard 정합)', () => {
+    renderWithTheme(<InviteCodeCard code="ABCDEF" />);
+    expect(screen.getByTestId(`icon-${IconName.Link}`)).toBeTruthy();
   });
 });

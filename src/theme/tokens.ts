@@ -26,6 +26,8 @@ const palette = {
   white:'#FFFFFF', surfaceAlt:'#F7F7F8', black:'#000000',
   // primary 버튼 그림자(--mk-accent-shadow rgba(51,102,255,.30)) · 카드 웜 섀도우 베이스.
   accentShadow:'rgba(51,102,255,0.30)', shadowWarm:'#785A46',
+  // 별점 채움색 — 킷 mk-ui Stars 채운 별 #FFB23E (앰버, warning #FF9200과 구분).
+  starFill:'#FFB23E',
 } as const;
 
 // 시맨틱 컬러 (라이트) [muklog 웜 변형 — 킷 ui_kits/muklog]
@@ -46,6 +48,8 @@ const lightColor = {
   warning: palette.orange[50], warningStrong: palette.orange[40], warningWeak: palette.orange[95],
   error: palette.red[50], errorStrong: palette.red[40], errorWeak: palette.red[95],
   ring: palette.blue.interactive,
+  // 별점 채움색 — 킷 Stars #FFB23E. 빈 별은 borderStrong(--line-strong)로 정합.
+  starFill: palette.starFill,
 } as const;
 
 // 시맨틱 컬러 (다크) — 시맨틱만 오버라이드. 신규 키도 동일 키로 미러링(tsc 키 일관성, 엣지1).
@@ -63,11 +67,13 @@ const darkColor = {
 } as const;
 
 // 스페이싱 [확인 — 원티드 실제 스케일, px → RN 숫자]
-export const spacing = { 0:0, px:0.5, 1:1, 2:2, 4:4, 6:6, 8:8, 10:10, 12:12, 14:14, 16:16, 20:20, 24:24, 28:28, 32:32, 40:40, 48:48, 56:56, 64:64, 72:72, 80:80 } as const;
+// 7/18/26 = 킷 다수 gap·padding(아바타 행·시트 액션·헤더 등). 4px 그리드 보강값(plan A8).
+export const spacing = { 0:0, px:0.5, 1:1, 2:2, 4:4, 6:6, 7:7, 8:8, 10:10, 12:12, 14:14, 16:16, 18:18, 20:20, 24:24, 26:26, 28:28, 32:32, 40:40, 48:48, 56:56, 64:64, 72:72, 80:80 } as const;
 
 // 라운드 [muklog 킷 정합] — control(버튼 14, --mk-radius-btn) / card(카드 22, --mk-radius-card) / sheet(시트 20).
 //   기존 sm/md/lg/xl/full 은 호환 유지(소비처 단계적 이전).
-export const radius = { sm:4, md:8, lg:12, xl:16, control:14, card:22, sheet:20, full:9999 } as const;
+//   action(18) = AddSheet 액션 카드(킷 SheetAction) 전용 radius.
+export const radius = { sm:4, md:8, lg:12, xl:16, control:14, action:18, card:22, sheet:20, full:9999 } as const;
 
 // 섀도우 [프로젝트 정의] — RN은 iOS shadow* + Android elevation
 //   card = muklog LogCard 소프트 웜 섀도우(--mk-shadow-card: rgba(120,90,70,.07)+.05를 단일 그림자로 근사).
@@ -100,6 +106,8 @@ export const typography = {
   wordmark:   makeTypography({ size: 26, ratio: 1, family: 'Pretendard-Bold' }),      // 800/26 (헤더 워드마크)
   cardTitle:  makeTypography({ size: 17, ratio: 1.3, family: 'Pretendard-Bold' }),    // 700/17 (카드 타이틀)
   emptyTitle: makeTypography({ size: 21, ratio: 1.3, family: 'Pretendard-Bold' }),    // 800/21 (빈상태 제목)
+  sectionTitle: makeTypography({ size: 19, ratio: 1.2, family: 'Pretendard-Bold' }),  // 800/19 (LogScreen "우리 맛집 N" 섹션, 킷 mk-log:56)
+  navTitle:   makeTypography({ size: 16, ratio: 1.2, family: 'Pretendard-Bold' }),     // 700/16 (LogScreen 헤더 로그명, 킷 mk-log:25)
   sectionCaption: makeTypography({ size: 14, ratio: 1.5, family: 'Pretendard-Medium' }), // 500/14 (섹션 캡션)
   meta:       makeTypography({ size: 13, ratio: 1, family: 'Pretendard-Medium' }),     // 500/12.5 (카드 날짜 메타, 정수 근사)
   spotCount:  makeTypography({ size: 14, ratio: 1, family: 'Pretendard-SemiBold' }),   // 600/13.5 "맛집 N곳"(정수 근사)

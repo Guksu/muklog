@@ -16,7 +16,7 @@
 
 ## 하네스: muklog 개발
 
-**목표:** planner→developer→qa 에이전트 팀으로 한 스프린트에 한 기능을 설계·구현·검증한다.
+**목표:** planner→ui-publisher→developer→qa 에이전트 팀으로 한 스프린트에 한 기능을 기획·퍼블리싱·구현·검증한다. **역할 경계:** planner=무엇을(기획·계약) / **ui-publisher=어떻게 보이는가(킷 `ui_kits/muklog`→RN 토큰·프리미티브·화면 골격)** / developer=어떻게 동작하는가(데이터·훅·배선) / qa=통합 정합성+비주얼 충실도. **디자인 단일 출처는 킷 `ui_kits/muklog`**(`.claude/skills/ui-design/ui_kits/muklog/`) — ui-publisher가 RN으로 번역하고, developer는 비주얼을 임의 변경하지 않는다.
 
 **트리거:** 기능 개발/스프린트 관련 요청(예: "초대코드 방 기능 스프린트 시작", "먹로그 리스트 구현", "지도 탭 개발", "다음 스프린트", "○○만 다시 구현") 시 `sprint-orchestrator` 스킬을 사용하라. 단순 질문은 직접 응답 가능.
 
@@ -30,3 +30,4 @@
 | 2026-06-09 | 코드 컨벤션 도입 + 전체 코드 정합화 (useCallback/useMemo 제거, 화살표 함수, named-args, useEffect 명명) + 하네스 연결 | docs/code-convention.md, src 전체, dev/qa 스킬·에이전트 | 사용자 컨벤션 적용 |
 | 2026-06-09 | fmt consteval 빌드 오류 우회 — base.h 직접 패치(FMT_USE_CONSTEVAL 강제 0). -D 정의는 fmt 11.0.2가 헤더에서 재정의해 무효였음 | plugins/withFmtConstevalFix.js, app.json | 신규 Xcode clang ↔ RN 0.76 fmt 비호환. SDK 업그레이드 시 제거 |
 | 2026-06-09 | TDD 기본 채택 + 하네스 전반 반영(전략 문서·테스트 레퍼런스·오케스트레이터·dev/qa/planner 스킬·에이전트) | docs/testing-strategy.md, rn-supabase-dev/references/testing.md, 스킬·에이전트 전반 | 사용자 지시(TDD 기본) |
+| 2026-06-11 | **UI 퍼블리셔 역할 추가** — 4역할 파이프라인(기획→퍼블리싱→구현→QA). ui-publisher 에이전트 + ui-publishing 스킬 신설, 오케스트레이터·developer·qa-inspector 역할 경계 갱신(퍼블리셔=비주얼/토큰/프리미티브, 개발자=데이터/로직). 디자인 단일 출처를 킷 `ui_kits/muklog`로 명문화 | .claude/agents/ui-publisher.md, .claude/skills/ui-publishing/, sprint-orchestrator·developer·qa-inspector | 기획 UI와 구현 UI 불일치 누적 → 비주얼 충실도 전담 역할 분리 |

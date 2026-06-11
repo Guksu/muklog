@@ -53,7 +53,8 @@ export const CodeInput = ({ value, onChangeText }: CodeInputProps) => {
             borderRadius: theme.radius.control,
             backgroundColor: theme.color.surface,
             borderWidth: 2,
-            borderColor: filled || isActive ? theme.color.primary : theme.color.border,
+            // 킷: 비활성 셀 보더 --line(hairline). 채움/활성만 accent(plan B5).
+            borderColor: filled || isActive ? theme.color.primary : theme.color.hairline,
           };
           const glow: ViewStyle = isActive
             ? {
@@ -66,7 +67,8 @@ export const CodeInput = ({ value, onChangeText }: CodeInputProps) => {
             : {};
           return (
             <View key={`code-cell-${index}`} testID={`code-cell-${index}`} style={[styles.cell, cell, glow]}>
-              <Text variant="h2" color="fg">
+              {/* 킷 셀 글자 lineHeight 1 — 셀 내 수직 중앙 정렬 보정. */}
+              <Text variant="h2" color="fg" style={styles.cellChar}>
                 {ch}
               </Text>
             </View>
@@ -81,4 +83,5 @@ const styles = StyleSheet.create({
   hiddenInput: { position: 'absolute', opacity: 0, width: '100%', height: '100%' },
   row: { flexDirection: 'row', justifyContent: 'center' },
   cell: { alignItems: 'center', justifyContent: 'center' },
+  cellChar: { lineHeight: 24 },
 });
