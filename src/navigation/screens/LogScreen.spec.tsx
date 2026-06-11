@@ -19,6 +19,21 @@ jest.mock('@/features/room', () => {
 
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn().mockResolvedValue(true) }));
 
+// auth: meId 제공(작성자 라벨 파생용). MuklogList는 더블로 대체(supabase 비유입, 자체 spec에서 검증).
+jest.mock('@/features/auth', () => ({
+  useAuth: () => ({ state: { status: 'authenticated', userId: 'me-uid' } }),
+}));
+jest.mock('@/features/muklog', () => {
+  const { View, Text } = require('react-native');
+  return {
+    MuklogList: ({ roomId, meId }: { roomId: string; meId: string }) => (
+      <View accessibilityLabel="muklog-list">
+        <Text>{`list:${roomId}:${meId}`}</Text>
+      </View>
+    ),
+  };
+});
+
 import { useRoom } from '@/features/room';
 import { LogScreen } from './LogScreen';
 
@@ -80,5 +95,25 @@ describe('LogScreen', () => {
     renderWithTheme(<LogScreen />);
     expect(screen.queryByText('ABCDEF')).toBeNull();
     expect(screen.getByText('둘이 함께 기록 중이에요')).toBeTruthy();
+  });
+
+  it('ready면 placeholder 대신 MuklogList(roomId·meId 전달)를 마운트한다 (T11 통합)', () => {
+    setRoomState({
+      status: 'ready',
+      room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 1, mode: 'couple' },
+    });
+    renderWithTheme(<LogScreen />);
+    expect(screen.queryByText('맛집 기록은 곧 추가돼요 🍽️')).toBeNull();
+    expect(screen.getByLabelText('muklog-list')).toBeTruthy();
+    expect(screen.getByText('list:r1:me-uid')).toBeTruthy();
+  });
+
+  it('커플이어도 MuklogList를 동일하게 마운트한다 (커플/솔로 무관)', () => {
+    setRoomState({
+      status: 'ready',
+      room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 2, mode: 'couple' },
+    });
+    renderWithTheme(<LogScreen />);
+    expect(screen.getByLabelText('muklog-list')).toBeTruthy();
   });
 });

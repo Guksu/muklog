@@ -7,4 +7,5 @@ export { Icon, IconName, type IconProps } from './Icon';
 export { Card, type CardProps } from './Card';
 export { Badge, type BadgeProps } from './Badge';
 export { Sheet, type SheetProps } from './Sheet';
+export { Stars, type StarsProps } from './Stars';
 export { InviteCodeCard, type InviteCodeCardProps } from './InviteCodeCard';

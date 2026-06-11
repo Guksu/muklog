@@ -77,8 +77,9 @@ muklogs
   category     text
   address      text
   road_address text
-  lat          double precision (NOT NULL)
-  lng          double precision (NOT NULL)
+  area         text                -- 동네 표시용(예: "연남동"). 수동 입력/표시 편의 (muklog-list 신설, nullable)
+  lat          double precision     -- nullable: 수동 입력 시 NULL, Kakao 선택 시 채움(muklog-editor). 지도는 lat is not null만 핀
+  lng          double precision     -- nullable: 상동
   memo         text
   rating       smallint            -- 1~5 (옵션)
   visited_at   date
