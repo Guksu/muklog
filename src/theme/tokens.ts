@@ -28,6 +28,9 @@ const palette = {
   accentShadow:'rgba(51,102,255,0.30)', shadowWarm:'#785A46',
   // 별점 채움색 — 킷 mk-ui Stars 채운 별 #FFB23E (앰버, warning #FF9200과 구분).
   starFill:'#FFB23E',
+  // 브랜드 스플래시 배경 — 킷 muklog-splash.png 라이트블루→화이트 그라데이션의 상단 가장자리 톤(#EBF1FF, 픽셀 샘플).
+  //   RN/Expo는 네이티브 스플래시에 그라데이션을 못 그려 단색 근사 — 상단 톤 채택(중앙 로크업 주변 가장 두드러진 브랜드 라이트블루).
+  splashBg:'#EBF1FF',
 } as const;
 
 // 시맨틱 컬러 (라이트) [muklog 웜 변형 — 킷 templates/muklog]
@@ -50,6 +53,8 @@ const lightColor = {
   ring: palette.blue.interactive,
   // 별점 채움색 — 킷 Stars #FFB23E. 빈 별은 borderStrong(--line-strong)로 정합.
   starFill: palette.starFill,
+  // 브랜드 스플래시 배경 단색 근사(킷 splash 상단 라이트블루). app.json 스플래시 backgroundColor 출처.
+  splashBg: palette.splashBg,
 } as const;
 
 // 시맨틱 컬러 (다크) — 시맨틱만 오버라이드. 신규 키도 동일 키로 미러링(tsc 키 일관성, 엣지1).

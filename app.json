@@ -7,6 +7,7 @@
     "scheme": "muklog",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "icon": "./assets/muklog-app-icon.png",
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -15,7 +16,11 @@
       "bundleIdentifier": "com.muklog.app"
     },
     "android": {
-      "package": "com.muklog.app"
+      "package": "com.muklog.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/muklog-app-icon.png",
+        "backgroundColor": "#4775F0"
+      }
     },
     "plugins": [
       "expo-dev-client",
@@ -23,7 +28,8 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FFFFFF",
+          "image": "./assets/muklog-splash.png",
+          "backgroundColor": "#EBF1FF",
           "resizeMode": "contain"
         }
       ],

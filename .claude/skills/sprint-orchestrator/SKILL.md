@@ -28,7 +28,7 @@ muklog 개발을 **스프린트 단위**로 조율하는 통합 스킬. 한 스�
 | qa-inspector | general-purpose | 통합 정합성 + 비주얼 충실도 교차검증 | integration-qa | `qa-report.md` |
 
 > qa-inspector는 검증 스크립트 실행이 필요하므로 `general-purpose` 타입으로 스폰한다(에이전트 정의 `.claude/agents/qa-inspector.md`를 프롬프트에 포함).
-> **디자인 단일 출처는 킷 `ui_kits/muklog`**(`.claude/skills/ui-design/ui_kits/muklog/`). ui-publisher가 이를 RN으로 번역한다. developer는 ui-publisher의 컴포넌트/골격 위에 데이터를 바인딩하고, 비주얼을 임의로 바꾸지 않는다(누락 토큰/프리미티브는 ui-publisher에 요청).
+> **디자인 단일 출처는 킷 `templates/muklog`**(`.claude/skills/ui-design/templates/muklog/`). ui-publisher가 이를 RN으로 번역한다. developer는 ui-publisher의 컴포넌트/골격 위에 데이터를 바인딩하고, 비주얼을 임의로 바꾸지 않는다(누락 토큰/프리미티브는 ui-publisher에 요청).
 
 ## 워크플로우
 

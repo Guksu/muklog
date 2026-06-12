@@ -73,6 +73,12 @@ describe('tokens — starFill (Stars 채움색, A6)', () => {
   });
 });
 
+describe('tokens — splashBg (브랜드 스플래시 배경, brand-assets)', () => {
+  it('스플래시 배경 토큰이 킷 splash 상단 라이트블루 #EBF1FF다', () => {
+    expect(themes.light.color.splashBg).toBe('#EBF1FF');
+  });
+});
+
 describe('tokens — shadow.card (muklog 소프트 웜 섀도우)', () => {
   it('카드용 웜 섀도우(베이스 #785A46) 토큰이 존재한다', () => {
     expect(shadow.card).toBeDefined();
