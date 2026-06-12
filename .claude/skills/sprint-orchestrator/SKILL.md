@@ -55,11 +55,11 @@ muklog 개발을 **스프린트 단위**로 조율하는 통합 스킬. 한 스�
        { name: "sprint-planner", agent_type: "sprint-planner", model: "opus",
          prompt: "이번 스프린트 기능: {기능명}. docs/design/architecture.md와 sprint-planning 스킬을 따라 docs/sprint/{slug}/plan.md를 작성하라." },
        { name: "ui-publisher", agent_type: "ui-publisher", model: "opus",
-         prompt: "docs/sprint/{slug}/plan.md의 화면·컴포넌트를 디자인 킷 ui_kits/muklog(.claude/skills/ui-design/ui_kits/muklog/)을 단일 출처로 RN에 정합시켜라. ui-publishing 스킬을 따라 docs/sprint/{slug}/ui-spec.md(킷 라인↔RN 매핑·props 계약)를 쓰고, src/theme 토큰·src/components 프리미티브·화면 비주얼 골격을 킷대로 만들되 데이터 바인딩은 props로 노출하라. TDD. git 작업 금지." },
+         prompt: "docs/sprint/{slug}/plan.md의 화면·컴포넌트를 디자인 킷 templates/muklog(.claude/skills/ui-design/templates/muklog/)을 단일 출처로 RN에 정합시켜라. ui-publishing 스킬을 따라 docs/sprint/{slug}/ui-spec.md(킷 라인↔RN 매핑·props 계약)를 쓰고, src/theme 토큰·src/components 프리미티브·화면 비주얼 골격을 킷대로 만들되 데이터 바인딩은 props로 노출하라. TDD. git 작업 금지." },
        { name: "developer", agent_type: "developer", model: "opus",
          prompt: "docs/sprint/{slug}/plan.md + ui-spec.md를 따라 데이터·훅·쿼리·Edge Function·네비게이션을 ui-publisher의 컴포넌트/골격에 배선하라(비주얼 임의 변경 금지, 누락 토큰/프리미티브는 ui-publisher에 요청). rn-supabase-dev 스킬. git 작업 금지. dev-notes.md에 생산자↔소비자 매핑을 남겨라." },
        { name: "qa-inspector", agent_type: "general-purpose", model: "opus",
-         prompt: "{.claude/agents/qa-inspector.md 전문 + integration-qa 스킬}. 각 모듈 완성 직후 (1) 경계면 통합 정합성, (2) 킷 ui_kits/muklog 대비 비주얼 충실도(킷 라인↔RN 파일:라인)를 교차검증하고 docs/sprint/{slug}/qa-report.md를 작성하라. git 작업 금지." }
+         prompt: "{.claude/agents/qa-inspector.md 전문 + integration-qa 스킬}. 각 모듈 완성 직후 (1) 경계면 통합 정합성, (2) 킷 templates/muklog 대비 비주얼 충실도(킷 라인↔RN 파일:라인)를 교차검증하고 docs/sprint/{slug}/qa-report.md를 작성하라. git 작업 금지." }
      ]
    )
    ```

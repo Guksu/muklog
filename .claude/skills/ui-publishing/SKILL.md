@@ -1,11 +1,11 @@
 ---
 name: ui-publishing
-description: "muklog UI 퍼블리싱 가이드. 디자인 킷 ui_kits/muklog(웹 JSX)을 React Native로 정확히 번역하는 규칙 — 토큰 매핑·공용 프리미티브(FoodCover/MkChip/MemberBadge 등)·웹→RN 변환·비주얼 충실도 체크리스트. ui-publisher 에이전트가 사용. UI 퍼블리싱/디자인 정합/킷 번역/불일치 수정 작업 시 적용."
+description: "muklog UI 퍼블리싱 가이드. 디자인 킷 templates/muklog(웹 JSX)을 React Native로 정확히 번역하는 규칙 — 토큰 매핑·공용 프리미티브(FoodCover/MkChip/MemberBadge 등)·웹→RN 변환·비주얼 충실도 체크리스트. ui-publisher 에이전트가 사용. UI 퍼블리싱/디자인 정합/킷 번역/불일치 수정 작업 시 적용."
 ---
 
 # muklog UI Publishing — 킷→RN 번역 가이드
 
-**디자인 단일 출처:** 킷 `ui_kits/muklog` = `.claude/skills/ui-design/ui_kits/muklog/`.
+**디자인 단일 출처:** 킷 `templates/muklog` = `.claude/skills/ui-design/templates/muklog/`. (토큰 원천은 `.claude/skills/ui-design/tokens/`.)
 - `mk-ui.jsx` — 공용 프리미티브(Icon·Stars·FoodCover·MkAvatar·MkButton·MkIconBtn·MkChip·MemberBadge·Sheet·MkTabBar·fmtDate·sinceLabel).
 - `mk-home.jsx` — 홈 레벨 화면(로그 리스트·지도·+시트·입장·생성).
 - `mk-log.jsx` — 로그 레벨 화면(맛집 리스트·상세·작성/편집·프로필).
@@ -97,5 +97,5 @@ description: "muklog UI 퍼블리싱 가이드. 디자인 킷 ui_kits/muklog(웹
 
 ## 6. 스택 연계
 - 코드 패턴·컨벤션 세부는 `rn-supabase-dev` 스킬과 `docs/code-convention.md`를 공유한다(중복 작성 금지).
-- 원티드 디자인 시스템 일반 규칙·아이콘·토큰 원천은 `ui-design` 스킬. **단 muklog는 `ui_kits/muklog` 변형이 우선**(이모지/음식커버 허용).
+- 원티드 디자인 시스템 일반 규칙·아이콘·토큰 원천은 `ui-design` 스킬. **단 muklog는 `templates/muklog` 변형이 우선**(이모지/음식커버 허용).
 - 데이터·훅·네비게이션 배선은 developer 영역 — 넘기지 않는다.

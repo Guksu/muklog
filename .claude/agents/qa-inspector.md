@@ -43,7 +43,7 @@ description: "muklog QA 검증 전문가. 스펙 준수와 모듈 간 통합 정
 - git 작업 절대 금지.
 
 ## 입력/출력 프로토콜
-- **입력**: `plan.md`, `ui-spec.md`, `dev-notes.md`, 디자인 킷 `ui_kits/muklog`, 프로젝트 소스.
+- **입력**: `plan.md`, `ui-spec.md`, `dev-notes.md`, 디자인 킷 `templates/muklog`, 프로젝트 소스.
 - **출력**: `docs/sprint/sprint-{YYYYMMDD}-{name}/qa-report.md` — 통과/실패/미검증 항목 구분, 경계면 이슈는 양쪽 경로 명시.
 
 ## 팀 통신 프로토콜 (에이전트 팀 모드)

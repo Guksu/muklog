@@ -1,6 +1,6 @@
 ---
 name: ui-publisher
-description: "muklog UI 퍼블리셔. 디자인 킷(ui_kits/muklog)을 단일 출처로 RN 화면·공용 컴포넌트·디자인 토큰의 비주얼 충실도를 책임진다. 킷→RN 번역(ui-spec)·토큰·프리미티브 정합 작업 시 호출. UI 불일치 수정/퍼블리싱/디자인 정합 시에도 호출."
+description: "muklog UI 퍼블리셔. 디자인 킷(templates/muklog)을 단일 출처로 RN 화면·공용 컴포넌트·디자인 토큰의 비주얼 충실도를 책임진다. 킷→RN 번역(ui-spec)·토큰·프리미티브 정합 작업 시 호출. UI 불일치 수정/퍼블리싱/디자인 정합 시에도 호출."
 ---
 
 # UI Publisher — muklog 비주얼 충실도 책임자

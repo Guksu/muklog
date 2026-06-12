@@ -4,7 +4,7 @@
 //   컬러·스페이싱 = 원티드 공개 소스 실값[확인]. 타이포·radius·shadow = 프로젝트 정의.
 // 규칙: 컴포넌트는 이 파일의 시맨틱 별칭만 사용한다. raw hex/숫자 색상 하드코딩 금지.
 
-// 원시 컬러 — 원티드 베이스 + muklog 웜 변형(킷 ui_kits/muklog) [확인]
+// 원시 컬러 — 원티드 베이스 + muklog 웜 변형(킷 templates/muklog) [확인]
 //   blue.interactive(#3366FF) = muklog --mk-accent (포인트 블루),
 //   blue.accentStrong(#1F4FE0) = --mk-accent-strong (배지/CTA 텍스트·강조),
 //   blue.accentWeak(#EAF0FF) = --mk-accent-weak, blue.accentLine(#BFD0FF) = --mk-accent-line.
@@ -30,7 +30,7 @@ const palette = {
   starFill:'#FFB23E',
 } as const;
 
-// 시맨틱 컬러 (라이트) [muklog 웜 변형 — 킷 ui_kits/muklog]
+// 시맨틱 컬러 (라이트) [muklog 웜 변형 — 킷 templates/muklog]
 //   primary=포인트 #3366FF / accentStrong=#1F4FE0(배지·CTA 텍스트·강조) / brand=시그니처 #0066FF.
 //   primaryWeak=#EAF0FF(--mk-accent-weak) / accentLine=#BFD0FF(점선 CTA·코드입력 보더).
 //   accentShadow=primary 버튼 그림자. fg/fgWeak는 웜 잉크(#2A2422/#5C5550).
