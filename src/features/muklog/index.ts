@@ -2,9 +2,14 @@
 //   조회/입력 훅 + 카드/리스트/시트 + 카테고리/타입/에러 매핑.
 export { useMuklogs } from './useMuklogs';
 export { useCreateMuklog, type CreateMuklogResult } from './useCreateMuklog';
+export { useMuklogPhotoPicker, MUKLOG_PHOTO_MAX } from './useMuklogPhotoPicker';
+export { uploadMuklogPhotos, type UploadMuklogPhotosResult } from './uploadMuklogPhotos';
+export { MUKLOG_PHOTOS_BUCKET, buildMuklogPhotoPath, createPhotoFileId } from './photoPath';
+export { processMuklogPhoto, PHOTO_MAX_EDGE, PHOTO_COMPRESS } from './photoImage';
 export { MuklogCard, type MuklogCardProps } from './MuklogCard';
 export { MuklogList, type MuklogListProps } from './MuklogList';
 export { MuklogEntrySheet, type MuklogEntrySheetProps } from './MuklogEntrySheet';
+export { PhotoPickerGrid, type PhotoPickerGridProps } from './PhotoPickerGrid';
 export {
   MUKLOG_CATEGORIES,
   MUKLOG_CATEGORY_KEYS,
@@ -18,5 +23,5 @@ export {
   DEFAULT_MUKLOG_ERROR_MESSAGE,
   MuklogErrorToken,
 } from './errors';
-export { type Muklog, type MuklogsState, type CreateMuklogInput } from './types';
+export { type Muklog, type MuklogsState, type CreateMuklogInput, type PickedPhoto } from './types';
 export { muklogCategoriesInUse, filterMuklogsByCategory } from './filterByCategory';

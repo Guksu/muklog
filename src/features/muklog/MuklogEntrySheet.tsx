@@ -10,7 +10,11 @@ import { Button, Sheet, Stars, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 import { MUKLOG_CATEGORIES, MUKLOG_CATEGORY_KEYS, type MuklogCategoryKey } from './categories';
+import { mapMuklogError } from './errors';
+import { PhotoPickerGrid } from './PhotoPickerGrid';
+import { type PickedPhoto } from './types';
 import { useCreateMuklog } from './useCreateMuklog';
+import { useMuklogPhotoPicker } from './useMuklogPhotoPicker';
 import { todayLocalDate } from './validate';
 
 const PLACE_NAME_MAX = 60;
@@ -25,25 +29,72 @@ export type MuklogEntrySheetProps = {
   onClose: () => void;
   /** 저장 성공 시 호출(부모가 refresh + 닫기). */
   onSaved: () => void;
+  // 사진(plan §4 ⑤) — controlled 주입(있으면 우선) 또는 내부 picker 훅(기본).
+  //   onAddPhoto가 주어지면 controlled로 간주(테스트/외부 제어), 없으면 useMuklogPhotoPicker가 상태/권한/5장 제한 담당.
+  /** 선택된 로컬 사진(controlled). 미지정 시 내부 picker 훅이 관리. */
+  photos?: PickedPhoto[];
+  /** 사진 추가 타일 탭(controlled). 미지정 시 내부 picker(권한+다중선택)가 동작. */
+  onAddPhoto?: () => void;
+  /** 썸네일 ×탭(controlled). 미지정 시 내부 picker가 index 제거. */
+  onRemovePhoto?: ({ index }: { index: number }) => void;
 };
 
-export const MuklogEntrySheet = ({ visible, roomId, onClose, onSaved }: MuklogEntrySheetProps) => {
+export const MuklogEntrySheet = ({
+  visible,
+  roomId,
+  onClose,
+  onSaved,
+  photos: photosProp,
+  onAddPhoto,
+  onRemovePhoto,
+}: MuklogEntrySheetProps) => {
   const theme = useTheme();
   const { createMuklog, loading, error } = useCreateMuklog();
+  const picker = useMuklogPhotoPicker();
 
   const [placeName, setPlaceName] = useState('');
   const [category, setCategory] = useState<MuklogCategoryKey | null>(null);
   const [rating, setRating] = useState(0);
   const [memo, setMemo] = useState('');
   const [visitedAt, setVisitedAt] = useState(todayLocalDate());
+  // 내부 picker 권한 거부 등 사진 단계 에러(controlled가 아닐 때만 발생).
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  // controlled(onAddPhoto 주입) 우선, 아니면 내부 picker 훅. 표시 에러는 createMuklog 에러 + picker 에러.
+  const controlled = onAddPhoto !== undefined;
+  const photos = controlled ? (photosProp ?? []) : picker.photos;
+
+  const handleAddPhoto = async () => {
+    if (controlled) {
+      onAddPhoto?.();
+      return;
+    }
+    setPhotoError(null);
+    try {
+      await picker.addPhotos();
+    } catch (err) {
+      // 권한 거부 등 → 한국어 메시지 인라인 표시(picker 미실행).
+      setPhotoError(mapMuklogError({ error: err }));
+    }
+  };
+
+  const handleRemovePhoto = ({ index }: { index: number }) => {
+    if (controlled) {
+      onRemovePhoto?.({ index });
+      return;
+    }
+    picker.removePhoto({ index });
+  };
 
   const canSave = placeName.trim().length > 0 && !loading;
 
   const handleSave = async () => {
     try {
       await createMuklog({
-        input: { roomId, placeName, category, area: null, rating, memo, visitedAt },
+        input: { roomId, placeName, category, area: null, rating, memo, visitedAt, photos },
       });
+      // 성공 시 내부 picker 선택 초기화(다음 입력에 이전 사진이 남지 않게). controlled는 부모 책임.
+      if (!controlled) picker.reset();
       onSaved();
     } catch {
       // 에러는 useCreateMuklog가 error 상태로 노출 → 아래 인라인 표시. 시트는 유지(입력 보존).
@@ -108,6 +159,22 @@ export const MuklogEntrySheet = ({ visible, roomId, onClose, onSaved }: MuklogEn
               </Pressable>
             );
           })}
+        </View>
+
+        {/* 사진 (0~5) — 킷 mk-log.jsx:319-339. 추가/삭제 콜백은 developer 연결. */}
+        <View style={{ marginTop: theme.spacing[16] }}>
+          <PhotoPickerGrid
+            label="사진"
+            photos={photos}
+            uploading={loading}
+            onAdd={() => void handleAddPhoto()}
+            onRemove={(arg) => handleRemovePhoto(arg)}
+          />
+          {photoError ? (
+            <Text variant="bodySm" color="error" style={{ marginTop: theme.spacing[8] }}>
+              {photoError}
+            </Text>
+          ) : null}
         </View>
 
         {/* 별점 */}

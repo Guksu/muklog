@@ -7,7 +7,7 @@
 // 소비: useMuklogs → Muklog. meId(현 사용자 uid)로 "내가 기록 / 짝꿍이 기록" 파생(파트너 프로필 OUT).
 //   작성자 아바타는 Avatar userId={createdBy} → defaultAvatar 결정적 익명(파트너도 안정적 이모지).
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 
 import { Avatar, FoodCover, Icon, IconName, Stars, Text } from '@/components';
 import { useTheme } from '@/theme';
@@ -39,6 +39,57 @@ export const MuklogCard = ({ muklog, meId }: MuklogCardProps) => {
 
   const authorLabel = muklog.createdBy === meId ? '내가 기록' : '짝꿍이 기록';
 
+  // 커버 오버레이 — 킷 mk-log.jsx:91-97. 카테고리 칩(좌상)·사진 장수 배지(우상).
+  //   썸네일(Image)·FoodCover 어느 쪽에도 동일하게 얹는다(인라인 중복 방지).
+  const coverOverlays = (
+    <>
+      {hasChip ? (
+        <View
+          testID="muklog-card-chip"
+          style={[
+            styles.chip,
+            {
+              // RN 근사: 킷 rgba(255,255,255,.82)+blur 글래스 → 불투명 surface(blur 미지원). ui-spec 기록.
+              backgroundColor: theme.color.surface,
+              borderRadius: theme.radius.full,
+              top: theme.spacing[12],
+              left: theme.spacing[12],
+              paddingVertical: theme.spacing[6],
+              paddingHorizontal: theme.spacing[10],
+            },
+          ]}
+        >
+          <Text variant="badge" color="fgWeak" style={styles.chipText}>
+            {chipEmoji} {chipLabel}
+          </Text>
+        </View>
+      ) : null}
+
+      {muklog.photoCount > 0 ? (
+        <View
+          testID="muklog-card-photo-badge"
+          style={[
+            styles.photoBadge,
+            {
+              // RN 근사: 킷 rgba(0,0,0,.32)+blur 글래스 → scrimStrong 반투명 검정(blur 미지원). ui-spec 기록.
+              backgroundColor: theme.color.scrimStrong,
+              borderRadius: theme.radius.full,
+              top: theme.spacing[12],
+              right: theme.spacing[12],
+              paddingVertical: theme.spacing[6],
+              paddingHorizontal: theme.spacing[8],
+            },
+          ]}
+        >
+          <Icon name={IconName.Camera} size={13} color="primaryFg" />
+          <Text variant="badge" color="primaryFg" style={styles.photoBadgeText}>
+            {muklog.photoCount}
+          </Text>
+        </View>
+      ) : null}
+    </>
+  );
+
   return (
     <View
       testID="muklog-card"
@@ -48,33 +99,24 @@ export const MuklogCard = ({ muklog, meId }: MuklogCardProps) => {
         theme.shadow.card,
       ]}
     >
-      {/* 커버 — FoodCover(카테고리 그라데이션+이모지). 카드가 overflow:hidden이라 커버 radius=0. */}
-      <FoodCover category={muklog.category} radius={0} emojiSize={COVER_EMOJI_SIZE} style={styles.cover}>
-        {hasChip ? (
-          <View
-            testID="muklog-card-chip"
-            style={[
-              styles.chip,
-              {
-                // RN 근사: 킷 rgba(255,255,255,.82)+blur 글래스 → 불투명 surface(blur 미지원). ui-spec 기록.
-                backgroundColor: theme.color.surface,
-                borderRadius: theme.radius.full,
-                top: theme.spacing[12],
-                left: theme.spacing[12],
-                // 킷 padding 5×10. RN 이모지 lineHeight 헤드룸(아래 chipText)을 담도록 세로 6.
-                paddingVertical: theme.spacing[6],
-                paddingHorizontal: theme.spacing[10],
-              },
-            ]}
-          >
-            {/* 칩은 이모지+라벨을 한 Text로 유지(킷 mk-log:90-91 단일 span). badge 토큰은 ratio 1이라
-                lineHeight==fontSize(12) → 이모지 글리프가 세로로 잘린다. lineHeight 16 헤드룸으로 방지. */}
-            <Text variant="badge" color="fgWeak" style={styles.chipText}>
-              {chipEmoji} {chipLabel}
-            </Text>
-          </View>
-        ) : null}
-      </FoodCover>
+      {/* 커버 — coverUri(대표 사진 signed URL) 있으면 Image, 없으면 FoodCover 폴백(plan §6.2 ⑥).
+          카드가 overflow:hidden이라 커버 radius=0. 칩·사진 배지는 어느 쪽이든 동일하게 오버레이. */}
+      {muklog.coverUri ? (
+        <View style={styles.cover}>
+          <Image
+            testID="muklog-card-cover-image"
+            accessibilityLabel={`${muklog.placeName} 대표 사진`}
+            source={{ uri: muklog.coverUri }}
+            resizeMode="cover"
+            style={styles.coverImage}
+          />
+          {coverOverlays}
+        </View>
+      ) : (
+        <FoodCover category={muklog.category} radius={0} emojiSize={COVER_EMOJI_SIZE} style={styles.cover}>
+          {coverOverlays}
+        </FoodCover>
+      )}
 
       {/* 본문 — 킷 padding 15 ≈ spacing 16. */}
       <View style={{ padding: theme.spacing[16] }}>
@@ -119,9 +161,14 @@ export const MuklogCard = ({ muklog, meId }: MuklogCardProps) => {
 const styles = StyleSheet.create({
   card: { overflow: 'hidden' },
   cover: { width: '100%', aspectRatio: 16 / 10 },
+  // 대표 사진 커버 — FoodCover와 동일 비율. resizeMode cover로 16/10 프레임 채움.
+  coverImage: { width: '100%', height: '100%' },
   chip: { position: 'absolute' },
   // 이모지 세로 클리핑 방지 — badge fontSize 12에 lineHeight 16 헤드룸.
   chipText: { lineHeight: 16 },
+  // 사진수 배지 — 킷 mk-log:94-97. 우상단, 카메라 아이콘 + 숫자(흰), gap 4.
+  photoBadge: { position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 4 },
+  photoBadgeText: { lineHeight: 14 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { flex: 1 },
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },

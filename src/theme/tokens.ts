@@ -39,6 +39,9 @@ const palette = {
   authGradTop:'#EAF0FF', authGradBottom:'#FFFFFF',
   lineStrong:'rgba(112,115,124,0.52)',
   socialAppleFg:'#FFFFFF', socialGoogleFg:'#1F1F1F',
+  // 사진 위 어두운 글래스 배지 베이스 — 킷 MuklogCard 사진수 배지 rgba(0,0,0,.32)+blur.
+  //   RN blur 미지원 → 반투명 검정 근사(불투명도만, 흐림 없음). 카드 커버 위 흰 텍스트 대비 확보.
+  scrimStrong:'rgba(0,0,0,0.42)',
 } as const;
 
 // 그라데이션 stops(시맨틱 color 맵은 단일 string 토큰만 담으므로 배열은 별도 export).
@@ -73,6 +76,8 @@ const lightColor = {
   lineStrong: palette.lineStrong,
   socialAppleBg: palette.black, socialAppleFg: palette.socialAppleFg,
   socialGoogleBg: palette.white, socialGoogleFg: palette.socialGoogleFg,
+  // 카드 사진수 배지 글래스 근사(킷 rgba(0,0,0,.32)+blur). 라이트/다크 공통(사진 위라 항상 어둡게).
+  scrimStrong: palette.scrimStrong,
 } as const;
 
 // 시맨틱 컬러 (다크) — 시맨틱만 오버라이드. 신규 키도 동일 키로 미러링(tsc 키 일관성, 엣지1).

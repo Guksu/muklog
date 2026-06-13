@@ -11,6 +11,11 @@ export const MuklogErrorToken = {
   PlaceNameRequired: 'PLACE_NAME_REQUIRED',
   RatingOutOfRange: 'RATING_OUT_OF_RANGE',
   VisitedAtInFuture: 'VISITED_AT_IN_FUTURE',
+  // 사진 슬라이스(muklog-photos) — 트리거(enforce_muklog_photo_fields)·권한·업로드.
+  PhotoOrderOutOfRange: 'PHOTO_ORDER_OUT_OF_RANGE', // 트리거: order_index 0~4 범위 밖
+  PhotoLimitExceeded: 'PHOTO_LIMIT_EXCEEDED', // 트리거: 먹로그당 5장 초과
+  PermissionDenied: 'PERMISSION_DENIED', // 갤러리 권한 거부(공통)
+  PhotoUploadFailed: 'PHOTO_UPLOAD_FAILED', // Storage 업로드/처리 실패
 } as const;
 export type MuklogErrorToken = (typeof MuklogErrorToken)[keyof typeof MuklogErrorToken];
 
@@ -19,6 +24,10 @@ export const MUKLOG_ERROR_MESSAGES: Record<string, string> = {
   [MuklogErrorToken.PlaceNameRequired]: '장소 이름을 입력해 주세요.',
   [MuklogErrorToken.RatingOutOfRange]: '별점은 1~5 사이로 선택해 주세요.',
   [MuklogErrorToken.VisitedAtInFuture]: '방문일은 오늘까지만 선택할 수 있어요.',
+  [MuklogErrorToken.PhotoOrderOutOfRange]: '사진은 최대 5장까지 첨부할 수 있어요.',
+  [MuklogErrorToken.PhotoLimitExceeded]: '사진은 최대 5장까지 첨부할 수 있어요.',
+  [MuklogErrorToken.PermissionDenied]: '사진 접근 권한이 필요해요. 설정에서 허용해 주세요.',
+  [MuklogErrorToken.PhotoUploadFailed]: '사진 업로드에 실패했어요. 다시 시도해 주세요.',
 };
 
 /** 토큰 미일치(네트워크/그 외) 시 기본 메시지. */

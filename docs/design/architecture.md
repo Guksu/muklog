@@ -169,12 +169,15 @@ Profile (헤더 진입)
 | `room-modes` | 솔로/커플 방 모드 (생성 흐름 모드 선택 + 정원 트리거 모드화 + `rooms.mode`/삭제 라이프사이클 스키마 필드) | #1 확장 | ✅ 완료 |
 | `room-leave` (경량) | 방 나가기(즉시): `leave_room()` RPC + Profile 화면 진입 + 0명 시 방 삭제 / 1명 잔존 시 보존 | #5 일부(즉시판) | ✅ 완료 |
 | `multi-log-home` | **멀티 로그 전환**: 온보딩/멤버십 게이트 제거 → HomeTabs 직행. 먹로그탭=내 로그 목록(카드·memberCount 배지) + 빈 상태. 헤더 +버튼=**로그 생성 단일 액션**(액션시트 없음 — 로그 입장 UI는 log-invite로 트리밍). `list_my_rooms` DEFINER RPC. 마이그레이션 `20260610150000_multi_log_home.sql`(create/join ALREADY_IN_ROOM 가드 제거·join 솔로 조인 허용·정원 2 통일·modes.ts 동기화·**`leave_room(p_room_id)` 인자화 선반영**). 로그 카드 탭 → LogScreen(최소 stub). Profile 나가기 제거. | 구조 전환 | ✅ 완료 |
-| `social-auth` | **인증 정책 전환**: 익명 자동발급 제거 → Google(네이티브 `@react-native-google-signin`)/Apple(`expo-apple-authentication`) 소셜 로그인 전용. AuthState 5상태(loading/unauthenticated/authenticating/authenticated/error) + LoginScreen(킷 mk-auth) + 인앱 로고 `AppMark` + 로그아웃(Profile). `userId` 계약 보존. OAuth 키 미발급 → 코드/모킹테스트 완성, 라이브는 키 발급 후 이월(미검증). `docs/sprint/sprint-20260612-social-auth/plan.md`. | 인증 정책 변경 | 진행 |
-| `log-invite` | 로그 진입(LogScreen) 후 초대코드 표시·복사 + **로그 입장(join) UI**(`JoinLogScreen` + +버튼 액션시트 "로그 입장"). join으로 2번째 멤버 합류 시 커플화. (구 `room-promote` 흡수 + multi-log-home에서 트리밍한 join UI. `join_room` RPC·`useJoinRoom`·`code.ts`는 multi-log-home에서 선반영/보존됨) | #1 신규 | 예정 |
+| `social-auth` | **인증 정책 전환**: 익명 자동발급 제거 → Google(네이티브 `@react-native-google-signin`)/Apple(`expo-apple-authentication`) 소셜 로그인 전용. AuthState 5상태(loading/unauthenticated/authenticating/authenticated/error) + LoginScreen(킷 mk-auth) + 인앱 로고 `AppMark` + 로그아웃(Profile). `userId` 계약 보존. OAuth 키 미발급 → 코드/모킹테스트 완성, 라이브는 키 발급 후 이월(미검증). `docs/sprint/sprint-20260612-social-auth/plan.md`. | 인증 정책 변경 | ✅ 완료 |
+| `log-invite` | 로그 진입(LogScreen) 후 초대코드 표시·복사 + **로그 입장(join) UI**(`JoinLogScreen` + +버튼 액션시트 "로그 입장"). join으로 2번째 멤버 합류 시 커플화. (구 `room-promote` 흡수 + multi-log-home에서 트리밍한 join UI. `join_room` RPC·`useJoinRoom`·`code.ts`는 multi-log-home에서 선반영/보존됨) | #1 신규 | ✅ 완료 |
 | `muklog-video` | 2초 영상 캡처/업로드 (카메라 권한 + `muklogs.video_*` + 용량 가드레일). muklog-editor 이후 의존 | #4 확장 | 예정 |
 | ~~`room-tabs`~~ | (대체됨) 멀티 로그 전환으로 HomeTabs/LogScreen 구조가 됨 → `multi-log-home`로 흡수 | #2 | ~~폐기~~ |
-| `muklog-list` | LogScreen 내 먹로그 카드 리스트 | #3 | 예정 |
-| `muklog-editor` | 먹로그 작성/편집 (장소검색 + 사진5 + 메모 + 위치) | #4 데이터 입력 | 예정 |
+| `muklog-list` | LogScreen 내 먹로그 카드 리스트 | #3 | ✅ 완료 |
+| ~~`muklog-editor`~~ → **슬라이스 분해** | 먹로그 작성/편집이 한 스프린트에 과대 → **`muklog-photos`(사진) / `muklog-place`(Kakao 장소·좌표) / `muklog-edit`(수정 모드)** 3슬라이스로 분해. (1 스프린트=1 기능 원칙) | #4 데이터 입력 | ~~분해~~ |
+| `muklog-photos` | **muklog-editor 첫 슬라이스 = 사진.** 작성 흐름에 사진 최대 5장 첨부 → 비공개 버킷 `muklog-photos`(private)+RLS+signed URL 업로드, `muklog_photos` 테이블 신설, 카드/리스트 대표 썸네일+장수 배지. (Kakao·위치·수정·영상 OUT). `docs/sprint/sprint-20260613-muklog-photos/plan.md`. | #4 데이터 입력 | 진행 |
+| `muklog-place` (예정) | muklog-editor 슬라이스 2 = Kakao 장소검색(Local API Edge Function 프록시) + 좌표/주소/카테고리 자동 채움(`muklogs.lat/lng/address/kakao_place_id`). | #4 | 예정 |
+| `muklog-edit` (예정) | muklog-editor 슬라이스 3 = 기존 먹로그 수정(필드·사진 추가/삭제/재정렬, `muklogs` update RLS·`muklog_photos` 재정렬). | #4 | 예정 |
 | `muklog-detail` | 먹로그 상세 (사진 캐러셀 + 메모 + 위치 미니맵) | #4 | 예정 |
 | `map-tab` | 지도 탭 (현재위치 + 먹로그 핀 + 일반 음식점 핀) | #5, #6 | 예정 |
 | ~~`room-promote`~~ | (흡수됨) 솔로→커플 전환이 멀티 로그 모델에서 "초대코드로 조인 시 자동 커플화"로 단순화 → `log-invite`로 흡수 | #1 | ~~폐기~~ |

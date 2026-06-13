@@ -38,6 +38,8 @@ const muklog = (over?: Partial<Muklog>): Muklog => ({
   visitedAt: '2026-02-14',
   createdBy: 'me-uid',
   createdAt: '2026-02-14T00:00:00.000Z',
+  photoCount: 0,
+  coverUri: null,
   ...over,
 });
 

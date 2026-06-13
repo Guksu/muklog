@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase';
 
 import { mapMuklogError } from './errors';
 import { type CreateMuklogInput } from './types';
+import { uploadMuklogPhotos } from './uploadMuklogPhotos';
 import { normalizeMuklogInput, toMuklogRow } from './validate';
 
 export type CreateMuklogResult = { id: string };
@@ -27,6 +28,18 @@ export type CreateMuklogResult = { id: string };
 export const useCreateMuklog = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 사진 업로드 실패 시 방금 만든 muklog를 best-effort 삭제한다(부분성공 회피, 일관성 §6).
+  //   muklogs_delete_own RLS(created_by=auth.uid())가 본인 행만 허용. FK ON DELETE CASCADE로
+  //   이미 insert된 muklog_photos 행도 함께 정리(Storage 파일 정리는 uploadMuklogPhotos가 담당).
+  //   정리 자체 실패는 무시한다(원본 사진 에러를 사용자에게 노출하는 게 우선).
+  const rollbackMuklog = async ({ muklogId }: { muklogId: string }) => {
+    try {
+      await supabase.from('muklogs').delete().eq('id', muklogId);
+    } catch {
+      // best-effort: 롤백 실패는 무시(차기 정리 잡 위임).
+    }
+  };
 
   const createMuklog = async ({
     input,
@@ -54,7 +67,22 @@ export const useCreateMuklog = () => {
 
       const obj = (data ?? {}) as { id?: string };
       if (!obj.id) throw new Error('CREATE_MUKLOG_BAD_RESPONSE');
-      return { id: obj.id };
+      const muklogId = obj.id;
+
+      // 사진(0~5장) 연동 — muklog insert 성공 후 순차 업로드 + muklog_photos insert(plan §5 ④).
+      //   사진 없으면 업로드 단계 스킵. 업로드 실패 시 "사진 없이 남는" 어중간한 상태를 피하려
+      //   방금 만든 muklog를 best-effort 롤백 삭제(muklogs_delete_own RLS 사용, 일관성 §6) 후 throw.
+      const photos = input.photos ?? [];
+      if (photos.length > 0) {
+        try {
+          await uploadMuklogPhotos({ roomId: normalized.roomId, muklogId, photos });
+        } catch (photoError) {
+          await rollbackMuklog({ muklogId });
+          throw photoError;
+        }
+      }
+
+      return { id: muklogId };
     } catch (err) {
       setError(mapMuklogError({ error: err }));
       throw err;

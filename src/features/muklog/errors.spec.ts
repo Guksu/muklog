@@ -40,4 +40,29 @@ describe('mapMuklogError', () => {
       MUKLOG_ERROR_MESSAGES.PLACE_NAME_REQUIRED,
     );
   });
+
+  // 사진 슬라이스(muklog-photos) — 트리거/권한/업로드 토큰.
+  it('PHOTO_ORDER_OUT_OF_RANGE 토큰을 매핑한다 (트리거 단일 출처)', () => {
+    expect(mapMuklogError({ error: new Error(MuklogErrorToken.PhotoOrderOutOfRange) })).toBe(
+      MUKLOG_ERROR_MESSAGES[MuklogErrorToken.PhotoOrderOutOfRange],
+    );
+  });
+
+  it('PHOTO_LIMIT_EXCEEDED 토큰을 매핑한다 (5장 상한)', () => {
+    expect(mapMuklogError({ error: new Error(MuklogErrorToken.PhotoLimitExceeded) })).toBe(
+      MUKLOG_ERROR_MESSAGES[MuklogErrorToken.PhotoLimitExceeded],
+    );
+  });
+
+  it('PERMISSION_DENIED 토큰을 사진 권한 메시지로 매핑한다 (갤러리 권한 거부)', () => {
+    expect(mapMuklogError({ error: new Error(MuklogErrorToken.PermissionDenied) })).toBe(
+      MUKLOG_ERROR_MESSAGES[MuklogErrorToken.PermissionDenied],
+    );
+  });
+
+  it('PHOTO_UPLOAD_FAILED 토큰을 업로드 실패 메시지로 매핑한다', () => {
+    expect(mapMuklogError({ error: new Error(MuklogErrorToken.PhotoUploadFailed) })).toBe(
+      MUKLOG_ERROR_MESSAGES[MuklogErrorToken.PhotoUploadFailed],
+    );
+  });
 });

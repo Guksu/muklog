@@ -9,7 +9,17 @@ import { renderWithTheme } from '@/test/renderWithTheme';
 const mockUseCreateMuklog = jest.fn();
 jest.mock('./useCreateMuklog', () => ({ useCreateMuklog: () => mockUseCreateMuklog() }));
 
+// 내부 picker(uncontrolled 경로) 검증용 — expo-image-picker 모킹.
+jest.mock('expo-image-picker', () => ({
+  requestMediaLibraryPermissionsAsync: jest.fn(),
+  launchImageLibraryAsync: jest.fn(),
+}));
+import * as ImagePicker from 'expo-image-picker';
+
 import { MuklogEntrySheet } from './MuklogEntrySheet';
+
+const requestMock = ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock;
+const launchMock = ImagePicker.launchImageLibraryAsync as jest.Mock;
 
 const createMuklog = jest.fn();
 const useCreateMuklogMock = mockUseCreateMuklog;
@@ -26,6 +36,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   createMuklog.mockResolvedValue({ id: 'new-id' });
   useCreateMuklogMock.mockReturnValue({ createMuklog, loading: false, error: null });
+  requestMock.mockResolvedValue({ granted: true });
+  launchMock.mockResolvedValue({ canceled: true, assets: null });
 });
 
 describe('MuklogEntrySheet', () => {
@@ -88,5 +100,84 @@ describe('MuklogEntrySheet', () => {
     renderSheet();
     expect(screen.getByLabelText('카테고리 파스타·양식')).toBeTruthy();
     expect(screen.getByLabelText('카테고리 이자카야')).toBeTruthy();
+  });
+
+  it('사진 필드(추가 타일)를 렌더하고 추가 탭 시 onAddPhoto를 호출한다 (⑤)', () => {
+    const onAddPhoto = jest.fn();
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        photos={[]}
+        onAddPhoto={onAddPhoto}
+        onRemovePhoto={jest.fn()}
+      />,
+    );
+    fireEvent.press(screen.getByTestId('photo-add-tile'));
+    expect(onAddPhoto).toHaveBeenCalledTimes(1);
+  });
+
+  it('uncontrolled(추가 콜백 미주입)면 내부 picker로 선택→썸네일 표시→createMuklog input.photos로 전달', async () => {
+    launchMock.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file://a.jpg' }] });
+    renderWithTheme(
+      <MuklogEntrySheet visible roomId="r1" onClose={onClose} onSaved={onSaved} />,
+    );
+    fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('photo-add-tile'));
+    });
+    // 선택 후 썸네일 1장(N/5 hint 1/5).
+    await waitFor(() => expect(screen.getByTestId('photo-thumb-0')).toBeTruthy());
+    expect(screen.getByText('1/5')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('저장'));
+    });
+    await waitFor(() => expect(createMuklog).toHaveBeenCalledTimes(1));
+    expect(createMuklog).toHaveBeenCalledWith({
+      input: expect.objectContaining({ photos: [{ uri: 'file://a.jpg' }] }),
+    });
+  });
+
+  it('uncontrolled 권한 거부 시 사진 권한 메시지를 인라인 표시한다', async () => {
+    requestMock.mockResolvedValueOnce({ granted: false });
+    renderWithTheme(
+      <MuklogEntrySheet visible roomId="r1" onClose={onClose} onSaved={onSaved} />,
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('photo-add-tile'));
+    });
+    await waitFor(() =>
+      expect(screen.getByText('사진 접근 권한이 필요해요. 설정에서 허용해 주세요.')).toBeTruthy(),
+    );
+    expect(launchMock).not.toHaveBeenCalled();
+  });
+
+  it('photos가 주어지면 createMuklog input.photos로 전달한다 (경계: 시트→훅)', async () => {
+    const photos = [{ uri: 'file://a.jpg' }, { uri: 'file://b.jpg' }];
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        photos={photos}
+        onAddPhoto={jest.fn()}
+        onRemovePhoto={jest.fn()}
+      />,
+    );
+    fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('저장'));
+    });
+
+    await waitFor(() => expect(createMuklog).toHaveBeenCalledTimes(1));
+    expect(createMuklog).toHaveBeenCalledWith({
+      input: expect.objectContaining({ photos }),
+    });
   });
 });

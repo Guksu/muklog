@@ -1,19 +1,24 @@
 // src/features/muklog/useMuklogs.spec.ts
-// 먹로그 목록 조회 훅 — from('muklogs').select().eq().order().order() 계약, snake→camel 매핑,
+// 먹로그 목록 조회 훅 — from('muklogs').select(임베드).eq().order().order() 계약, snake→camel 매핑,
+//   muklog_photos 임베드(대표 1장 + 개수) + createSignedUrls 배치 발급 → coverUri/photoCount.
 //   빈 배열→ready(에러 아님), error 전이, 정렬 인자 검증, refresh 재조회(폴링 없음).
-//   (plan §5.2 / §5 T5, AC1·AC6·AC11) SQL/RLS는 단위 대상 아님 → supabase 체이닝 모킹으로 클라 계약만 검증.
+//   (plan §5.2·§3.5 / §5 ⑤⑥, AC1·AC6·AC11) SQL/RLS는 단위 대상 아님 → supabase 체이닝+storage 모킹.
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-jest.mock('@/lib/supabase', () => ({ supabase: { from: jest.fn() } }));
+jest.mock('@/lib/supabase', () => ({
+  supabase: { from: jest.fn(), storage: { from: jest.fn() } },
+}));
 
 import { supabase } from '@/lib/supabase';
 import { useMuklogs } from './useMuklogs';
 
 // 체이닝 빌더: select/eq/order는 this(빌더)를 반환, 마지막 order가 thenable로 결과를 resolve한다.
 const fromMock = supabase.from as jest.Mock;
+const storageFromMock = supabase.storage.from as jest.Mock;
 const orderMock = jest.fn();
 const eqMock = jest.fn();
 const selectMock = jest.fn();
+const createSignedUrlsMock = jest.fn();
 
 const row = (over?: Record<string, unknown>) => ({
   id: 'm1',
@@ -26,6 +31,7 @@ const row = (over?: Record<string, unknown>) => ({
   visited_at: '2026-02-14',
   created_by: 'u1',
   created_at: '2026-02-14T00:00:00.000Z',
+  muklog_photos: [],
   ...over,
 });
 
@@ -41,7 +47,6 @@ const mockQueryResult = ({ data, error }: { data: unknown; error: unknown }) => 
     eqMock(...a);
     return builder;
   };
-  // order는 호출 인자를 기록하고, 마지막 order 결과가 await되도록 builder를 thenable로 만든다.
   builder.order = (...a: unknown[]) => {
     orderMock(...a);
     return builder;
@@ -55,10 +60,16 @@ beforeEach(() => {
   selectMock.mockReset();
   eqMock.mockReset();
   orderMock.mockReset();
+  createSignedUrlsMock.mockReset();
+  storageFromMock.mockReturnValue({
+    createSignedUrls: (...a: unknown[]) => createSignedUrlsMock(...a),
+  });
+  // 기본: 배치 발급 0건(사진 없는 케이스).
+  createSignedUrlsMock.mockResolvedValue({ data: [], error: null });
 });
 
 describe('useMuklogs', () => {
-  it('rows를 받으면 ready로 전이하고 snake→camel로 매핑한다 (AC1)', async () => {
+  it('rows를 받으면 ready로 전이하고 snake→camel로 매핑한다 (사진 없으면 photoCount 0 / coverUri null) (AC1)', async () => {
     mockQueryResult({ data: [row()], error: null });
     const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }));
 
@@ -77,9 +88,89 @@ describe('useMuklogs', () => {
           visitedAt: '2026-02-14',
           createdBy: 'u1',
           createdAt: '2026-02-14T00:00:00.000Z',
+          photoCount: 0,
+          coverUri: null,
         },
       ],
     });
+    // 사진 0건이면 signed URL 배치 발급을 호출하지 않는다(비용 가드레일).
+    expect(createSignedUrlsMock).not.toHaveBeenCalled();
+  });
+
+  it('select에 muklog_photos 임베드(storage_path, order_index)를 포함한다 (경계: 컬럼명 정확)', async () => {
+    mockQueryResult({ data: [], error: null });
+    renderHook(() => useMuklogs({ roomId: 'r1' }));
+    await waitFor(() => expect(selectMock).toHaveBeenCalled());
+    expect(selectMock.mock.calls[0][0]).toContain('muklog_photos(storage_path, order_index)');
+  });
+
+  it('임베드된 사진 → 대표(order_index 최소) storage_path의 signed URL을 coverUri로, 개수를 photoCount로 채운다', async () => {
+    // order 2/0/1 → 대표는 order 0 = p-cover.
+    mockQueryResult({
+      data: [
+        row({
+          muklog_photos: [
+            { storage_path: 'r1/m1/c.jpg', order_index: 2 },
+            { storage_path: 'r1/m1/a.jpg', order_index: 0 },
+            { storage_path: 'r1/m1/b.jpg', order_index: 1 },
+          ],
+        }),
+      ],
+      error: null,
+    });
+    createSignedUrlsMock.mockResolvedValueOnce({
+      data: [{ path: 'r1/m1/a.jpg', signedUrl: 'https://signed/a' }],
+      error: null,
+    });
+
+    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }));
+    await waitFor(() => expect(result.current.state.status).toBe('ready'));
+
+    // 대표 path 1개만 배치 발급(전체 5장 아님 — 비용 가드레일 §8).
+    expect(createSignedUrlsMock).toHaveBeenCalledWith(['r1/m1/a.jpg'], 3600);
+    const state = result.current.state as { status: 'ready'; muklogs: { photoCount: number; coverUri: string | null }[] };
+    expect(state.muklogs[0].photoCount).toBe(3);
+    expect(state.muklogs[0].coverUri).toBe('https://signed/a');
+  });
+
+  it('여러 먹로그의 대표 path를 한 번에 배치 발급한다 (createSignedUrls 1회)', async () => {
+    mockQueryResult({
+      data: [
+        row({ id: 'm1', muklog_photos: [{ storage_path: 'r1/m1/a.jpg', order_index: 0 }] }),
+        row({ id: 'm2', muklog_photos: [{ storage_path: 'r1/m2/a.jpg', order_index: 0 }] }),
+      ],
+      error: null,
+    });
+    createSignedUrlsMock.mockResolvedValueOnce({
+      data: [
+        { path: 'r1/m1/a.jpg', signedUrl: 'https://signed/m1' },
+        { path: 'r1/m2/a.jpg', signedUrl: 'https://signed/m2' },
+      ],
+      error: null,
+    });
+
+    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }));
+    await waitFor(() => expect(result.current.state.status).toBe('ready'));
+
+    expect(createSignedUrlsMock).toHaveBeenCalledTimes(1);
+    expect(createSignedUrlsMock).toHaveBeenCalledWith(['r1/m1/a.jpg', 'r1/m2/a.jpg'], 3600);
+    const state = result.current.state as { status: 'ready'; muklogs: { coverUri: string | null }[] };
+    expect(state.muklogs[0].coverUri).toBe('https://signed/m1');
+    expect(state.muklogs[1].coverUri).toBe('https://signed/m2');
+  });
+
+  it('signed URL 발급 실패해도 목록은 ready(coverUri null로 폴백) — 사진 때문에 목록을 막지 않는다', async () => {
+    mockQueryResult({
+      data: [row({ muklog_photos: [{ storage_path: 'r1/m1/a.jpg', order_index: 0 }] })],
+      error: null,
+    });
+    createSignedUrlsMock.mockResolvedValueOnce({ data: null, error: new Error('signed boom') });
+
+    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }));
+    await waitFor(() => expect(result.current.state.status).toBe('ready'));
+    const state = result.current.state as { status: 'ready'; muklogs: { photoCount: number; coverUri: string | null }[] };
+    expect(state.muklogs[0].photoCount).toBe(1);
+    expect(state.muklogs[0].coverUri).toBeNull();
   });
 
   it('from/eq/order 계약(room_id 필터 + visited_at desc, created_at desc)을 지킨다 (AC6·AC7)', async () => {

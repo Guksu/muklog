@@ -20,6 +20,8 @@ const base: Muklog = {
   visitedAt: '2026-02-14',
   createdBy: 'me-uid',
   createdAt: '2026-02-14T00:00:00.000Z',
+  photoCount: 0,
+  coverUri: null,
 };
 
 const renderCard = (over?: Partial<Muklog>, meId = 'me-uid') =>
@@ -94,5 +96,29 @@ describe('MuklogCard', () => {
   it('visitedAt이 null이면 "날짜 미정" fallback을 표시한다(데이터 결측)', () => {
     renderCard({ visitedAt: null, area: null });
     expect(screen.getByText('날짜 미정')).toBeTruthy();
+  });
+
+  it('coverUri가 있으면 대표 썸네일 이미지를 커버로 렌더한다 (⑥)', () => {
+    renderCard({ coverUri: 'https://signed.example/cover.jpg', photoCount: 3 });
+    const cover = screen.getByTestId('muklog-card-cover-image');
+    expect(cover.props.source).toEqual({ uri: 'https://signed.example/cover.jpg' });
+  });
+
+  it('coverUri가 null이면 FoodCover 폴백을 쓴다 (⑥ 0장 폴백)', () => {
+    renderCard({ coverUri: null, photoCount: 0 });
+    expect(screen.getByTestId('food-cover-gradient')).toBeTruthy();
+    expect(screen.queryByTestId('muklog-card-cover-image')).toBeNull();
+  });
+
+  it('photoCount > 0이면 카메라+장수 배지를 표시한다 (⑥)', () => {
+    renderCard({ photoCount: 3, coverUri: 'https://signed.example/c.jpg' });
+    const badge = screen.getByTestId('muklog-card-photo-badge');
+    expect(badge).toBeTruthy();
+    expect(screen.getByText('3')).toBeTruthy();
+  });
+
+  it('photoCount 0이면 사진 배지를 숨긴다 (⑥)', () => {
+    renderCard({ photoCount: 0, coverUri: null });
+    expect(screen.queryByTestId('muklog-card-photo-badge')).toBeNull();
   });
 });
