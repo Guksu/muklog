@@ -3,7 +3,7 @@
 //   primary #3366FF · accentStrong #1F4FE0 · primaryWeak #EAF0FF · accentLine #BFD0FF · accentShadow rgba(51,102,255,.30)
 //   · fg 웜잉크 #2A2422 / fgWeak #5C5550 · brand #0066FF · hairline·surfaceAlt·fgAssistive 키 존재
 //   · radius.control=14 / card=22 / sheet=20 · shadow.card 웜 섀도우 · body 계열 family = Pretendard-Medium.
-import { themes, radius, shadow, typography } from './tokens';
+import { themes, radius, shadow, typography, brandGradient, authVisualGradient } from './tokens';
 
 describe('tokens — 컬러 (muklog 웜 변형, AC-1)', () => {
   it('primary가 포인트 블루 #3366FF다', () => {
@@ -84,6 +84,28 @@ describe('tokens — shadow.card (muklog 소프트 웜 섀도우)', () => {
     expect(shadow.card).toBeDefined();
     expect(shadow.card.shadowColor).toBe('#785A46');
     expect(shadow.card.elevation).toBe(2);
+  });
+});
+
+describe('tokens — 인증(social-auth) 토큰 (킷 mk-auth.jsx)', () => {
+  it('brandGradient가 킷 AppMark 블루 그라데이션 [#5B85FF, #2A55E6]이다', () => {
+    expect(brandGradient).toEqual(['#5B85FF', '#2A55E6']);
+  });
+
+  it('authVisualGradient가 킷 스플래시/로그인 상단 비주얼 [#EAF0FF, #FFFFFF]이다', () => {
+    expect(authVisualGradient).toEqual(['#EAF0FF', '#FFFFFF']);
+  });
+
+  it('lineStrong이 킷 SocialButton 보더(--line-strong rgba 112,115,124,.52)다', () => {
+    expect(themes.light.color.lineStrong).toBe('rgba(112,115,124,0.52)');
+  });
+
+  it('소셜 버튼 색 토큰(apple 검정/google 흰+잉크)이 킷 값이다', () => {
+    const { color } = themes.light;
+    expect(color.socialAppleBg).toBe('#000000');
+    expect(color.socialAppleFg).toBe('#FFFFFF');
+    expect(color.socialGoogleBg).toBe('#FFFFFF');
+    expect(color.socialGoogleFg).toBe('#1F1F1F');
   });
 });
 

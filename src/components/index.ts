@@ -13,3 +13,9 @@ export { Chip, type ChipProps } from './Chip';
 export { FoodCover, type FoodCoverProps } from './FoodCover';
 export { IconButton, type IconButtonProps } from './IconButton';
 export { InviteCodeCard, type InviteCodeCardProps } from './InviteCodeCard';
+export { AppMark, type AppMarkProps } from './AppMark';
+export {
+  SocialButton,
+  type SocialButtonProps,
+  type SocialButtonVariant,
+} from './SocialButton';

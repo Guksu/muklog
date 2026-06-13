@@ -31,7 +31,20 @@ const palette = {
   // 브랜드 스플래시 배경 — 킷 muklog-splash.png 라이트블루→화이트 그라데이션의 상단 가장자리 톤(#EBF1FF, 픽셀 샘플).
   //   RN/Expo는 네이티브 스플래시에 그라데이션을 못 그려 단색 근사 — 상단 톤 채택(중앙 로크업 주변 가장 두드러진 브랜드 라이트블루).
   splashBg:'#EBF1FF',
+  // 인증 화면(social-auth) — 킷 mk-auth.jsx [확인].
+  //   브랜드 마크 그라데이션(AppMark rect): #5B85FF→#2A55E6(mk-auth:15-16). 포크/스푼 = #2A55E6(stop1).
+  //   스플래시/로그인 상단 비주얼 그라데이션: linear-gradient(160deg,#EAF0FF 0%,#FFF 60~70%)(mk-auth:57,91).
+  //   소셜 버튼: apple 검정 #000/흰 텍스트, google 흰 #FFF/잉크 #1F1F1F + --line-strong 보더(mk-auth:128-131).
+  brandBlueTop:'#5B85FF', brandBlueBottom:'#2A55E6',
+  authGradTop:'#EAF0FF', authGradBottom:'#FFFFFF',
+  lineStrong:'rgba(112,115,124,0.52)',
+  socialAppleFg:'#FFFFFF', socialGoogleFg:'#1F1F1F',
 } as const;
+
+// 그라데이션 stops(시맨틱 color 맵은 단일 string 토큰만 담으므로 배열은 별도 export).
+//   소비처: AppMark(브랜드 마크), SplashView·LoginScreen 상단 비주얼(expo-linear-gradient).
+export const brandGradient = [palette.brandBlueTop, palette.brandBlueBottom] as const;
+export const authVisualGradient = [palette.authGradTop, palette.authGradBottom] as const;
 
 // 시맨틱 컬러 (라이트) [muklog 웜 변형 — 킷 templates/muklog]
 //   primary=포인트 #3366FF / accentStrong=#1F4FE0(배지·CTA 텍스트·강조) / brand=시그니처 #0066FF.
@@ -55,6 +68,11 @@ const lightColor = {
   starFill: palette.starFill,
   // 브랜드 스플래시 배경 단색 근사(킷 splash 상단 라이트블루). app.json 스플래시 backgroundColor 출처.
   splashBg: palette.splashBg,
+  // 인증(social-auth) — 킷 mk-auth.jsx. 소셜 버튼 색·강한 보더(--line-strong).
+  //   apple bg는 라이트/다크 공통 검정(브랜드 가이드), google bg는 surface(흰)와 동일하나 의미 분리로 별칭 유지.
+  lineStrong: palette.lineStrong,
+  socialAppleBg: palette.black, socialAppleFg: palette.socialAppleFg,
+  socialGoogleBg: palette.white, socialGoogleFg: palette.socialGoogleFg,
 } as const;
 
 // 시맨틱 컬러 (다크) — 시맨틱만 오버라이드. 신규 키도 동일 키로 미러링(tsc 키 일관성, 엣지1).

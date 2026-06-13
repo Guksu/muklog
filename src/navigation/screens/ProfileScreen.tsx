@@ -6,7 +6,7 @@
 //
 // 생산자: useProfile(조회)/useUpdateProfile(저장·업로드)/useMyLogs(통계). 소비자: 상태별 UX. 스타일=토큰만(raw hex 0).
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { Avatar, Button, Icon, IconName, Screen, Sheet, Text } from '@/components';
 import { useAuth } from '@/features/auth';
@@ -51,6 +51,7 @@ export const ProfileScreen = () => {
 
 const ProfileContent = ({ userId }: { userId: string }) => {
   const theme = useTheme();
+  const { signOut } = useAuth();
   const { state, refresh } = useProfile({ userId });
   const { saveNickname, changeAvatar, savingNickname, uploadingAvatar, error } = useUpdateProfile({
     userId,
@@ -133,6 +134,14 @@ const ProfileContent = ({ userId }: { userId: string }) => {
     } catch {
       // 권한거부/업로드 실패는 useUpdateProfile.error로 표시. 취소는 no-op.
     }
+  };
+
+  // 로그아웃 — 파괴적 액션이므로 확인 후 signOut(→ AuthGate가 unauthenticated→LoginScreen).
+  const handleSignOut = () => {
+    Alert.alert('로그아웃', '로그아웃하면 다시 로그인해야 해요. 로그아웃할까요?', [
+      { text: '취소', style: 'cancel' },
+      { text: '로그아웃', style: 'destructive', onPress: () => void signOut() },
+    ]);
   };
 
   return (
@@ -235,6 +244,26 @@ const ProfileContent = ({ userId }: { userId: string }) => {
           ))}
         </View>
 
+        {/* 로그아웃(파괴적 액션) — 설정 리스트 하단 별도 행. 탭→확인→signOut(social-auth ⑥/§4.3). */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="로그아웃"
+          onPress={handleSignOut}
+          style={[
+            styles.signOutRow,
+            {
+              backgroundColor: theme.color.surface,
+              borderRadius: theme.radius.sheet,
+              marginTop: theme.spacing[12],
+            },
+            theme.shadow.card,
+          ]}
+        >
+          <Text variant="spotCount" color="error" style={styles.signOutLabel}>
+            로그아웃
+          </Text>
+        </Pressable>
+
         {error ? (
           <Text variant="bodySm" color="error" style={[styles.center, { marginTop: theme.spacing[16] }]}>
             {error}
@@ -310,5 +339,8 @@ const styles = StyleSheet.create({
   settingsCard: { marginTop: 20 },
   settingsRow: { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 14 },
   settingsLabel: { flex: 1, fontSize: 15 },
+  // 로그아웃 행 — 설정 카드와 동일 톤(surface 카드), 텍스트는 error 컬러(파괴적), 중앙 정렬.
+  signOutRow: { paddingVertical: 16, alignItems: 'center' },
+  signOutLabel: { fontSize: 15 },
   input: { borderWidth: 2 },
 });

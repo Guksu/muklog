@@ -6,6 +6,8 @@ export {
   radius,
   shadow,
   typography,
+  brandGradient,
+  authVisualGradient,
   type Theme,
   type ColorToken,
   type TypographyVariant,

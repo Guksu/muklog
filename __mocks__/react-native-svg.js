@@ -23,4 +23,8 @@ module.exports = {
   G: make('G'),
   Circle: make('Circle'),
   Rect: make('Rect'),
+  Ellipse: make('Ellipse'),
+  Defs: make('Defs'),
+  LinearGradient: make('LinearGradient'),
+  Stop: make('Stop'),
 };

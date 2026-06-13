@@ -25,6 +25,10 @@ jest.mock('@/features/profile', () => {
 jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
 jest.mock('@/features/room', () => ({ useMyLogs: jest.fn() }));
 
+// Alert.alert: 확인 버튼(onPress)을 즉시 호출하도록 모킹(로그아웃 확인 흐름 검증).
+import { Alert } from 'react-native';
+jest.spyOn(Alert, 'alert');
+
 import { useProfile, useUpdateProfile } from '@/features/profile';
 import { useAuth } from '@/features/auth';
 import { useMyLogs } from '@/features/room';
@@ -38,6 +42,7 @@ const useMyLogsMock = useMyLogs as jest.Mock;
 const refresh = jest.fn();
 const saveNickname = jest.fn();
 const changeAvatar = jest.fn();
+const signOut = jest.fn();
 
 const setupProfile = (state: unknown) => {
   useProfileMock.mockReturnValue({ state, refresh });
@@ -62,7 +67,11 @@ const setupMyLogs = (logs: { memberCount: number }[] = []) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  useAuthMock.mockReturnValue({ state: { status: 'authenticated', userId: 'u1' }, retry: jest.fn() });
+  useAuthMock.mockReturnValue({
+    state: { status: 'authenticated', userId: 'u1' },
+    retry: jest.fn(),
+    signOut,
+  });
   setupProfile({ status: 'ready', profile: { nickname: '민수', avatarUrl: null } });
   setupUpdate();
   setupMyLogs();
@@ -130,6 +139,25 @@ describe('ProfileScreen — ready 구조(B3)', () => {
     setupUpdate({ error: '이미지 업로드에 실패했어요. 다시 시도해 주세요.' });
     renderWithTheme(<ProfileScreen />);
     expect(screen.getByText('이미지 업로드에 실패했어요. 다시 시도해 주세요.')).toBeTruthy();
+  });
+
+  it('"로그아웃" 활성 행을 표시한다 (social-auth ⑥)', () => {
+    renderWithTheme(<ProfileScreen />);
+    expect(screen.getByText('로그아웃')).toBeTruthy();
+  });
+
+  it('"로그아웃" 행을 누르면 확인 Alert 후 signOut을 호출한다', () => {
+    (Alert.alert as jest.Mock).mockImplementation((_t, _m, buttons) => {
+      // 확인(파괴적) 버튼 onPress 실행 — 확인 흐름 시뮬.
+      const confirm = (buttons as { text: string; onPress?: () => void }[]).find(
+        (b) => b.text === '로그아웃',
+      );
+      confirm?.onPress?.();
+    });
+    renderWithTheme(<ProfileScreen />);
+    fireEvent.press(screen.getByText('로그아웃'));
+    expect(Alert.alert).toHaveBeenCalled();
+    expect(signOut).toHaveBeenCalledTimes(1);
   });
 });
 

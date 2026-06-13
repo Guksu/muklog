@@ -1,24 +1,59 @@
 // src/features/auth/AuthProvider.tsx
-// 익명 세션 부트스트랩. 앱 진입 시 세션이 없으면 signInAnonymously()로 익명 사용자를 확보한다.
-// 세션은 AsyncStorage에 영속되므로 재실행 시 동일 uid가 복원된다.
+// 소셜 인증 상태머신(social-auth). 익명 자동 발급을 폐기하고 Google/Apple 소셜 로그인 전용으로 전환.
 //
-// 생산자: 이 Provider가 AuthState를 만들어 context로 노출.
-// 소비자: AuthGate가 useAuth()로 구독해 loading/authenticated/error 3분기를 렌더.
+// 상태(AuthState, plan §3.1):
+//   loading        부트스트랩(getSession) 진행 중
+//   unauthenticated 세션 없음 → LoginScreen 노출(자동 로그인 안 함)
+//   authenticating  소셜 로그인 진행 중(해당 provider 버튼 로딩)
+//   authenticated   userId 확보(★ userId:string 계약 보존 — 모든 소비처 회귀 0)
+//   error           부트스트랩 자체 실패(앱이 못 뜸) — 전체화면 + 재시도
 //
-// invite-room: 익명 세션 확보 직후 profiles 본인 행을 upsert하여 FK 무결성을 선행 보장한다.
-//   (upsert 성공 후에만 authenticated로 전이 → 이후 create_room/join_room RPC의 FK 위반 0.)
+// 생산자: 이 Provider가 AuthState/loginError/메서드를 context로 노출.
+// 소비자: AuthGate(5분기), LoginScreen(authenticating/loginError/onGoogle/onApple), ProfileScreen(signOut).
+//
+// 취소 ≠ 에러(plan §3.1):
+//   OAuth 취소 → unauthenticated + loginError=null(전체 error 화면 금지).
+//   OAuth 실패(네트워크/토큰) → unauthenticated + loginError=인라인 메시지.
+//   부트스트랩 실패 → error(전체화면 AuthErrorView).
+//
+// 익명 잔재 강등(E8): 세션의 user.is_anonymous===true면 signOut→unauthenticated(AsyncStorage 잔존 익명 폐기).
+// profiles 본인 행 보장(ensureProfileAndAuth): upsert {id} onConflict id ignoreDuplicates → FK 무결성 선행.
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
 
+import { AuthErrorToken, messageForAuthError } from './errors';
+import {
+  configureGoogleSignIn,
+  signInWithAppleNative,
+  signInWithGoogleNative,
+  type NativeSignInResult,
+} from './socialSignIn';
+
 export type AuthState =
   | { status: 'loading' }
+  | { status: 'unauthenticated' }
+  | { status: 'authenticating'; provider: 'google' | 'apple' }
   | { status: 'authenticated'; userId: string }
   | { status: 'error'; message: string };
 
+// signInWithIdToken에 넘기는 provider 문자열(supabase 계약).
+const IdTokenProvider = {
+  google: 'google',
+  apple: 'apple',
+} as const;
+
 type AuthContextValue = {
   state: AuthState;
-  /** error 상태에서 재시도 버튼이 호출. 다시 loading → 부트스트랩 수행. */
+  /** Google 소셜 로그인 시도. authenticating(google) → idToken → signInWithIdToken. */
+  signInWithGoogle: () => Promise<void>;
+  /** Apple 소셜 로그인 시도(iOS 전용). authenticating(apple) → identityToken → signInWithIdToken. */
+  signInWithApple: () => Promise<void>;
+  /** 로그아웃. supabase.auth.signOut() → unauthenticated, profileEnsuredRef 리셋. */
+  signOut: () => Promise<void>;
+  /** 로그인 시도 실패 인라인 메시지(취소 시 null 유지). 전체 error 화면이 아님. */
+  loginError: string | null;
+  /** error 상태에서 재시도. 다시 loading → 부트스트랩 수행. */
   retry: () => void;
 };
 
@@ -26,80 +61,153 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [state, setState] = useState<AuthState>({ status: 'loading' });
+  const [loginError, setLoginError] = useState<string | null>(null);
   // retry 트리거. 값이 바뀌면 부트스트랩 effect 재실행.
   const [attempt, setAttempt] = useState(0);
   const mountedRef = useRef(true);
   // 동일 userId에 대해 profiles upsert를 1회만 수행하기 위한 가드(토큰 갱신 시 중복 upsert 방지).
+  // signOut 시 리셋 → 재로그인 시 upsert 재실행(plan E11).
   const profileEnsuredRef = useRef<string | null>(null);
 
   const retry = () => {
     setState({ status: 'loading' });
+    setLoginError(null);
     setAttempt((n) => n + 1);
   };
+
+  // profiles 본인 행 보장 → 성공 후 authenticated 전이(FK 무결성 선행). 실패 시 throw.
+  const ensureProfileAndAuth = async ({ userId }: { userId: string }) => {
+    if (profileEnsuredRef.current !== userId) {
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({ id: userId }, { onConflict: 'id', ignoreDuplicates: true });
+      if (error) throw error;
+      profileEnsuredRef.current = userId;
+    }
+    if (mountedRef.current) {
+      setState({ status: 'authenticated', userId });
+    }
+  };
+
+  // 네이티브 헬퍼 결과를 상태 전이로 매핑(Google/Apple 공통).
+  //   ok        → signInWithIdToken → onAuthStateChange가 ensureProfileAndAuth→authenticated 수행.
+  //   cancelled → unauthenticated + loginError=null.
+  //   실패      → unauthenticated + loginError=메시지.
+  const runSocialSignIn = async ({
+    provider,
+    nativeResult,
+  }: {
+    provider: 'google' | 'apple';
+    nativeResult: NativeSignInResult;
+  }) => {
+    if (!nativeResult.ok) {
+      if (mountedRef.current) {
+        setState({ status: 'unauthenticated' });
+        setLoginError(messageForAuthError({ token: nativeResult.token }));
+      }
+      return;
+    }
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: IdTokenProvider[provider],
+      token: nativeResult.token,
+    });
+    if (error || !data.user) {
+      if (mountedRef.current) {
+        setState({ status: 'unauthenticated' });
+        setLoginError(messageForAuthError({ token: AuthErrorToken.TokenExchangeFailed }));
+      }
+      return;
+    }
+    // 성공: onAuthStateChange(SIGNED_IN)가 ensureProfileAndAuth→authenticated를 처리.
+    //   리스너가 도는 사이를 대비해 여기서도 직접 보장(중복은 profileEnsuredRef 가드로 무해).
+    setLoginError(null);
+    await ensureProfileAndAuth({ userId: data.user.id });
+  };
+
+  const signInWithGoogle = async () => {
+    setLoginError(null);
+    setState({ status: 'authenticating', provider: 'google' });
+    const nativeResult = await signInWithGoogleNative();
+    await runSocialSignIn({ provider: 'google', nativeResult });
+  };
+
+  const signInWithApple = async () => {
+    setLoginError(null);
+    setState({ status: 'authenticating', provider: 'apple' });
+    const nativeResult = await signInWithAppleNative();
+    await runSocialSignIn({ provider: 'apple', nativeResult });
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    profileEnsuredRef.current = null;
+    if (mountedRef.current) {
+      setState({ status: 'unauthenticated' });
+      setLoginError(null);
+    }
+  };
+
+  useEffect(
+    function configureGoogleOnMount() {
+      // GoogleSignin.configure는 앱 부팅 시 1회(plan ③). env 누락은 throw하지만,
+      // 부트스트랩/로그인과 독립적으로 한 번만 수행한다.
+      configureGoogleSignIn();
+    },
+    [],
+  );
 
   useEffect(
     function bootstrapAuth() {
       mountedRef.current = true;
-
-      // profiles 본인 행 보장 → 성공 후에만 authenticated 전이.
-      //   upsert {id} / onConflict id / ignoreDuplicates(=INSERT ... ON CONFLICT DO NOTHING) → 닉네임/아바타는 NULL 유지.
-      //   실패 시 throw → 호출부(bootstrap/listener)가 error 상태로 전이(FK 무결성 보호).
-      async function ensureProfileAndAuth({ userId }: { userId: string }) {
-        if (profileEnsuredRef.current !== userId) {
-          const { error } = await supabase
-            .from('profiles')
-            .upsert({ id: userId }, { onConflict: 'id', ignoreDuplicates: true });
-          if (error) throw error;
-          profileEnsuredRef.current = userId;
-        }
-        if (mountedRef.current) {
-          setState({ status: 'authenticated', userId });
-        }
-      }
 
       async function bootstrap() {
         try {
           const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
           if (sessionError) throw sessionError;
 
-          let userId = sessionData.session?.user?.id ?? null;
+          const user = sessionData.session?.user ?? null;
 
-          if (!userId) {
-            // 세션 없음(최초 실행 또는 AsyncStorage 손실) → 익명 발급
-            const { data: signInData, error: signInError } = await supabase.auth.signInAnonymously();
-            if (signInError) throw signInError;
-            userId = signInData.user?.id ?? null;
+          // 익명 세션 잔재 강등(E8): 익명이면 폐기 → unauthenticated(로그인 화면 노출).
+          if (user?.is_anonymous === true) {
+            await supabase.auth.signOut();
+            if (mountedRef.current) setState({ status: 'unauthenticated' });
+            return;
           }
 
+          const userId = user?.id ?? null;
           if (!userId) {
-            throw new Error('익명 세션을 확보하지 못했습니다(userId 없음).');
+            // 세션 없음 → 자동 로그인 안 함(익명 발급 제거).
+            if (mountedRef.current) setState({ status: 'unauthenticated' });
+            return;
           }
 
-          // profiles 본인 행 보장 후 authenticated 전이(FK 무결성 선행).
+          // 소셜 세션 복원: profiles 보장 후 authenticated.
           await ensureProfileAndAuth({ userId });
         } catch (err) {
+          // 부트스트랩 자체 실패만 error(전체화면). 로그인 시도 실패와 구분.
           const message = err instanceof Error ? err.message : '알 수 없는 인증 오류';
-          if (mountedRef.current) {
-            setState({ status: 'error', message });
-          }
+          if (mountedRef.current) setState({ status: 'error', message });
         }
       }
 
       bootstrap();
 
-      // 세션 변화(갱신/만료/로그아웃) 반영
+      // 세션 변화(로그인 성공/갱신/로그아웃) 반영.
       const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
         if (!mountedRef.current) return;
         const userId = session?.user?.id;
         if (userId) {
-          // 여기서도 profiles 보장 후 authenticated 전이(첫 전이가 upsert를 우회하지 않도록).
-          // profileEnsuredRef 가드로 토큰 갱신 시 중복 upsert는 발생하지 않음.
+          // 소셜 로그인 성공/토큰 갱신 → profiles 보장 후 authenticated(가드로 중복 upsert 없음).
           ensureProfileAndAuth({ userId }).catch((err) => {
+            // 리스너 경로의 프로필 보장 실패는 로그인 시도 실패로 취급(전체 error 화면 금지).
             const message = err instanceof Error ? err.message : '프로필 초기화에 실패했습니다.';
-            if (mountedRef.current) setState({ status: 'error', message });
+            if (mountedRef.current) {
+              setState({ status: 'unauthenticated' });
+              setLoginError(message);
+            }
           });
         }
-        // userId 없음(SIGNED_OUT 등)은 부트스트랩/재시도가 처리하므로 여기선 강제 error 전이하지 않음.
+        // userId 없음(SIGNED_OUT 등)은 signOut/부트스트랩이 처리 → 여기선 강제 전이하지 않음(error 금지).
       });
 
       return function cleanupAuth() {
@@ -110,7 +218,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     [attempt],
   );
 
-  return <AuthContext.Provider value={{ state, retry }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{ state, signInWithGoogle, signInWithApple, signOut, loginError, retry }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 /** Provider 바깥 호출 시 명확히 throw. */

@@ -18,4 +18,15 @@ function required(key: string, value: string | undefined): string {
 export const env = {
   SUPABASE_URL: required('EXPO_PUBLIC_SUPABASE_URL', process.env.EXPO_PUBLIC_SUPABASE_URL),
   SUPABASE_ANON_KEY: required('EXPO_PUBLIC_SUPABASE_ANON_KEY', process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY),
+  // Google OAuth 클라이언트 ID(public — 시크릿 아님). GoogleSignin.configure에 주입.
+  //   Web client ID: Supabase가 idToken 검증 시 audience로 사용(가장 중요).
+  //   iOS client ID: iOS 네이티브 로그인용. (app.json의 reversed URL scheme은 별도 — env 아님)
+  GOOGLE_WEB_CLIENT_ID: required(
+    'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID',
+    process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  ),
+  GOOGLE_IOS_CLIENT_ID: required(
+    'EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID',
+    process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+  ),
 } as const;
