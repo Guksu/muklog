@@ -2,7 +2,7 @@
 // 맛집 카드 — placeName·별점·카테고리 칩·위치줄(area·날짜)·메모 2줄 클램프·작성자 라벨
 //   (plan §6.2 / §5 T8, AC9·AC10) + 데이터 결측(category/area/memo null) 안전 처리(§9).
 import React from 'react';
-import { screen } from '@testing-library/react-native';
+import { fireEvent, screen } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -120,5 +120,18 @@ describe('MuklogCard', () => {
   it('photoCount 0이면 사진 배지를 숨긴다 (⑥)', () => {
     renderCard({ photoCount: 0, coverUri: null });
     expect(screen.queryByTestId('muklog-card-photo-badge')).toBeNull();
+  });
+
+  it('onPress가 주어지면 카드 탭 시 호출한다(상세 진입 배선, plan §4.3)', () => {
+    const onPress = jest.fn();
+    renderWithTheme(<MuklogCard muklog={base} meId="me-uid" onPress={onPress} />);
+    fireEvent.press(screen.getByLabelText('트라토리아 보나 상세 보기'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('onPress가 없으면 비활성(기존 사용처 안전 — 누르지 못하고 라벨 없음)', () => {
+    renderCard();
+    // onPress 미연결 시 카드 자체에 button role/상세 라벨이 없어야 한다(기존 사용처 회귀 방지).
+    expect(screen.queryByLabelText('트라토리아 보나 상세 보기')).toBeNull();
   });
 });

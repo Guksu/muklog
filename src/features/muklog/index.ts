@@ -1,6 +1,12 @@
 // src/features/muklog — 공개 표면 (plan §5 T12)
 //   조회/입력 훅 + 카드/리스트/시트 + 카테고리/타입/에러 매핑.
 export { useMuklogs } from './useMuklogs';
+export {
+  useMuklog,
+  type MuklogDetail,
+  type MuklogDetailPhoto,
+  type MuklogDetailState,
+} from './useMuklog';
 export { useCreateMuklog, type CreateMuklogResult } from './useCreateMuklog';
 export { useMuklogPhotoPicker, MUKLOG_PHOTO_MAX } from './useMuklogPhotoPicker';
 export { uploadMuklogPhotos, type UploadMuklogPhotosResult } from './uploadMuklogPhotos';

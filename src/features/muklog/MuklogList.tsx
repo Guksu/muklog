@@ -7,8 +7,10 @@
 // 소비: LogScreen이 초대 카드 아래에 <MuklogList roomId meId /> 마운트(roomId=route.params, meId=auth uid).
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useNavigation, type NavigationProp } from '@react-navigation/native';
 
 import { Button, Chip, Icon, IconName, Text } from '@/components';
+import { Routes, type AppStackParamList } from '@/navigation/routes';
 import { useTheme } from '@/theme';
 
 import { categoryEmoji, categoryLabel } from './categories';
@@ -26,6 +28,7 @@ export type MuklogListProps = {
 
 export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
   const theme = useTheme();
+  const navigation = useNavigation<NavigationProp<AppStackParamList>>();
   const { state, refresh } = useMuklogs({ roomId });
   const [sheetOpen, setSheetOpen] = useState(false);
   // 카테고리 필터(B2) — null="전체". 선택 상태만 화면 보유, 도출/필터는 순수 유틸(filterByCategory).
@@ -124,7 +127,12 @@ export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
             {/* 필터된 카드 리스트(category=null이면 전체). */}
             <View style={{ gap: theme.spacing[14] }}>
               {filterMuklogsByCategory({ muklogs: state.muklogs, category }).map((item) => (
-                <MuklogCard key={item.id} muklog={item} meId={meId} />
+                <MuklogCard
+                  key={item.id}
+                  muklog={item}
+                  meId={meId}
+                  onPress={() => navigation.navigate(Routes.MuklogDetail, { muklogId: item.id })}
+                />
               ))}
             </View>
           </View>

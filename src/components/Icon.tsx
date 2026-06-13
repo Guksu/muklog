@@ -29,6 +29,7 @@ export const IconName = {
   Heart: 'heart',
   CircleInfo: 'circle-info',
   Link: 'link',
+  Calendar: 'calendar',
 } as const;
 export type IconName = (typeof IconName)[keyof typeof IconName];
 

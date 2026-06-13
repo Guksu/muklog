@@ -26,6 +26,8 @@ export type FoodCoverProps = {
   emojiSize?: number;
   /** 커버 컨테이너 추가 스타일(크기·aspectRatio 등은 소비처가 지정). */
   style?: ViewStyle;
+  /** 테스트/식별자(미지정 시 그라데이션 testID만). */
+  testID?: string;
   /** 커버 위 오버레이(사진수 배지 등). */
   children?: React.ReactNode;
 };
@@ -40,6 +42,7 @@ export const FoodCover = ({
   radius = 20,
   emojiSize = 40,
   style,
+  testID = 'food-cover-gradient',
   children,
 }: FoodCoverProps) => {
   // 킷 CAT[cat]||CAT.cafe 정합 — 미지 key는 cafe 이모지로 폴백(categoryEmoji는 빈 문자열 반환하므로 보강).
@@ -49,7 +52,7 @@ export const FoodCover = ({
 
   return (
     <LinearGradient
-      testID="food-cover-gradient"
+      testID={testID}
       colors={colors}
       start={GRADIENT_START}
       end={GRADIENT_END}

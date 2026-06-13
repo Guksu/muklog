@@ -14,6 +14,7 @@ import { HomeTabs } from './HomeTabs';
 import { Routes, type AppStackParamList } from './routes';
 import { JoinLogScreen } from './screens/JoinLogScreen';
 import { LogScreen } from './screens/LogScreen';
+import { MuklogDetailRoute } from './screens/MuklogDetailRoute';
 import { ProfileScreen } from './screens/ProfileScreen';
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
@@ -45,6 +46,11 @@ export const AppNavigator = () => {
         name={Routes.JoinLog}
         component={JoinLogScreen}
         options={{ ...detailHeaderOptions, title: '초대코드 입장' }}
+      />
+      <Stack.Screen
+        name={Routes.MuklogDetail}
+        component={MuklogDetailRoute}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );

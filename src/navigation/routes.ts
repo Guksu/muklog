@@ -9,6 +9,7 @@ export const Routes = {
   Profile: 'Profile', // 스택 — 프로필 편집(헤더 진입)
   LogScreen: 'LogScreen', // 스택 — 로그 상세(초대코드 표시·복사 + 솔로/커플 분기)
   JoinLog: 'JoinLog', // 스택 — 초대코드 입장(6셀 코드 입력 → join_room)
+  MuklogDetail: 'MuklogDetail', // 스택 — 먹로그 상세(읽기 전용 · 사진 캐러셀). param { muklogId }
 } as const;
 
 // 루트(인증 후) 스택 파라미터 목록
@@ -17,6 +18,8 @@ export type AppStackParamList = {
   [Routes.Profile]: undefined;
   [Routes.LogScreen]: { roomId: string };
   [Routes.JoinLog]: undefined;
+  // 상세는 muklogId만 받고 자체 조회(roomId는 조회 결과의 room_id로 충분, RLS가 권한 차단). plan §4.1.
+  [Routes.MuklogDetail]: { muklogId: string };
 };
 
 // 홈 탭 네비게이터 파라미터 목록 (디폴트 = LogList)

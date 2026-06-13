@@ -33,4 +33,9 @@ describe('Icon', () => {
     const node = screen.getByTestId('icon-person');
     expect(node.props.color).toBe('#2A2422');
   });
+
+  it('calendar 글리프(먹로그 상세 InfoRow 방문일)를 렌더한다', () => {
+    renderWithTheme(<Icon name={IconName.Calendar} />);
+    expect(screen.getByTestId('icon-calendar')).toBeTruthy();
+  });
 });

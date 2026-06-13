@@ -12,6 +12,13 @@ const mockUseMuklogs = jest.fn();
 const refresh = jest.fn();
 jest.mock('./useMuklogs', () => ({ useMuklogs: () => mockUseMuklogs() }));
 
+// 카드 탭 → navigate(MuklogDetail, { muklogId }) 배선 검증용 navigation 모킹(plan §4.3).
+const mockNavigate = jest.fn();
+jest.mock('@react-navigation/native', () => ({
+  ...jest.requireActual('@react-navigation/native'),
+  useNavigation: () => ({ navigate: mockNavigate }),
+}));
+
 // 시트는 visible/onSaved만 검증(내부는 자체 spec) → 가벼운 더블로 대체.
 jest.mock('./MuklogEntrySheet', () => {
   const { Pressable, Text } = require('react-native');
@@ -171,5 +178,17 @@ describe('MuklogList — 카테고리 필터 (B2)', () => {
     mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
     renderList();
     expect(screen.queryByText('전체')).toBeNull();
+  });
+});
+
+describe('MuklogList — 상세 진입 배선 (plan §4.3)', () => {
+  it('카드 탭 시 navigate(MuklogDetail, { muklogId: 카드 id })를 호출한다', () => {
+    mockUseMuklogs.mockReturnValue({
+      state: { status: 'ready', muklogs: [muklog({ id: 'm-target', placeName: '트라토리아 보나' })] },
+      refresh,
+    });
+    renderList();
+    fireEvent.press(screen.getByLabelText('트라토리아 보나 상세 보기'));
+    expect(mockNavigate).toHaveBeenCalledWith('MuklogDetail', { muklogId: 'm-target' });
   });
 });

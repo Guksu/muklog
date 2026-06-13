@@ -7,7 +7,7 @@
 // 소비: useMuklogs → Muklog. meId(현 사용자 uid)로 "내가 기록 / 짝꿍이 기록" 파생(파트너 프로필 OUT).
 //   작성자 아바타는 Avatar userId={createdBy} → defaultAvatar 결정적 익명(파트너도 안정적 이모지).
 import React from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar, FoodCover, Icon, IconName, Stars, Text } from '@/components';
 import { useTheme } from '@/theme';
@@ -21,13 +21,15 @@ export type MuklogCardProps = {
   muklog: Muklog;
   /** 현재 사용자 uid — 작성자 라벨("내가 기록"/"짝꿍이 기록") 파생용. */
   meId: string;
+  /** 카드 탭 콜백(상세 진입 배선, plan §4.3). 없으면 카드는 비활성(기존 사용처 안전). */
+  onPress?: () => void;
 };
 
 // 킷 FC2 커버 이모지 56, 작성자 아바타 22(ring 없음).
 const COVER_EMOJI_SIZE = 56;
 const AUTHOR_AVATAR_SIZE = 22;
 
-export const MuklogCard = ({ muklog, meId }: MuklogCardProps) => {
+export const MuklogCard = ({ muklog, meId, onPress }: MuklogCardProps) => {
   const theme = useTheme();
 
   const chipEmoji = categoryEmoji({ key: muklog.category });
@@ -90,15 +92,14 @@ export const MuklogCard = ({ muklog, meId }: MuklogCardProps) => {
     </>
   );
 
-  return (
-    <View
-      testID="muklog-card"
-      style={[
-        styles.card,
-        { backgroundColor: theme.color.surface, borderRadius: theme.radius.card },
-        theme.shadow.card,
-      ]}
-    >
+  // 카드 골격(비주얼 불변) — onPress 유무에 따라 래퍼만 Pressable/View로 교체(킷 레이아웃 유지).
+  const cardStyle = [
+    styles.card,
+    { backgroundColor: theme.color.surface, borderRadius: theme.radius.card },
+    theme.shadow.card,
+  ];
+  const cardBody = (
+    <>
       {/* 커버 — coverUri(대표 사진 signed URL) 있으면 Image, 없으면 FoodCover 폴백(plan §6.2 ⑥).
           카드가 overflow:hidden이라 커버 radius=0. 칩·사진 배지는 어느 쪽이든 동일하게 오버레이. */}
       {muklog.coverUri ? (
@@ -154,6 +155,27 @@ export const MuklogCard = ({ muklog, meId }: MuklogCardProps) => {
           </Text>
         </View>
       </View>
+    </>
+  );
+
+  // onPress가 있으면 Pressable로 감싸 상세 진입(접근성 라벨 = "장소명 상세 보기"). 없으면 비활성 View(기존 사용처 안전).
+  if (onPress) {
+    return (
+      <Pressable
+        testID="muklog-card"
+        accessibilityRole="button"
+        accessibilityLabel={`${muklog.placeName} 상세 보기`}
+        onPress={onPress}
+        style={cardStyle}
+      >
+        {cardBody}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View testID="muklog-card" style={cardStyle}>
+      {cardBody}
     </View>
   );
 };

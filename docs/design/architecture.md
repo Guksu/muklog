@@ -178,7 +178,7 @@ Profile (헤더 진입)
 | `muklog-photos` | **muklog-editor 첫 슬라이스 = 사진.** 작성 흐름에 사진 최대 5장 첨부 → 비공개 버킷 `muklog-photos`(private)+RLS+signed URL 업로드, `muklog_photos` 테이블 신설, 카드/리스트 대표 썸네일+장수 배지. (Kakao·위치·수정·영상 OUT). `docs/sprint/sprint-20260613-muklog-photos/plan.md`. | #4 데이터 입력 | 진행 |
 | `muklog-place` (예정) | muklog-editor 슬라이스 2 = Kakao 장소검색(Local API Edge Function 프록시) + 좌표/주소/카테고리 자동 채움(`muklogs.lat/lng/address/kakao_place_id`). | #4 | 예정 |
 | `muklog-edit` (예정) | muklog-editor 슬라이스 3 = 기존 먹로그 수정(필드·사진 추가/삭제/재정렬, `muklogs` update RLS·`muklog_photos` 재정렬). | #4 | 예정 |
-| `muklog-detail` | 먹로그 상세 (사진 캐러셀 + 메모 + 위치 미니맵) | #4 | 예정 |
+| `muklog-detail` | **먹로그 상세(읽기 전용)**: 리스트 카드 탭 → 상세 진입(`muklogId`). 사진 전체 캐러셀(order별 signed URL) + 카테고리·별점·방문일 + 메모 + 작성자(파트너 실프로필은 RLS상 OUT, "짝꿍이 기록"+익명 아바타) + 미니맵 stub(좌표 없음). 단일 먹로그 조회 훅 `useMuklog` 신설(`muklog_photos` 임베드 + 배치 signed URL). 슬라이스 관계: muklog-photos✅ → **muklog-detail** → muklog-place/muklog-edit. **수정·삭제(muklog-edit)·공유·실 지도(muklog-place/map-tab)·영상(muklog-video) OUT.** `docs/sprint/sprint-20260613-muklog-detail/plan.md`. | #4 | 진행 |
 | `map-tab` | 지도 탭 (현재위치 + 먹로그 핀 + 일반 음식점 핀) | #5, #6 | 예정 |
 | ~~`room-promote`~~ | (흡수됨) 솔로→커플 전환이 멀티 로그 모델에서 "초대코드로 조인 시 자동 커플화"로 단순화 → `log-invite`로 흡수 | #1 | ~~폐기~~ |
 | `room-lifecycle` (추후) | 예약 삭제 cron: 커플방 24h 미입장 자동삭제(#2) + 나가기 24h 유예/취소(#5). Supabase pg_cron 또는 스케줄 Edge Function. (즉시 나가기는 `room-leave`로 분리 출시) | #2·#5 신규 | **보류(설계만)** |
