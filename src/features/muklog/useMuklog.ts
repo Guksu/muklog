@@ -23,8 +23,12 @@ const MUKLOG_DETAIL_SELECT_COLUMNS =
   'id, room_id, place_name, category, area, memo, rating, visited_at, lat, lng, road_address, created_by, created_at, muklog_photos(storage_path, order_index)';
 
 // ── 반환 shape (camelCase — 매핑 단일 출처, plan §3.3) ─────────────────────────────
-/** 캐러셀 사진 1장 — order_index 오름차순. uri = signed URL(TTL 3600s). */
-export type MuklogDetailPhoto = { orderIndex: number; uri: string };
+/**
+ * 캐러셀 사진 1장 — order_index 오름차순. uri = signed URL(TTL 3600s).
+ * storagePath는 같은 임베드 행에서 함께 zip(편집 reconcile 키 — 인덱스 산술 없이 매핑).
+ *   ⚠️ order_index 갭(reindex 실패 등)에도 안전: photos 항목이 자신의 storage_path를 직접 보유한다.
+ */
+export type MuklogDetailPhoto = { orderIndex: number; uri: string; storagePath: string };
 
 /** 단일 먹로그 상세(camelCase). MuklogDetailScreen이 그대로 소비. */
 export type MuklogDetail = {
@@ -41,6 +45,9 @@ export type MuklogDetail = {
   createdBy: string; // uuid (작성자 라벨/아바타 파생)
   createdAt: string; // ISO
   photos: MuklogDetailPhoto[]; // order_index 오름차순. [] = 사진 0장
+  // 삭제용 storage_path 전체(order_index 오름차순). 임베드에서 매핑 — 추가 쿼리 0(plan §3.6 e).
+  //   signed URL 발급 성공/실패와 무관하게 항상 채운다(삭제는 path만 필요, photos와 분리).
+  photoStoragePaths: string[];
 };
 
 export type MuklogDetailState =
@@ -112,10 +119,18 @@ const toMuklogDetail = ({
   signedMap: Record<string, string>;
 }): MuklogDetail => {
   const embeds = row.muklog_photos ?? [];
-  const photos: MuklogDetailPhoto[] = [...embeds]
-    .sort((a, b) => a.order_index - b.order_index)
-    .map((p) => ({ orderIndex: p.order_index, uri: signedMap[p.storage_path] ?? null }))
+  // order_index 오름차순 정렬은 한 번만 — photos(URL 발급분)와 photoStoragePaths(전체 path)가 공유.
+  const orderedEmbeds = [...embeds].sort((a, b) => a.order_index - b.order_index);
+  // 각 사진은 자신의 storage_path를 함께 보유(편집 reconcile 키). order_index 갭이 있어도 인덱스 산술 불필요.
+  const photos: MuklogDetailPhoto[] = orderedEmbeds
+    .map((p) => ({
+      orderIndex: p.order_index,
+      storagePath: p.storage_path,
+      uri: signedMap[p.storage_path] ?? null,
+    }))
     .filter((p): p is MuklogDetailPhoto => p.uri !== null);
+  // 삭제용 전체 storage_path(URL 발급 실패와 무관) — useDeleteMuklog photoPaths로 소비.
+  const photoStoragePaths = orderedEmbeds.map((p) => p.storage_path);
 
   return {
     id: row.id,
@@ -131,6 +146,7 @@ const toMuklogDetail = ({
     createdBy: row.created_by,
     createdAt: row.created_at,
     photos,
+    photoStoragePaths,
   };
 };
 

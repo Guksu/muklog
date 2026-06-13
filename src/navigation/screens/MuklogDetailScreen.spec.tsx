@@ -181,6 +181,101 @@ describe('MuklogDetailScreen — 상단 글래스 바 (AC d)', () => {
   });
 });
 
+describe('MuklogDetailScreen — more 메뉴 / 편집·삭제 (muklog-edit §5 ⑤)', () => {
+  const renderManage = (over?: {
+    canManage?: boolean;
+    onEdit?: () => void;
+    onConfirmDelete?: () => void;
+    deleting?: boolean;
+    deleteError?: string | null;
+    data?: Partial<MuklogDetailViewData>;
+  }) =>
+    renderWithTheme(
+      <MuklogDetailScreen
+        state={{ status: 'ready', muklog: data(over?.data) }}
+        meId="me-uid"
+        meAvatarUrl={null}
+        onBack={onBack}
+        onRetry={onRetry}
+        canManage={over?.canManage ?? true}
+        onEdit={over?.onEdit}
+        onConfirmDelete={over?.onConfirmDelete}
+        deleting={over?.deleting}
+        deleteError={over?.deleteError}
+      />,
+    );
+
+  it('canManage=true면 more 버튼을 렌더한다 (AC a)', () => {
+    renderManage({ canManage: true });
+    expect(screen.getByTestId('muklog-detail-more')).toBeTruthy();
+    expect(screen.getByLabelText('더보기')).toBeTruthy();
+  });
+
+  it('canManage=false(짝꿍 것)면 more 버튼을 미렌더한다 (AC a)', () => {
+    renderManage({ canManage: false });
+    expect(screen.queryByTestId('muklog-detail-more')).toBeNull();
+    expect(screen.queryByLabelText('더보기')).toBeNull();
+  });
+
+  it('more 탭 → 메뉴 시트(편집/삭제)를 연다', () => {
+    renderManage({ canManage: true });
+    // 메뉴 열기 전엔 편집/삭제 행 없음.
+    expect(screen.queryByLabelText('편집')).toBeNull();
+    fireEvent.press(screen.getByLabelText('더보기'));
+    expect(screen.getByLabelText('편집')).toBeTruthy();
+    expect(screen.getByLabelText('삭제')).toBeTruthy();
+  });
+
+  it('메뉴 "편집" 탭 → onEdit을 호출한다 (AC b)', () => {
+    const onEdit = jest.fn();
+    renderManage({ canManage: true, onEdit });
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('편집'));
+    expect(onEdit).toHaveBeenCalledTimes(1);
+  });
+
+  it('메뉴 "삭제" 탭 → 삭제 확인 시트(킷 카피)를 연다', () => {
+    renderManage({ canManage: true, data: { placeName: '보나' } });
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('삭제'));
+    expect(screen.getByText('먹로그를 삭제할까요?')).toBeTruthy();
+    // 킷 카피 "되돌릴 수 없어요" + place명 포함(확인 본문 한 노드에 둘 다).
+    expect(screen.getByText(/‘보나’.*되돌릴 수 없어요/s)).toBeTruthy();
+  });
+
+  it('확인 시트 "삭제하기" 탭 → onConfirmDelete를 호출한다 (AC c)', () => {
+    const onConfirmDelete = jest.fn();
+    renderManage({ canManage: true, onConfirmDelete });
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('삭제'));
+    fireEvent.press(screen.getByLabelText('삭제하기'));
+    expect(onConfirmDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('삭제 진행 중(deleting)이면 삭제하기 버튼이 비활성이다', () => {
+    renderManage({ canManage: true, deleting: true });
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('삭제'));
+    expect(screen.getByLabelText('삭제하기').props.accessibilityState?.disabled).toBe(true);
+  });
+
+  it('삭제 실패(deleteError)면 확인 시트에 인라인 에러를 표시한다(재시도 가능)', () => {
+    renderManage({ canManage: true, deleteError: '삭제에 실패했어요.' });
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('삭제'));
+    expect(screen.getByText('삭제에 실패했어요.')).toBeTruthy();
+    // 시트는 유지(취소·삭제하기 모두 노출).
+    expect(screen.getByLabelText('삭제하기')).toBeTruthy();
+    expect(screen.getByLabelText('취소')).toBeTruthy();
+  });
+
+  it('공유(share) 버튼은 계속 미렌더한다', () => {
+    renderManage({ canManage: true });
+    expect(screen.queryByLabelText('공유')).toBeNull();
+    expect(screen.queryByTestId('muklog-detail-share')).toBeNull();
+  });
+});
+
 describe('MuklogDetailScreen — 작성자 라벨 (AC e)', () => {
   it('createdBy === meId면 "내가 기록"', () => {
     renderReady({ createdBy: 'me-uid' });

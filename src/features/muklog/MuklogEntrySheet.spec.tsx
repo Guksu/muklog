@@ -17,6 +17,23 @@ jest.mock('expo-image-picker', () => ({
 import * as ImagePicker from 'expo-image-picker';
 
 import { MuklogEntrySheet } from './MuklogEntrySheet';
+import { type MuklogEditInitial } from './types';
+
+const editInitial = (over?: Partial<MuklogEditInitial>): MuklogEditInitial => ({
+  muklogId: 'mk-1',
+  roomId: 'r1',
+  placeName: '트라토리아 보나',
+  category: 'pasta',
+  area: '연남동',
+  rating: 4,
+  memo: '인생 까르보나라',
+  visitedAt: '2026-02-14',
+  photos: [
+    { storagePath: 'r1/mk-1/a.jpg', orderIndex: 0, uri: 'https://signed/a.jpg' },
+    { storagePath: 'r1/mk-1/b.jpg', orderIndex: 1, uri: 'https://signed/b.jpg' },
+  ],
+  ...over,
+});
 
 const requestMock = ImagePicker.requestMediaLibraryPermissionsAsync as jest.Mock;
 const launchMock = ImagePicker.launchImageLibraryAsync as jest.Mock;
@@ -179,5 +196,170 @@ describe('MuklogEntrySheet', () => {
     expect(createMuklog).toHaveBeenCalledWith({
       input: expect.objectContaining({ photos }),
     });
+  });
+});
+
+describe('MuklogEntrySheet — 편집 모드 (initial / onSubmit) [§5 ④]', () => {
+  it('initial 주입 시 제목 "먹로그 편집" + 모든 필드를 프리필한다 (AC a)', () => {
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        initial={editInitial()}
+        onSubmit={jest.fn()}
+      />,
+    );
+    expect(screen.getByText('먹로그 편집')).toBeTruthy();
+    expect(screen.getByLabelText('장소 이름').props.value).toBe('트라토리아 보나');
+    expect(screen.getByLabelText('메모').props.value).toBe('인생 까르보나라');
+    expect(screen.getByLabelText('방문일').props.value).toBe('2026-02-14');
+    // 카테고리 pasta 칩이 선택 상태.
+    expect(screen.getByLabelText('카테고리 파스타·양식').props.accessibilityState?.selected).toBe(true);
+    // 저장 버튼 라벨은 "수정".
+    expect(screen.getByLabelText('수정')).toBeTruthy();
+  });
+
+  it('existing 사진 썸네일을 표시하고 ×로 제거하면 슬롯이 줄어든다 (AC b)', () => {
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        initial={editInitial()}
+        onSubmit={jest.fn()}
+      />,
+    );
+    expect(screen.getByTestId('photo-thumb-0')).toBeTruthy();
+    expect(screen.getByTestId('photo-thumb-1')).toBeTruthy();
+    expect(screen.getByText('2/5')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('photo-remove-0'));
+    expect(screen.queryByTestId('photo-thumb-1')).toBeNull();
+    expect(screen.getByText('1/5')).toBeTruthy();
+  });
+
+  it('편집 신규 사진 추가 시 내부 picker로 new 슬롯을 append한다(합산 5 컷)', async () => {
+    launchMock.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file://new.jpg' }] });
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        initial={editInitial()}
+        onSubmit={jest.fn()}
+      />,
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('photo-add-tile'));
+    });
+    await waitFor(() => expect(screen.getByText('3/5')).toBeTruthy());
+  });
+
+  it('저장(수정) 시 onSubmit(EditorPhoto 최종 배열)을 호출하고 onSaved를 부른다 (AC c)', async () => {
+    const onSubmit = jest.fn().mockResolvedValue({ id: 'mk-1' });
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        initial={editInitial()}
+        onSubmit={onSubmit}
+      />,
+    );
+    // 첫 existing 사진 제거 → toDelete 후보. 장소명 수정.
+    fireEvent.press(screen.getByTestId('photo-remove-0'));
+    fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나 파스타');
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('수정'));
+    });
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledWith({
+      input: expect.objectContaining({
+        muklogId: 'mk-1',
+        roomId: 'r1',
+        placeName: '보나 파스타',
+        category: 'pasta',
+        rating: 4,
+        memo: '인생 까르보나라',
+        visitedAt: '2026-02-14',
+        // 첫 사진 제거 후 남은 existing 1장(b.jpg)만 최종 배열에.
+        photos: [{ kind: 'existing', storagePath: 'r1/mk-1/b.jpg', uri: 'https://signed/b.jpg' }],
+      }),
+    });
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it('변경 없이 저장해도 onSubmit(동일 값)을 호출한다 (AC d, no-op reconcile)', async () => {
+    const onSubmit = jest.fn().mockResolvedValue({ id: 'mk-1' });
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        initial={editInitial()}
+        onSubmit={onSubmit}
+      />,
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('수정'));
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledWith({
+      input: expect.objectContaining({
+        placeName: '트라토리아 보나',
+        photos: [
+          { kind: 'existing', storagePath: 'r1/mk-1/a.jpg', uri: 'https://signed/a.jpg' },
+          { kind: 'existing', storagePath: 'r1/mk-1/b.jpg', uri: 'https://signed/b.jpg' },
+        ],
+      }),
+    });
+  });
+
+  it('편집 저장 실패(onSubmit reject) 시 submitError를 인라인 표시하고 onSaved 미호출(입력 보존)', async () => {
+    const onSubmit = jest.fn().mockRejectedValue(new Error('UPDATE_FAILED'));
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        initial={editInitial()}
+        onSubmit={onSubmit}
+        submitError="수정에 실패했어요. 다시 시도해 주세요."
+      />,
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('수정'));
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(screen.getByText('수정에 실패했어요. 다시 시도해 주세요.')).toBeTruthy();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it('편집 모드는 작성 useCreateMuklog를 호출하지 않는다(경로 분리)', async () => {
+    const onSubmit = jest.fn().mockResolvedValue({ id: 'mk-1' });
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        initial={editInitial()}
+        onSubmit={onSubmit}
+      />,
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('수정'));
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(createMuklog).not.toHaveBeenCalled();
   });
 });

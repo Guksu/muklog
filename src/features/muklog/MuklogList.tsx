@@ -5,9 +5,9 @@
 //   useMuklogs(진입 1회+refresh)·useCreateMuklog(시트 내부)를 소유. 스타일은 토큰만(raw hex 0), 이모지 허용.
 //
 // 소비: LogScreen이 초대 카드 아래에 <MuklogList roomId meId /> 마운트(roomId=route.params, meId=auth uid).
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useNavigation, type NavigationProp } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, type NavigationProp } from '@react-navigation/native';
 
 import { Button, Chip, Icon, IconName, Text } from '@/components';
 import { Routes, type AppStackParamList } from '@/navigation/routes';
@@ -33,6 +33,22 @@ export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
   const [sheetOpen, setSheetOpen] = useState(false);
   // 카테고리 필터(B2) — null="전체". 선택 상태만 화면 보유, 도출/필터는 순수 유틸(filterByCategory).
   const [category, setCategory] = useState<string | null>(null);
+
+  // 최신 refresh를 ref로 보관(stale closure 회피) — focus 콜백을 안정 참조로 유지하기 위함.
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  // 첫 포커스(마운트 로드와 겹침)는 건너뛰고, 상세 등에서 복귀(재포커스) 시에만 refresh(plan §4.3, 폴링 아님).
+  const hasFocusedRef = useRef(false);
+
+  // useFocusEffect는 콜백 참조 안정성이 필수(매 렌더 새 함수면 매번 재구독) → 예외적으로 useCallback 사용(컨벤션 허용 케이스).
+  const handleFocus = React.useCallback(function refreshOnRefocus() {
+    if (!hasFocusedRef.current) {
+      hasFocusedRef.current = true; // 첫 포커스 = 마운트 로드 → 중복 조회 가드(plan §6).
+      return;
+    }
+    void refreshRef.current();
+  }, []);
+  useFocusEffect(handleFocus);
 
   // 섹션 헤더의 N(D7) — ready일 때만 실제 개수, 그 외 0. N은 필터 무관 전체 수(킷 mk-log.jsx:55).
   const count = state.status === 'ready' ? state.muklogs.length : 0;

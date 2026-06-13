@@ -40,6 +40,48 @@ export type CreateMuklogInput = {
   photos?: PickedPhoto[]; // 0~5장, 선택 순서 = order_index. 업로드/insert는 developer(useCreateMuklog)
 };
 
+// ── 편집(muklog-edit) — 프리필 원본 + 에디터 사진 슬롯 (plan §3.2) ───────────────────
+//   UI(ui-publisher)는 ExistingPhoto/EditorPhoto/MuklogEditInitial을 소비·생성한다.
+//   update 호출 입력(UpdateMuklogInput)·reconciliation은 developer 영역(useUpdateMuklog).
+
+/** 편집 진입 시 프리필 원본 사진(remote 자산). 상세 조회(useMuklog) 결과에서 파생. */
+export type ExistingPhoto = {
+  storagePath: string; // 'roomId/muklogId/uuid.jpg' — reconciliation 키(유지/삭제 판정)
+  orderIndex: number; // 현재 order_index
+  uri: string; // 표시용 signed URL
+};
+
+/** 에디터가 다루는 사진 슬롯 — 기존(existing) | 신규(new) 합집합. 최종 배열 인덱스 = 새 order_index. */
+export type EditorPhoto =
+  | { kind: 'existing'; storagePath: string; uri: string } // 유지 후보(× → 배열에서 제거 = 삭제)
+  | { kind: 'new'; uri: string }; // 신규 pick(local uri) — 업로드 대상
+
+/** 편집 시트(MuklogEntrySheet) initial 프리필 데이터. developer가 useMuklog 결과를 매핑해 주입. */
+export type MuklogEditInitial = {
+  muklogId: string;
+  roomId: string;
+  placeName: string;
+  category: string | null;
+  area: string | null;
+  rating: number | null;
+  memo: string | null;
+  visitedAt: string | null; // 'YYYY-MM-DD'
+  photos: ExistingPhoto[]; // order_index 오름차순
+};
+
+/** update 입력(필드 + 최종 사진 슬롯 배열). 최종 배열 순서 = 새 order_index(0..N-1) (plan §3.2). */
+export type UpdateMuklogInput = {
+  muklogId: string;
+  roomId: string;
+  placeName: string;
+  category?: string | null;
+  area?: string | null;
+  rating?: number | null;
+  memo?: string | null;
+  visitedAt?: string | null;
+  photos: EditorPhoto[]; // 0~5. existing(유지) + new(신규)가 섞인 최종 순서
+};
+
 /** validate를 통과한 정규화 입력(row 빌더 입력). */
 export type NormalizedMuklogInput = {
   roomId: string;

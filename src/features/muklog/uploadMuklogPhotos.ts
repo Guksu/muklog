@@ -40,23 +40,27 @@ const cleanupUploadedPhotos = async ({ paths }: { paths: string[] }): Promise<vo
  * 중간 실패 시 이미 올린 파일/행을 best-effort 정리한 뒤 원본 에러를 throw한다.
  * @param roomId 상위 로그(방) id — 경로 첫 세그먼트(storage 멤버십 판정)
  * @param muklogId 방금 생성된 먹로그 id — 경로 두 번째 세그먼트 + FK
- * @param photos 선택된 로컬 사진(선택 순서 = order_index). 빈 배열이면 즉시 반환
+ * @param photos 선택된 로컬 사진(선택 순서). 빈 배열이면 즉시 반환
+ * @param startOrderIndex 첫 사진의 order_index(기본 0 = 작성 회귀). 편집 신규 사진은 기존 장수 뒤로 이어붙임(plan §3.4)
  * @returns 업로드 성공한 storage 키 목록
  */
 export const uploadMuklogPhotos = async ({
   roomId,
   muklogId,
   photos,
+  startOrderIndex = 0,
 }: {
   roomId: string;
   muklogId: string;
   photos: PickedPhoto[];
+  startOrderIndex?: number;
 }): Promise<UploadMuklogPhotosResult> => {
   const uploadedPaths: string[] = [];
 
   try {
     for (let index = 0; index < photos.length; index += 1) {
       const photo = photos[index];
+      const orderIndex = startOrderIndex + index;
 
       // 1. 처리본(장변 1280·JPEG q0.7)만 업로드(원본 직업로드 0, 비용 가드레일 §8).
       const processed = await processMuklogPhoto({ uri: photo.uri });
@@ -72,10 +76,10 @@ export const uploadMuklogPhotos = async ({
       if (uploadError) throw uploadError;
       uploadedPaths.push(path);
 
-      // 4. muklog_photos 행 기록(order_index=선택 순서). RLS가 내 방·내 먹로그만 허용.
+      // 4. muklog_photos 행 기록(order_index=startOrderIndex+선택 순서). RLS가 내 방·내 먹로그만 허용.
       const { error: insertError } = await supabase
         .from('muklog_photos')
-        .insert({ muklog_id: muklogId, storage_path: path, order_index: index });
+        .insert({ muklog_id: muklogId, storage_path: path, order_index: orderIndex });
       if (insertError) throw insertError;
     }
 

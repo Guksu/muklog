@@ -10,6 +10,7 @@ import React from 'react';
 import {
   ActivityIndicator,
   Image,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text as RNText,
@@ -21,7 +22,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Avatar, Button, FoodCover, Icon, IconButton, IconName, Stars, Text } from '@/components';
+import { Avatar, Button, FoodCover, Icon, IconButton, IconName, Sheet, Stars, Text } from '@/components';
 import { categoryEmoji, categoryLabel } from '@/features/muklog/categories';
 import { formatVisitedDate } from '@/features/muklog/formatVisitedDate';
 import { useTheme } from '@/theme';
@@ -64,6 +65,17 @@ export type MuklogDetailScreenProps = {
   onBack: () => void;
   /** error 상태 "다시 시도" 콜백(developer: useMuklog refresh). */
   onRetry: () => void;
+  // ── more 메뉴 / 편집·삭제 (muklog-edit, 킷 mk-log:144·195-217) ─────────────────────
+  /** 작성자(createdBy===meId)일 때만 more 글래스 버튼 노출(plan §5 ⑤ a). false면 미렌더(짝꿍 것). */
+  canManage?: boolean;
+  /** 메뉴 "편집" 탭 — developer가 MuklogEntrySheet(initial) open을 연결(plan §4.2). */
+  onEdit?: () => void;
+  /** 삭제 확인 시트 "삭제하기" 탭 — developer가 useDeleteMuklog 실행을 연결(plan §3.6/§4.2). */
+  onConfirmDelete?: () => void;
+  /** 삭제 진행 중(useDeleteMuklog.loading) — 확인 시트 버튼 비활성/로딩. */
+  deleting?: boolean;
+  /** 삭제 실패 메시지(useDeleteMuklog.error) — 확인 시트 인라인(재시도 가능). */
+  deleteError?: string | null;
 };
 
 // 킷 실측치 — 사진 정사각(aspectRatio 1/1, mk-log:136), 글래스 back, 작성자 아바타 26(mk-log:179).
@@ -127,12 +139,20 @@ export const MuklogDetailScreen = ({
   meAvatarUrl,
   onBack,
   onRetry,
+  canManage = false,
+  onEdit,
+  onConfirmDelete,
+  deleting = false,
+  deleteError = null,
 }: MuklogDetailScreenProps) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   // 캐러셀 현재 페이지 — onScroll로 갱신(킷 mk-log:134 setIdx(round(scrollLeft/clientWidth))).
   const [pageIndex, setPageIndex] = React.useState(0);
+  // more 메뉴 / 삭제 확인 시트 열림 상태(킷 mk-log:124-125 menuOpen/confirmOpen).
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
 
   if (state.status === 'loading') {
     return (
@@ -257,7 +277,7 @@ export const MuklogDetailScreen = ({
             />
           )}
 
-          {/* 상단 글래스 바 — 킷 mk-log:140-146. back만 활성(share/more는 OUT 미렌더). */}
+          {/* 상단 글래스 바 — 킷 mk-log:140-146. back(좌) + more(우, 작성자만). share는 OUT 미렌더. */}
           <View
             style={[
               styles.glassBar,
@@ -265,6 +285,16 @@ export const MuklogDetailScreen = ({
             ]}
           >
             <GlassBtn name={IconName.ChevronLeft} accessibilityLabel="뒤로 가기" onPress={onBack} />
+            {/* more 글래스 버튼 — 작성자(canManage)일 때만(plan §5 ⑤ a). 짝꿍 것은 미렌더. */}
+            {canManage ? (
+              <View testID="muklog-detail-more" style={[styles.glassRight, { gap: theme.spacing[8] }]}>
+                <GlassBtn
+                  name={IconName.MoreHorizontal}
+                  accessibilityLabel="더보기"
+                  onPress={() => setMenuOpen(true)}
+                />
+              </View>
+            ) : null}
           </View>
 
           {/* 페이지 인디케이터 — 킷 mk-log:148-154. 사진 >1장일 때만, 현재 인덱스 dot 강조(18px). */}
@@ -407,7 +437,118 @@ export const MuklogDetailScreen = ({
           </View>
         </View>
       </ScrollView>
+
+      {/* ··· 메뉴 시트 — 킷 mk-log:195-202. 편집 / 삭제(danger). 작성자만 진입(canManage). */}
+      <Sheet visible={menuOpen} onClose={() => setMenuOpen(false)}>
+        <View style={styles.menuList}>
+          <MenuRow
+            icon={IconName.Setting}
+            label="편집"
+            accessibilityLabel="편집"
+            onPress={() => {
+              setMenuOpen(false);
+              onEdit?.();
+            }}
+          />
+          <View
+            style={[styles.menuDivider, { backgroundColor: theme.color.hairlineAlt, marginVertical: theme.spacing[4] }]}
+          />
+          <MenuRow
+            icon={IconName.Trash}
+            label="삭제"
+            accessibilityLabel="삭제"
+            danger
+            onPress={() => {
+              setMenuOpen(false);
+              setConfirmOpen(true);
+            }}
+          />
+        </View>
+      </Sheet>
+
+      {/* 삭제 확인 시트 — 킷 mk-log:204-217. 카피·negative(삭제하기)/ghost(취소). 실제 삭제는 onConfirmDelete. */}
+      <Sheet visible={confirmOpen} onClose={() => setConfirmOpen(false)} title="먹로그를 삭제할까요?">
+        <Text variant="bodySm" color="fgMuted" style={[styles.confirmBody, { marginBottom: theme.spacing[18] }]}>
+          {state.status === 'ready' ? `‘${state.muklog.placeName}’ ` : ''}기록과 사진이 함께 사라져요.{'\n'}이 작업은 되돌릴 수 없어요.
+        </Text>
+        {deleteError ? (
+          <Text variant="bodySm" color="error" style={[styles.confirmBody, { marginBottom: theme.spacing[12] }]}>
+            {deleteError}
+          </Text>
+        ) : null}
+        <View style={{ gap: theme.spacing[10] }}>
+          {/* 삭제하기 — 킷 status-negative 버튼(negative 토큰). 확인 시트는 닫지 않음(developer가 성공 시 goBack). */}
+          <Pressable
+            testID="muklog-delete-confirm"
+            accessibilityRole="button"
+            accessibilityLabel="삭제하기"
+            accessibilityState={{ disabled: deleting, busy: deleting }}
+            disabled={deleting}
+            onPress={onConfirmDelete}
+            style={({ pressed }) => [
+              styles.deleteBtn,
+              {
+                backgroundColor: theme.color.negative,
+                borderRadius: theme.radius.control,
+                paddingVertical: theme.spacing[14],
+                opacity: deleting ? 0.45 : pressed ? 0.85 : 1,
+              },
+            ]}
+          >
+            {deleting ? (
+              <ActivityIndicator color={theme.color.negativeFg} />
+            ) : (
+              <Text variant="button" color="negativeFg">
+                삭제하기
+              </Text>
+            )}
+          </Pressable>
+          <Button
+            title="취소"
+            accessibilityLabel="취소"
+            variant="ghost"
+            full
+            disabled={deleting}
+            onPress={() => setConfirmOpen(false)}
+          />
+        </View>
+      </Sheet>
     </View>
+  );
+};
+
+// ── 액션시트 메뉴 한 줄 (킷 MenuRow mk-log:223-234) ─────────────────────────────────
+//   아이콘(21) + 라벨(600/16). danger면 negative 토큰(편집=fg / 삭제=negative).
+const MenuRow = ({
+  icon,
+  label,
+  accessibilityLabel,
+  danger,
+  onPress,
+}: {
+  icon: IconName;
+  label: string;
+  accessibilityLabel: string;
+  danger?: boolean;
+  onPress: () => void;
+}) => {
+  const theme = useTheme();
+  const tint: ColorToken = danger ? 'negative' : 'fg';
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.menuRow,
+        { gap: theme.spacing[14], paddingVertical: theme.spacing[14], paddingHorizontal: theme.spacing[8], opacity: pressed ? 0.6 : 1 },
+      ]}
+    >
+      <Icon name={icon} size={21} color={tint} />
+      <Text variant="body" color={tint}>
+        {label}
+      </Text>
+    </Pressable>
   );
 };
 
@@ -448,6 +589,7 @@ const styles = StyleSheet.create({
   // 캐러셀 영역(상대 위치 — 글래스바·인디케이터 오버레이의 기준).
   carouselWrap: { position: 'relative' },
   glassBar: { position: 'absolute', flexDirection: 'row', justifyContent: 'space-between' },
+  glassRight: { flexDirection: 'row', alignItems: 'center' },
   // 글래스 버튼은 IconButton 자체가 40×40 — 배경 원형만 입힌다.
   glassBtn: { overflow: 'hidden' },
   indicator: {
@@ -484,4 +626,11 @@ const styles = StyleSheet.create({
   },
   roadRow: { flexDirection: 'row', alignItems: 'center' },
   roadText: { flex: 1 },
+  // more 메뉴 시트(킷 mk-log:197 gap 4) + 구분 헤어라인(킷 mk-log:199 height 1).
+  menuList: { gap: 4 },
+  menuDivider: { height: StyleSheet.hairlineWidth },
+  menuRow: { flexDirection: 'row', alignItems: 'center' },
+  // 삭제 확인 본문(킷 mk-log:206 가운데 정렬) + 삭제하기 버튼(킷 mk-log:210-214).
+  confirmBody: { textAlign: 'center' },
+  deleteBtn: { alignItems: 'center', justifyContent: 'center' },
 });

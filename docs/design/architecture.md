@@ -110,8 +110,8 @@ muklog_photos                    -- 먹로그당 최대 5장 (영상 1개와는 
   - **나가기 24h 유예(#5)**: 커플방에서 한 명이 나가기 → `delete_scheduled_at = now()+24h`, `delete_requested_by = 나간 사람`. 24h 내 **나간 사람만** 취소(두 필드 NULL로) 가능. 미취소 시 cron이 방+데이터 전체 삭제(남은 멤버 데이터 포함). 솔로방에는 나가기 유예 미적용.
     > ⚠️ **즉시 나가기(`room-leave`)와의 관계(사용자 승인된 divergence)**: 위 유예/취소/cron은 무거워 `room-lifecycle`로 **보류**한다. 1차 출시는 §위 "즉시판"(유예 없이 즉시 해지 + 0명 시 삭제, **남은 멤버는 보존**)이다. `delete_scheduled_at`/`delete_requested_by` 컬럼은 선반영돼 있어 추후 `leave_room` 본문만 교체하면 유예 모델로 확장된다.
 - **RLS(Row Level Security)**: 모든 테이블에 활성화. 사용자는 **자신이 멤버인 방**의 데이터만 read/write. 핵심 정책:
-  - `muklogs`: `room_id IN (select room_id from room_members where user_id = auth.uid())`
-  - `muklog_photos`: 상위 `muklog`의 room 멤버십으로 검증
+  - `muklogs`: select=`room_id IN (select room_id from room_members where user_id = auth.uid())`. insert=`created_by=auth.uid() and 내 방`. **update(`muklogs_update_own`)·delete(`muklogs_delete_own`)=`created_by=auth.uid() and 내 방`**(수정=muklog-edit, 삭제 정책=muklog-photos 롤백용 선반영·muklog-edit에서 삭제 UI 사용).
+  - `muklog_photos`: select/insert/delete=상위 `muklog`의 room 멤버십(insert/delete는 created_by 본인). **update(`muklog_photos_update_member`)=동일 조건**(muklog-edit 사진 재정렬 order_index reindex용).
 - **Storage 정책**: `muklog-photos` 버킷은 경로 첫 세그먼트(`room_id`)가 멤버인 방일 때만 접근.
 
 ---
@@ -177,7 +177,7 @@ Profile (헤더 진입)
 | ~~`muklog-editor`~~ → **슬라이스 분해** | 먹로그 작성/편집이 한 스프린트에 과대 → **`muklog-photos`(사진) / `muklog-place`(Kakao 장소·좌표) / `muklog-edit`(수정 모드)** 3슬라이스로 분해. (1 스프린트=1 기능 원칙) | #4 데이터 입력 | ~~분해~~ |
 | `muklog-photos` | **muklog-editor 첫 슬라이스 = 사진.** 작성 흐름에 사진 최대 5장 첨부 → 비공개 버킷 `muklog-photos`(private)+RLS+signed URL 업로드, `muklog_photos` 테이블 신설, 카드/리스트 대표 썸네일+장수 배지. (Kakao·위치·수정·영상 OUT). `docs/sprint/sprint-20260613-muklog-photos/plan.md`. | #4 데이터 입력 | 진행 |
 | `muklog-place` (예정) | muklog-editor 슬라이스 2 = Kakao 장소검색(Local API Edge Function 프록시) + 좌표/주소/카테고리 자동 채움(`muklogs.lat/lng/address/kakao_place_id`). | #4 | 예정 |
-| `muklog-edit` (예정) | muklog-editor 슬라이스 3 = 기존 먹로그 수정(필드·사진 추가/삭제/재정렬, `muklogs` update RLS·`muklog_photos` 재정렬). | #4 | 예정 |
+| `muklog-edit` | muklog-editor 슬라이스 3 = 기존 먹로그 **수정·삭제**. 상세 more 메뉴(편집/삭제)+삭제 확인 시트 렌더·배선, `MuklogEntrySheet` dual-mode(initial 프리필), 사진 reconciliation(유지/삭제/신규+order_index 재부여). **신설: `muklogs_update_own` RLS + `muklog_photos_update_member` RLS(reindex용)**. 삭제는 row(FK CASCADE) + **Storage 파일 정리**. 슬라이스 관계: photos✅→detail✅→**muklog-edit**→place. Kakao 장소/좌표·영상·드래그 재정렬 OUT. `docs/sprint/sprint-20260613-muklog-edit/plan.md`. | #4 | 진행 |
 | `muklog-detail` | **먹로그 상세(읽기 전용)**: 리스트 카드 탭 → 상세 진입(`muklogId`). 사진 전체 캐러셀(order별 signed URL) + 카테고리·별점·방문일 + 메모 + 작성자(파트너 실프로필은 RLS상 OUT, "짝꿍이 기록"+익명 아바타) + 미니맵 stub(좌표 없음). 단일 먹로그 조회 훅 `useMuklog` 신설(`muklog_photos` 임베드 + 배치 signed URL). 슬라이스 관계: muklog-photos✅ → **muklog-detail** → muklog-place/muklog-edit. **수정·삭제(muklog-edit)·공유·실 지도(muklog-place/map-tab)·영상(muklog-video) OUT.** `docs/sprint/sprint-20260613-muklog-detail/plan.md`. | #4 | 진행 |
 | `map-tab` | 지도 탭 (현재위치 + 먹로그 핀 + 일반 음식점 핀) | #5, #6 | 예정 |
 | ~~`room-promote`~~ | (흡수됨) 솔로→커플 전환이 멀티 로그 모델에서 "초대코드로 조인 시 자동 커플화"로 단순화 → `log-invite`로 흡수 | #1 | ~~폐기~~ |

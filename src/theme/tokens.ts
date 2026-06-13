@@ -42,6 +42,10 @@ const palette = {
   // 사진 위 어두운 글래스 배지 베이스 — 킷 MuklogCard 사진수 배지 rgba(0,0,0,.32)+blur.
   //   RN blur 미지원 → 반투명 검정 근사(불투명도만, 흐림 없음). 카드 커버 위 흰 텍스트 대비 확보.
   scrimStrong:'rgba(0,0,0,0.42)',
+  // 파괴적 액션색(삭제) — 킷 mk-log.jsx 삭제하기 버튼/MenuRow danger의 var(--status-negative, #E5484D).
+  //   킷 index.html에 --status-negative 정의가 없어 인라인 폴백 #E5484D가 실값(킷=SSOT) → 그대로 채택.
+  //   기존 error(#FF4242)/errorStrong(#E52222)와 의미 분리(error=검증/조회 실패 텍스트, negative=파괴 CTA).
+  statusNegative:'#E5484D',
 } as const;
 
 // 그라데이션 stops(시맨틱 color 맵은 단일 string 토큰만 담으므로 배열은 별도 export).
@@ -78,6 +82,8 @@ const lightColor = {
   socialGoogleBg: palette.white, socialGoogleFg: palette.socialGoogleFg,
   // 카드 사진수 배지 글래스 근사(킷 rgba(0,0,0,.32)+blur). 라이트/다크 공통(사진 위라 항상 어둡게).
   scrimStrong: palette.scrimStrong,
+  // 파괴 액션(삭제) — 킷 status-negative(#E5484D). negativeFg=버튼 글자 흰색.
+  negative: palette.statusNegative, negativeFg: palette.white,
 } as const;
 
 // 시맨틱 컬러 (다크) — 시맨틱만 오버라이드. 신규 키도 동일 키로 미러링(tsc 키 일관성, 엣지1).

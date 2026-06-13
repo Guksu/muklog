@@ -90,6 +90,7 @@ describe('useMuklog', () => {
         createdBy: 'u1',
         createdAt: '2026-02-14T00:00:00.000Z',
         photos: [],
+        photoStoragePaths: [],
       },
     });
     // 사진 0장이면 signed URL 배치 발급을 호출하지 않는다(비용 가드레일).
@@ -134,11 +135,72 @@ describe('useMuklog', () => {
       ['r1/m1/a.jpg', 'r1/m1/b.jpg', 'r1/m1/c.jpg'],
       3600,
     );
-    const state = result.current.state as { status: 'ready'; muklog: { photos: { orderIndex: number; uri: string }[] } };
+    const state = result.current.state as {
+      status: 'ready';
+      muklog: { photos: { orderIndex: number; uri: string; storagePath: string }[] };
+    };
+    // 각 photo는 자신의 storagePath를 함께 보유(인덱스 산술 없이 편집 reconcile 매핑, order_index 갭 안전).
     expect(state.muklog.photos).toEqual([
-      { orderIndex: 0, uri: 'https://signed/a' },
-      { orderIndex: 1, uri: 'https://signed/b' },
-      { orderIndex: 2, uri: 'https://signed/c' },
+      { orderIndex: 0, storagePath: 'r1/m1/a.jpg', uri: 'https://signed/a' },
+      { orderIndex: 1, storagePath: 'r1/m1/b.jpg', uri: 'https://signed/b' },
+      { orderIndex: 2, storagePath: 'r1/m1/c.jpg', uri: 'https://signed/c' },
+    ]);
+  });
+
+  it('photoStoragePaths를 order_index 오름차순 전체 path로 매핑한다(URL 발급 실패와 무관, plan §3.6 e)', async () => {
+    mockQueryResult({
+      data: row({
+        muklog_photos: [
+          { storage_path: 'r1/m1/c.jpg', order_index: 2 },
+          { storage_path: 'r1/m1/a.jpg', order_index: 0 },
+          { storage_path: 'r1/m1/b.jpg', order_index: 1 },
+        ],
+      }),
+      error: null,
+    });
+    // signed URL은 전부 실패시켜도 photoStoragePaths는 전체 path를 유지(삭제용).
+    createSignedUrlsMock.mockResolvedValueOnce({ data: null, error: new Error('boom') });
+
+    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }));
+    await waitFor(() => expect(result.current.state.status).toBe('ready'));
+    const state = result.current.state as {
+      status: 'ready';
+      muklog: { photos: unknown[]; photoStoragePaths: string[] };
+    };
+    expect(state.muklog.photoStoragePaths).toEqual(['r1/m1/a.jpg', 'r1/m1/b.jpg', 'r1/m1/c.jpg']);
+    // 발급 전부 실패 → photos는 비지만 path는 보존.
+    expect(state.muklog.photos).toEqual([]);
+  });
+
+  it('order_index에 갭이 있어도 각 photo가 자신의 storagePath를 보유한다(인덱스 산술 의존 제거, reindex 실패 안전)', async () => {
+    // 갭 시나리오: order_index 0, 2(1 없음) — reindex 실패로 빈 슬롯이 생긴 상태.
+    mockQueryResult({
+      data: row({
+        muklog_photos: [
+          { storage_path: 'r1/m1/a.jpg', order_index: 0 },
+          { storage_path: 'r1/m1/c.jpg', order_index: 2 },
+        ],
+      }),
+      error: null,
+    });
+    createSignedUrlsMock.mockResolvedValueOnce({
+      data: [
+        { path: 'r1/m1/a.jpg', signedUrl: 'https://signed/a' },
+        { path: 'r1/m1/c.jpg', signedUrl: 'https://signed/c' },
+      ],
+      error: null,
+    });
+
+    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }));
+    await waitFor(() => expect(result.current.state.status).toBe('ready'));
+    const state = result.current.state as {
+      status: 'ready';
+      muklog: { photos: { orderIndex: number; uri: string; storagePath: string }[] };
+    };
+    // 각 photo의 storagePath는 같은 임베드 행에서 zip — order_index 갭과 무관하게 정확.
+    expect(state.muklog.photos).toEqual([
+      { orderIndex: 0, storagePath: 'r1/m1/a.jpg', uri: 'https://signed/a' },
+      { orderIndex: 2, storagePath: 'r1/m1/c.jpg', uri: 'https://signed/c' },
     ]);
   });
 
@@ -159,8 +221,13 @@ describe('useMuklog', () => {
 
     const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }));
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
-    const state = result.current.state as { status: 'ready'; muklog: { photos: { orderIndex: number; uri: string }[] } };
-    expect(state.muklog.photos).toEqual([{ orderIndex: 0, uri: 'https://signed/a' }]);
+    const state = result.current.state as {
+      status: 'ready';
+      muklog: { photos: { orderIndex: number; uri: string; storagePath: string }[] };
+    };
+    expect(state.muklog.photos).toEqual([
+      { orderIndex: 0, storagePath: 'r1/m1/a.jpg', uri: 'https://signed/a' },
+    ]);
   });
 
   it('signed URL 배치 전체가 실패해도 ready(photos:[]) — 사진 때문에 화면을 막지 않는다 (AC e)', async () => {

@@ -66,6 +66,21 @@ describe('tokens — radius (muklog 킷)', () => {
   });
 });
 
+describe('tokens — negative (파괴 액션색, muklog-edit 삭제 CTA)', () => {
+  it('negative가 킷 status-negative #E5484D다(삭제하기 버튼/MenuRow danger)', () => {
+    expect(themes.light.color.negative).toBe('#E5484D');
+  });
+
+  it('negativeFg가 삭제 버튼 글자 흰색 #FFFFFF다', () => {
+    expect(themes.light.color.negativeFg).toBe('#FFFFFF');
+  });
+
+  it('negative는 error(#FF4242)/errorStrong(#E52222)과 의미·값이 분리된다', () => {
+    expect(themes.light.color.negative).not.toBe(themes.light.color.error);
+    expect(themes.light.color.negative).not.toBe(themes.light.color.errorStrong);
+  });
+});
+
 describe('tokens — starFill (Stars 채움색, A6)', () => {
   it('채운 별 색이 킷 #FFB23E다(warning #FF9200과 구분)', () => {
     expect(themes.light.color.starFill).toBe('#FFB23E');

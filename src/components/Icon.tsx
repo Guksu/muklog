@@ -30,6 +30,9 @@ export const IconName = {
   CircleInfo: 'circle-info',
   Link: 'link',
   Calendar: 'calendar',
+  // 상세 more 메뉴/삭제(muklog-edit) — 킷 mk-log:144 more-horizontal / mk-log:200 trash.
+  MoreHorizontal: 'more-horizontal',
+  Trash: 'trash',
 } as const;
 export type IconName = (typeof IconName)[keyof typeof IconName];
 

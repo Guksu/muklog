@@ -13,10 +13,22 @@ const refresh = jest.fn();
 jest.mock('./useMuklogs', () => ({ useMuklogs: () => mockUseMuklogs() }));
 
 // 카드 탭 → navigate(MuklogDetail, { muklogId }) 배선 검증용 navigation 모킹(plan §4.3).
+//   useFocusEffect는 마운트 시 콜백을 1회 실행하도록 모킹(포커스 refresh 검증, plan §4.3).
+//   refireFocus()로 "재포커스(상세 복귀)"를 흉내내 첫 마운트 중복 가드를 검증한다.
 const mockNavigate = jest.fn();
+let lastFocusCallback: (() => void) | null = null;
+const refireFocus = () => lastFocusCallback?.();
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
   useNavigation: () => ({ navigate: mockNavigate }),
+  useFocusEffect: (cb: () => void) => {
+    const React = require('react');
+    React.useEffect(() => {
+      // 실제 useFocusEffect처럼 마운트(첫 포커스) 시 콜백 1회 실행. 이후 refireFocus로 재포커스 흉내.
+      lastFocusCallback = cb;
+      cb();
+    }, [cb]);
+  },
 }));
 
 // 시트는 visible/onSaved만 검증(내부는 자체 spec) → 가벼운 더블로 대체.
@@ -178,6 +190,25 @@ describe('MuklogList — 카테고리 필터 (B2)', () => {
     mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
     renderList();
     expect(screen.queryByText('전체')).toBeNull();
+  });
+});
+
+describe('MuklogList — 포커스 복귀 갱신 (plan §4.3·§6)', () => {
+  it('첫 마운트(첫 포커스)에는 refresh를 호출하지 않는다(중복 가드 — 마운트 로드와 겹침 회피)', () => {
+    mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
+    renderList();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('재포커스(상세에서 복귀) 시 refresh를 1회 호출한다(편집/삭제 반영)', () => {
+    mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
+    renderList();
+    expect(refresh).not.toHaveBeenCalled();
+    // 상세로 갔다 돌아옴(재포커스).
+    act(() => {
+      refireFocus();
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 });
 

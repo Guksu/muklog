@@ -129,4 +129,31 @@ describe('uploadMuklogPhotos', () => {
     // 업로드된 두 파일 모두 정리(2번째는 업로드 성공 후 insert 실패).
     expect(removeMock).toHaveBeenCalledWith(['r1/m1/f0.jpg', 'r1/m1/f1.jpg']);
   });
+
+  it('startOrderIndex로 시작 order_index를 지정한다(편집 신규 사진용, plan §3.4)', async () => {
+    const photos = [{ uri: 'a' }, { uri: 'b' }];
+    await uploadMuklogPhotos({ roomId: 'r1', muklogId: 'm1', photos, startOrderIndex: 3 });
+
+    expect(photosInsertMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ storage_path: 'r1/m1/f0.jpg', order_index: 3 }),
+    );
+    expect(photosInsertMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ storage_path: 'r1/m1/f1.jpg', order_index: 4 }),
+    );
+  });
+
+  it('startOrderIndex 미지정(기본 0)은 0,1,2로 회귀 동작한다', async () => {
+    const photos = [{ uri: 'a' }, { uri: 'b' }];
+    await uploadMuklogPhotos({ roomId: 'r1', muklogId: 'm1', photos });
+    expect(photosInsertMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ order_index: 0 }),
+    );
+    expect(photosInsertMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ order_index: 1 }),
+    );
+  });
 });
