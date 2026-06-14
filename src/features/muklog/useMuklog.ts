@@ -20,7 +20,7 @@ const SIGNED_URL_TTL_SECONDS = 3600; // signed URL 만료 1h (plan §3.5)
 
 // 상세가 소비하는 컬럼 + 전체 사진 임베드(order_index, storage_path). 매핑/정렬 단일 출처.
 const MUKLOG_DETAIL_SELECT_COLUMNS =
-  'id, room_id, place_name, category, area, memo, rating, visited_at, lat, lng, road_address, created_by, created_at, muklog_photos(storage_path, order_index)';
+  'id, room_id, place_name, category, area, memo, rating, visited_at, lat, lng, address, road_address, kakao_place_id, created_by, created_at, muklog_photos(storage_path, order_index)';
 
 // ── 반환 shape (camelCase — 매핑 단일 출처, plan §3.3) ─────────────────────────────
 /**
@@ -40,8 +40,13 @@ export type MuklogDetail = {
   memo: string | null; // null/빈문자 = 메모 없음
   rating: number | null; // 1~5, null = 미평가
   visitedAt: string | null; // 'YYYY-MM-DD'
-  roadAddress: string | null; // road_address. 현재 항상 null(muklog-place 전)
-  hasCoords: boolean; // lat != null && lng != null. 현재 항상 false → 미니맵 stub
+  // place 필드(muklog-place) — 편집 좌표 보존(§7-6)·미니맵. lat/lng는 쌍(nullable, 수동입력 시 null).
+  lat: number | null;
+  lng: number | null;
+  address: string | null; // 지번 주소
+  roadAddress: string | null; // road_address
+  kakaoPlaceId: string | null; // kakao_place_id(수동입력 시 null)
+  hasCoords: boolean; // lat != null && lng != null → 미니맵(map-tab) 핀 여부
   createdBy: string; // uuid (작성자 라벨/아바타 파생)
   createdAt: string; // ISO
   photos: MuklogDetailPhoto[]; // order_index 오름차순. [] = 사진 0장
@@ -71,7 +76,9 @@ type MuklogDetailRow = {
   visited_at: string | null;
   lat: number | null;
   lng: number | null;
+  address: string | null;
   road_address: string | null;
+  kakao_place_id: string | null;
   created_by: string;
   created_at: string;
   muklog_photos?: MuklogPhotoEmbed[] | null;
@@ -141,7 +148,11 @@ const toMuklogDetail = ({
     memo: row.memo,
     rating: row.rating,
     visitedAt: row.visited_at,
+    lat: row.lat,
+    lng: row.lng,
+    address: row.address,
     roadAddress: row.road_address,
+    kakaoPlaceId: row.kakao_place_id,
     hasCoords: row.lat !== null && row.lng !== null,
     createdBy: row.created_by,
     createdAt: row.created_at,

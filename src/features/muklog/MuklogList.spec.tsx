@@ -11,6 +11,19 @@ import { type Muklog } from './types';
 const mockUseMuklogs = jest.fn();
 const refresh = jest.fn();
 jest.mock('./useMuklogs', () => ({ useMuklogs: () => mockUseMuklogs() }));
+// 장소검색(muklog-place) 컨테이너 훅 — supabase(AsyncStorage) 로드 회피 위해 더블로 대체(섹션 동작과 무관).
+jest.mock('./usePlaceSearch', () => ({
+  usePlaceSearch: () => ({
+    query: '',
+    setQuery: jest.fn(),
+    status: 'idle',
+    results: [],
+    errorMessage: null,
+  }),
+}));
+jest.mock('./usePlaceSelection', () => ({
+  usePlaceSelection: () => ({ selectedPlace: null, selectPlace: jest.fn(), clearPlace: jest.fn() }),
+}));
 
 // 카드 탭 → navigate(MuklogDetail, { muklogId }) 배선 검증용 navigation 모킹(plan §4.3).
 //   useFocusEffect는 마운트 시 콜백을 1회 실행하도록 모킹(포커스 refresh 검증, plan §4.3).
@@ -31,16 +44,19 @@ jest.mock('@react-navigation/native', () => ({
   },
 }));
 
-// 시트는 visible/onSaved만 검증(내부는 자체 spec) → 가벼운 더블로 대체.
+// 시트는 visible/onSaved + 장소검색 props 전달만 검증(내부는 자체 spec) → 가벼운 더블로 대체.
+const mockSheetProps = jest.fn();
 jest.mock('./MuklogEntrySheet', () => {
   const { Pressable, Text } = require('react-native');
   return {
-    MuklogEntrySheet: ({ visible, onSaved }: { visible: boolean; onSaved: () => void }) =>
-      visible ? (
-        <Pressable accessibilityLabel="시트-저장" onPress={onSaved}>
+    MuklogEntrySheet: (props: { visible: boolean; onSaved: () => void }) => {
+      mockSheetProps(props);
+      return props.visible ? (
+        <Pressable accessibilityLabel="시트-저장" onPress={props.onSaved}>
           <Text>시트 열림</Text>
         </Pressable>
-      ) : null,
+      ) : null;
+    },
   };
 });
 
@@ -221,5 +237,20 @@ describe('MuklogList — 상세 진입 배선 (plan §4.3)', () => {
     renderList();
     fireEvent.press(screen.getByLabelText('트라토리아 보나 상세 보기'));
     expect(mockNavigate).toHaveBeenCalledWith('MuklogDetail', { muklogId: 'm-target' });
+  });
+});
+
+describe('MuklogList — 장소검색 컨테이너 배선 (muklog-place, T10)', () => {
+  it('시트에 placeSearch + selectedPlace/onSelectPlace/onClearPlace를 주입한다', () => {
+    mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
+    renderList();
+    const props = mockSheetProps.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    // 컨테이너가 usePlaceSearch 번들 + 선택 상태/콜백을 controlled로 전달.
+    expect(props.placeSearch).toEqual(
+      expect.objectContaining({ query: '', status: 'idle', results: [] }),
+    );
+    expect(props.selectedPlace).toBeNull();
+    expect(typeof props.onSelectPlace).toBe('function');
+    expect(typeof props.onClearPlace).toBe('function');
   });
 });

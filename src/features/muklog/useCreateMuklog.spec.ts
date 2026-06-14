@@ -84,6 +84,49 @@ describe('useCreateMuklog', () => {
     expect(created).toEqual({ id: 'new-id' });
   });
 
+  it('장소 선택값(place 필드)을 insert row에 실어 저장한다 (muklog-place §3.8 / T9)', async () => {
+    wireInsert({ data: { id: 'new-id' }, error: null });
+    const { result } = renderHook(() => useCreateMuklog());
+    await act(async () => {
+      await result.current.createMuklog({
+        input: {
+          ...validInput,
+          kakaoPlaceId: '26338954',
+          address: '서울 마포구 연남동 227-15',
+          roadAddress: '서울 마포구 동교로 123',
+          lat: 37.561,
+          lng: 126.925,
+        },
+      });
+    });
+    expect(insertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kakao_place_id: '26338954',
+        address: '서울 마포구 연남동 227-15',
+        road_address: '서울 마포구 동교로 123',
+        lat: 37.561,
+        lng: 126.925,
+      }),
+    );
+  });
+
+  it('장소 선택 없이 수동입력 폴백 → place 필드는 NULL로 insert (좌표 nullable)', async () => {
+    wireInsert({ data: { id: 'new-id' }, error: null });
+    const { result } = renderHook(() => useCreateMuklog());
+    await act(async () => {
+      await result.current.createMuklog({ input: validInput });
+    });
+    expect(insertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kakao_place_id: null,
+        address: null,
+        road_address: null,
+        lat: null,
+        lng: null,
+      }),
+    );
+  });
+
   it('장소명이 비면 앱단에서 차단하고 insert를 호출하지 않는다 (AC3)', async () => {
     wireInsert({ data: { id: 'x' }, error: null });
     const { result } = renderHook(() => useCreateMuklog());

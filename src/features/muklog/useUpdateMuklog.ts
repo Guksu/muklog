@@ -95,6 +95,7 @@ export const useUpdateMuklog = () => {
     setError(null);
     try {
       // 앱단 1차 검증/정규화(장소명 필수·rating 1~5·미래일 차단). photos는 reconcile가 따로 처리.
+      //   place 필드(muklog-place §3.8)도 함께 정규화해 update payload에 싣는다(프리필 좌표 보존).
       const normalized = normalizeMuklogInput({
         input: {
           roomId: input.roomId,
@@ -104,6 +105,11 @@ export const useUpdateMuklog = () => {
           rating: input.rating,
           memo: input.memo,
           visitedAt: input.visitedAt,
+          kakaoPlaceId: input.kakaoPlaceId,
+          address: input.address,
+          roadAddress: input.roadAddress,
+          lat: input.lat,
+          lng: input.lng,
         },
       });
 
@@ -117,6 +123,13 @@ export const useUpdateMuklog = () => {
           rating: normalized.rating,
           memo: normalized.memo,
           visited_at: normalized.visitedAt,
+          // place 필드(§3.8·§6) — 미포함 시 편집 저장이 기존 좌표/주소를 날림(손실 방지).
+          //   편집 진입 프리필(MuklogEditInitial)이 기존 값을 input에 싣고, 재검색 없이 저장해도 보존.
+          kakao_place_id: normalized.kakaoPlaceId,
+          address: normalized.address,
+          road_address: normalized.roadAddress,
+          lat: normalized.lat,
+          lng: normalized.lng,
         })
         .eq('id', input.muklogId)
         .select('id')

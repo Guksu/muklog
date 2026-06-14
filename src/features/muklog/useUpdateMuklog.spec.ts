@@ -124,6 +124,12 @@ describe('useUpdateMuklog', () => {
       rating: 4,
       memo: '좋았다',
       visited_at: '2026-02-14',
+      // place 필드(muklog-place §3.8) — baseInput에 좌표 없음 → 모두 null.
+      kakao_place_id: null,
+      address: null,
+      road_address: null,
+      lat: null,
+      lng: null,
     });
     // 위변조 차단: created_by/room_id는 payload에 없다.
     expect(payload).not.toHaveProperty('created_by');
@@ -136,6 +142,30 @@ describe('useUpdateMuklog', () => {
     expect(uploadMock).not.toHaveBeenCalled();
     expect(photosUpdateMock).not.toHaveBeenCalled();
     expect(res).toEqual({ id: 'm1' });
+  });
+
+  it('편집 프리필 place 필드를 update payload에 실어 좌표 손실을 막는다 (muklog-place §3.8·§6 / T9)', async () => {
+    const { result } = renderHook(() => useUpdateMuklog());
+    await act(async () => {
+      await result.current.updateMuklog({
+        input: {
+          ...baseInput,
+          kakaoPlaceId: '26338954',
+          address: '서울 마포구 연남동 227-15',
+          roadAddress: '서울 마포구 동교로 123',
+          lat: 37.561,
+          lng: 126.925,
+          photos: [keepSlot({ path: 'a' })],
+        },
+        initialPhotos: [existing({ path: 'a', order: 0 })],
+      });
+    });
+    const payload = updateMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.kakao_place_id).toBe('26338954');
+    expect(payload.address).toBe('서울 마포구 연남동 227-15');
+    expect(payload.road_address).toBe('서울 마포구 동교로 123');
+    expect(payload.lat).toBe(37.561);
+    expect(payload.lng).toBe(126.925);
   });
 
   it('사진 추가/삭제 혼합 → 삭제(행 delete→Storage remove) → 신규 업로드 → reindex 순으로 호출', async () => {

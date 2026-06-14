@@ -16,8 +16,8 @@ jest.mock('expo-image-picker', () => ({
 }));
 import * as ImagePicker from 'expo-image-picker';
 
-import { MuklogEntrySheet } from './MuklogEntrySheet';
-import { type MuklogEditInitial } from './types';
+import { MuklogEntrySheet, type MuklogPlaceSearchControl } from './MuklogEntrySheet';
+import { type MuklogEditInitial, type PlaceSearchItem } from './types';
 
 const editInitial = (over?: Partial<MuklogEditInitial>): MuklogEditInitial => ({
   muklogId: 'mk-1',
@@ -195,6 +195,238 @@ describe('MuklogEntrySheet', () => {
     await waitFor(() => expect(createMuklog).toHaveBeenCalledTimes(1));
     expect(createMuklog).toHaveBeenCalledWith({
       input: expect.objectContaining({ photos }),
+    });
+  });
+});
+
+describe('MuklogEntrySheet — 장소검색 controlled 골격 (muklog-place, ui-spec §5) [B]', () => {
+  const placeItem = (over?: Partial<PlaceSearchItem>): PlaceSearchItem => ({
+    kakaoPlaceId: 'k1',
+    placeName: '트라토리아 보나',
+    categoryName: '음식점 > 양식 > 이탈리안',
+    categoryGroupCode: 'FD6',
+    addressName: '서울 마포구 연남동 227-15',
+    roadAddressName: '서울 마포구 월드컵북로 39',
+    lat: 37.56,
+    lng: 126.92,
+    phone: '',
+    ...over,
+  });
+
+  const searchControl = (over?: Partial<MuklogPlaceSearchControl>): MuklogPlaceSearchControl => ({
+    query: '',
+    onChangeQuery: jest.fn(),
+    status: 'idle',
+    results: [],
+    ...over,
+  });
+
+  it('placeSearch 미주입이면 검색 영역이 없고 수동 입력만 보인다(회귀 안전)', () => {
+    renderSheet();
+    expect(screen.queryByLabelText('장소 검색')).toBeNull();
+    expect(screen.getByLabelText('장소 이름')).toBeTruthy();
+  });
+
+  it('placeSearch 주입 시 검색 입력 + 결과를 렌더하고, 결과 탭 시 onSelectPlace({item})을 호출한다', () => {
+    const onSelectPlace = jest.fn();
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        placeSearch={searchControl({ status: 'ready', query: '보나', results: [placeItem()] })}
+        onSelectPlace={onSelectPlace}
+      />,
+    );
+    expect(screen.getByLabelText('장소 검색')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('place-result-0'));
+    expect(onSelectPlace).toHaveBeenCalledWith({ item: placeItem() });
+    // 검색 모드에선 수동 입력도 함께(폴백).
+    expect(screen.getByLabelText('장소 이름')).toBeTruthy();
+  });
+
+  it('selectedPlace 주입 시 요약카드(장소명·📍주소)를 표시하고 수동 입력을 숨긴다(킷 토글)', () => {
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        placeSearch={searchControl()}
+        selectedPlace={{ placeName: '트라토리아 보나', category: 'pasta', roadAddress: '서울 마포구 월드컵북로 39' }}
+      />,
+    );
+    expect(screen.getByTestId('place-selected-summary')).toBeTruthy();
+    expect(screen.getByText('📍 서울 마포구 월드컵북로 39')).toBeTruthy();
+    // 요약 모드 = 검색/수동 입력 숨김.
+    expect(screen.queryByLabelText('장소 검색')).toBeNull();
+    expect(screen.queryByLabelText('장소 이름')).toBeNull();
+  });
+
+  it('요약카드 "선택 해제" 탭 시 onClearPlace를 호출한다(plan D2)', () => {
+    const onClearPlace = jest.fn();
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        selectedPlace={{ placeName: '보나' }}
+        onClearPlace={onClearPlace}
+      />,
+    );
+    fireEvent.press(screen.getByLabelText('장소 선택 해제'));
+    expect(onClearPlace).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('MuklogEntrySheet — 장소 자동채움 payload 합류 (muklog-place, T10·T11·§3.8) [C]', () => {
+  // 컨테이너가 selectedPlace(PlaceSelection)를 주입한 상태 — 시트가 sync effect로 placeName/category/좌표를 흡수.
+  const fullSelection = {
+    placeName: '트라토리아 보나',
+    category: 'pasta' as const,
+    area: '연남동',
+    address: '서울 마포구 연남동 227-15',
+    roadAddress: '서울 마포구 월드컵북로 39',
+    kakaoPlaceId: 'k1',
+    lat: 37.56,
+    lng: 126.92,
+  };
+
+  it('selectedPlace 자동채움 → 저장 시 createMuklog payload에 place 필드 + 자동선택 카테고리 합류 (T10·T9)', async () => {
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        selectedPlace={fullSelection}
+      />,
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('저장'));
+    });
+    await waitFor(() => expect(createMuklog).toHaveBeenCalledTimes(1));
+    expect(createMuklog).toHaveBeenCalledWith({
+      input: expect.objectContaining({
+        placeName: '트라토리아 보나',
+        category: 'pasta', // D1: 매핑 성공 카테고리 자동선택
+        area: '연남동',
+        address: '서울 마포구 연남동 227-15',
+        roadAddress: '서울 마포구 월드컵북로 39',
+        kakaoPlaceId: 'k1',
+        lat: 37.56,
+        lng: 126.92,
+      }),
+    });
+  });
+
+  it('자동채움 카테고리 매핑 실패(null) → 기존 칩 선택 보존(D1, 덮어쓰지 않음)', async () => {
+    // 매핑 실패(category=null) selectedPlace 주입. 사용자가 직접 cafe 칩 선택 → 저장 시 cafe 보존(null로 덮이지 않음).
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        selectedPlace={{ ...fullSelection, category: null }}
+      />,
+    );
+    fireEvent.press(screen.getByLabelText('카테고리 카페·디저트'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('저장'));
+    });
+    await waitFor(() => expect(createMuklog).toHaveBeenCalledTimes(1));
+    expect(createMuklog).toHaveBeenCalledWith({
+      input: expect.objectContaining({ placeName: '트라토리아 보나', category: 'cafe' }),
+    });
+  });
+
+  it('수동입력 폴백(검색 0건) → 저장 시 place 필드는 NULL(좌표 nullable) (T11)', async () => {
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        placeSearch={{
+          query: '없는가게',
+          onChangeQuery: jest.fn(),
+          status: 'ready',
+          results: [],
+        }}
+      />,
+    );
+    // 0건 안내 + 수동 입력 유지(폴백).
+    expect(screen.getByTestId('place-search-empty')).toBeTruthy();
+    fireEvent.changeText(screen.getByLabelText('장소 이름'), '직접 입력 맛집');
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('저장'));
+    });
+    await waitFor(() => expect(createMuklog).toHaveBeenCalledTimes(1));
+    expect(createMuklog).toHaveBeenCalledWith({
+      input: expect.objectContaining({
+        placeName: '직접 입력 맛집',
+        kakaoPlaceId: null,
+        address: null,
+        roadAddress: null,
+        lat: null,
+        lng: null,
+      }),
+    });
+  });
+
+  it('검색 에러 → 인라인 안내 + 수동입력 보존(폴백 저장 가능) (T11)', () => {
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        placeSearch={{
+          query: '보나',
+          onChangeQuery: jest.fn(),
+          status: 'error',
+          results: [],
+          errorMessage: '장소 검색에 실패했어요. 잠시 후 다시 시도하거나 직접 입력해 주세요.',
+        }}
+      />,
+    );
+    expect(screen.getByTestId('place-search-error')).toBeTruthy();
+    expect(screen.getByLabelText('장소 이름')).toBeTruthy(); // 입력 보존(수동 폴백)
+  });
+
+  it('편집 진입 시 initial place 필드를 보존해 재검색 없이 저장해도 좌표 손실 0 (§6)', async () => {
+    const onSubmit = jest.fn().mockResolvedValue({ id: 'mk-1' });
+    renderWithTheme(
+      <MuklogEntrySheet
+        visible
+        roomId="r1"
+        onClose={onClose}
+        onSaved={onSaved}
+        onSubmit={onSubmit}
+        initial={editInitial({
+          kakaoPlaceId: 'k-existing',
+          address: '서울 마포구 연남동 227-15',
+          roadAddress: '서울 마포구 월드컵북로 39',
+          lat: 37.56,
+          lng: 126.92,
+        })}
+      />,
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('수정'));
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit).toHaveBeenCalledWith({
+      input: expect.objectContaining({
+        kakaoPlaceId: 'k-existing',
+        address: '서울 마포구 연남동 227-15',
+        roadAddress: '서울 마포구 월드컵북로 39',
+        lat: 37.56,
+        lng: 126.92,
+      }),
     });
   });
 });

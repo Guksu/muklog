@@ -22,6 +22,15 @@ jest.mock('@/features/muklog', () => {
     useMuklog: (arg: unknown) => mockUseMuklog(arg),
     useUpdateMuklog: () => ({ updateMuklog: mockUpdateMuklog, loading: false, error: null }),
     useDeleteMuklog: () => ({ deleteMuklog: mockDeleteMuklog, loading: false, error: null }),
+    // 장소검색(muklog-place) — 컨테이너 훅 더블(검색·선택 상태). 편집 시트 더블이 무시하므로 빈 동작.
+    usePlaceSearch: () => ({
+      query: '',
+      setQuery: jest.fn(),
+      status: 'idle',
+      results: [],
+      errorMessage: null,
+    }),
+    usePlaceSelection: () => ({ selectedPlace: null, selectPlace: jest.fn(), clearPlace: jest.fn() }),
     // 편집 시트 더블 — visible/initial/onSubmit/onSaved만 노출(내부는 자체 spec).
     MuklogEntrySheet: (props: Record<string, unknown>) =>
       props.visible ? (

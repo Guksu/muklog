@@ -38,4 +38,9 @@ describe('Icon', () => {
     renderWithTheme(<Icon name={IconName.Calendar} />);
     expect(screen.getByTestId('icon-calendar')).toBeTruthy();
   });
+
+  it('search 글리프(장소검색 돋보기, muklog-place)를 렌더한다', () => {
+    renderWithTheme(<Icon name={IconName.Search} />);
+    expect(screen.getByTestId('icon-search')).toBeTruthy();
+  });
 });

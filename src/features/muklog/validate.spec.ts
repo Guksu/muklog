@@ -61,11 +61,58 @@ describe('normalizeMuklogInput', () => {
     expect(result.category).toBeNull();
     expect(result.area).toBeNull();
   });
+
+  // 장소검색(muklog-place) — place 필드 통과/정규화 (plan §3.8 / T8·T9).
+  it('place 필드(kakaoPlaceId/address/roadAddress/lat/lng)를 통과시킨다', () => {
+    const result = normalizeMuklogInput({
+      input: {
+        ...baseInput,
+        kakaoPlaceId: '26338954',
+        address: '서울 마포구 연남동 227-15',
+        roadAddress: '서울 마포구 동교로 123',
+        lat: 37.561,
+        lng: 126.925,
+      },
+    });
+    expect(result.kakaoPlaceId).toBe('26338954');
+    expect(result.address).toBe('서울 마포구 연남동 227-15');
+    expect(result.roadAddress).toBe('서울 마포구 동교로 123');
+    expect(result.lat).toBe(37.561);
+    expect(result.lng).toBe(126.925);
+  });
+
+  it('place 필드 미지정(수동입력 폴백) → 모두 null', () => {
+    const result = normalizeMuklogInput({ input: baseInput });
+    expect(result.kakaoPlaceId).toBeNull();
+    expect(result.address).toBeNull();
+    expect(result.roadAddress).toBeNull();
+    expect(result.lat).toBeNull();
+    expect(result.lng).toBeNull();
+  });
+
+  it('빈/공백 주소는 null, NaN 좌표는 쌍 무결성 위해 둘 다 null로 방어', () => {
+    const result = normalizeMuklogInput({
+      input: { ...baseInput, address: '  ', roadAddress: '', lat: Number.NaN, lng: 126.9 },
+    });
+    expect(result.address).toBeNull();
+    expect(result.roadAddress).toBeNull();
+    expect(result.lat).toBeNull();
+    expect(result.lng).toBeNull();
+  });
 });
 
 describe('toMuklogRow', () => {
-  it('정규화 입력 + userId로 snake row(created_by 포함)를 만든다 (AC2·AC8)', () => {
-    const normalized = normalizeMuklogInput({ input: baseInput });
+  it('정규화 입력 + userId로 snake row(created_by + place 필드 포함)를 만든다 (AC2·AC8)', () => {
+    const normalized = normalizeMuklogInput({
+      input: {
+        ...baseInput,
+        kakaoPlaceId: '26338954',
+        address: '서울 마포구 연남동 227-15',
+        roadAddress: '서울 마포구 동교로 123',
+        lat: 37.561,
+        lng: 126.925,
+      },
+    });
     const row = toMuklogRow({ input: normalized, userId: 'u9' });
     expect(row).toEqual({
       room_id: 'r1',
@@ -76,6 +123,21 @@ describe('toMuklogRow', () => {
       rating: 5,
       visited_at: '2026-02-14',
       created_by: 'u9',
+      kakao_place_id: '26338954',
+      address: '서울 마포구 연남동 227-15',
+      road_address: '서울 마포구 동교로 123',
+      lat: 37.561,
+      lng: 126.925,
     });
+  });
+
+  it('place 필드 없으면 snake row에 NULL로 매핑(좌표 nullable, §7-4)', () => {
+    const normalized = normalizeMuklogInput({ input: baseInput });
+    const row = toMuklogRow({ input: normalized, userId: 'u9' });
+    expect(row.kakao_place_id).toBeNull();
+    expect(row.address).toBeNull();
+    expect(row.road_address).toBeNull();
+    expect(row.lat).toBeNull();
+    expect(row.lng).toBeNull();
   });
 });

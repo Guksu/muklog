@@ -23,6 +23,25 @@ export {
   type MuklogEditSubmitInput,
 } from './MuklogEntrySheet';
 export { PhotoPickerGrid, type PhotoPickerGridProps } from './PhotoPickerGrid';
+// 장소검색(muklog-place) presentational — 킷 mk-log PlaceSearch/placeChosen 번역.
+export { PlaceResultRow, type PlaceResultRowProps } from './PlaceResultRow';
+export {
+  PlaceSearchField,
+  type PlaceSearchFieldProps,
+  type PlaceSearchStatus,
+} from './PlaceSearchField';
+export { PlaceSelectedSummary, type PlaceSelectedSummaryProps } from './PlaceSelectedSummary';
+// 장소검색(muklog-place) data 계층 — 검색 훅 + invoke 래퍼 + Kakao 매핑 유틸(developer).
+//   PlaceSearchStatus 타입은 PlaceSearchField가 이미 export(동일 정의) — 중복 방지 위해 여기선 미재노출.
+export {
+  usePlaceSearch,
+  PLACE_SEARCH_DEBOUNCE_MS,
+  PLACE_SEARCH_MIN_LENGTH,
+  type UsePlaceSearchResult,
+} from './usePlaceSearch';
+export { usePlaceSelection, type UsePlaceSelectionResult } from './usePlaceSelection';
+export { searchPlaces } from './searchPlaces';
+export { mapKakaoCategory, deriveArea, placeFieldsFromItem } from './kakaoCategory';
 export {
   MUKLOG_CATEGORIES,
   MUKLOG_CATEGORY_KEYS,
@@ -45,5 +64,8 @@ export {
   type EditorPhoto,
   type MuklogEditInitial,
   type UpdateMuklogInput,
+  type PlaceSearchItem,
+  type PlaceFields,
+  type PlaceSelection,
 } from './types';
 export { muklogCategoriesInUse, filterMuklogsByCategory } from './filterByCategory';

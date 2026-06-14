@@ -30,6 +30,16 @@ const trimToNull = ({ value }: { value: string | null | undefined }): string | n
 };
 
 /**
+ * 좌표 number를 유한값만 통과시킨다(null/undefined/NaN/Infinity → null). place 좌표 정규화용(plan §3.8).
+ * @param value 좌표 number(또는 null/undefined)
+ * @returns 유한 number 또는 null
+ */
+const finiteCoord = ({ value }: { value: number | null | undefined }): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return value;
+};
+
+/**
  * 입력을 정규화하고 1차 검증한다(장소명 필수·rating 1~5·미래 방문일 차단). 위반 시 토큰을 throw.
  * @param input 입력 시트가 만든 원본 입력
  * @returns 정규화된 입력(row 빌더 입력)
@@ -58,6 +68,12 @@ export const normalizeMuklogInput = ({
     throw new Error(MuklogErrorToken.VisitedAtInFuture);
   }
 
+  // place 좌표(muklog-place, plan §3.8): 유한 number만 통과. 한쪽이라도 결측/NaN이면 쌍 무결성 위해 둘 다 null
+  //   (지도 map-tab가 lat is not null만 핀 → 반쪽 좌표 차단). 좌표 쌍은 placeFieldsFromItem이 이미 보장하나 2차 방어.
+  const latRaw = finiteCoord({ value: input.lat });
+  const lngRaw = finiteCoord({ value: input.lng });
+  const hasCoordPair = latRaw !== null && lngRaw !== null;
+
   return {
     roomId: input.roomId,
     placeName,
@@ -66,10 +82,16 @@ export const normalizeMuklogInput = ({
     rating,
     memo: trimToNull({ value: input.memo }),
     visitedAt,
+    kakaoPlaceId: trimToNull({ value: input.kakaoPlaceId }),
+    address: trimToNull({ value: input.address }),
+    roadAddress: trimToNull({ value: input.roadAddress }),
+    lat: hasCoordPair ? latRaw : null,
+    lng: hasCoordPair ? lngRaw : null,
   };
 };
 
-/** insert 대상 snake_case row(매핑 경계 단일 출처). created_by는 RLS with check와 정합. */
+/** insert 대상 snake_case row(매핑 경계 단일 출처). created_by는 RLS with check와 정합.
+ *  place 필드(muklog-place §3.7·§7-4): kakao_place_id/address/road_address/lat/lng — 좌표 nullable. */
 export type MuklogInsertRow = {
   room_id: string;
   place_name: string;
@@ -79,6 +101,11 @@ export type MuklogInsertRow = {
   rating: number | null;
   visited_at: string;
   created_by: string;
+  kakao_place_id: string | null;
+  address: string | null;
+  road_address: string | null;
+  lat: number | null;
+  lng: number | null;
 };
 
 /**
@@ -102,4 +129,9 @@ export const toMuklogRow = ({
   rating: input.rating,
   visited_at: input.visitedAt,
   created_by: userId,
+  kakao_place_id: input.kakaoPlaceId,
+  address: input.address,
+  road_address: input.roadAddress,
+  lat: input.lat,
+  lng: input.lng,
 });

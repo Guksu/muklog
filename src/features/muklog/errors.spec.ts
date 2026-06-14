@@ -65,4 +65,23 @@ describe('mapMuklogError', () => {
       MUKLOG_ERROR_MESSAGES[MuklogErrorToken.PhotoUploadFailed],
     );
   });
+
+  // 장소검색 슬라이스(muklog-place) — Edge Function/네트워크 토큰(plan §3.6 / T7).
+  it('KAKAO_KEY_MISSING 토큰을 수동입력 폴백 메시지로 매핑한다 (키 미설정)', () => {
+    expect(mapMuklogError({ error: new Error(MuklogErrorToken.KakaoKeyMissing) })).toBe(
+      MUKLOG_ERROR_MESSAGES[MuklogErrorToken.KakaoKeyMissing],
+    );
+  });
+
+  it('KAKAO_REQUEST_FAILED 토큰을 검색 실패 메시지로 매핑한다 (Kakao 비정상)', () => {
+    expect(mapMuklogError({ error: new Error(MuklogErrorToken.KakaoRequestFailed) })).toBe(
+      MUKLOG_ERROR_MESSAGES[MuklogErrorToken.KakaoRequestFailed],
+    );
+  });
+
+  it('PLACE_SEARCH_FAILED 토큰을 검색 실패 폴백 메시지로 매핑한다 (네트워크 등)', () => {
+    expect(mapMuklogError({ error: new Error(MuklogErrorToken.PlaceSearchFailed) })).toBe(
+      MUKLOG_ERROR_MESSAGES[MuklogErrorToken.PlaceSearchFailed],
+    );
+  });
 });

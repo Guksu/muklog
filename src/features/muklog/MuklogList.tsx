@@ -18,6 +18,8 @@ import { filterMuklogsByCategory, muklogCategoriesInUse } from './filterByCatego
 import { MuklogCard } from './MuklogCard';
 import { MuklogEntrySheet } from './MuklogEntrySheet';
 import { useMuklogs } from './useMuklogs';
+import { usePlaceSearch } from './usePlaceSearch';
+import { usePlaceSelection } from './usePlaceSelection';
 
 export type MuklogListProps = {
   /** 조회 대상 로그 id(LogScreen route.params.roomId). */
@@ -31,6 +33,9 @@ export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
   const navigation = useNavigation<NavigationProp<AppStackParamList>>();
   const { state, refresh } = useMuklogs({ roomId });
   const [sheetOpen, setSheetOpen] = useState(false);
+  // 장소검색(muklog-place) — 컨테이너가 검색·선택 상태 소유, 시트에 controlled 주입. 자동채움 동기화는 시트.
+  const placeSearch = usePlaceSearch();
+  const { selectedPlace, selectPlace, clearPlace } = usePlaceSelection();
   // 카테고리 필터(B2) — null="전체". 선택 상태만 화면 보유, 도출/필터는 순수 유틸(filterByCategory).
   const [category, setCategory] = useState<string | null>(null);
 
@@ -55,6 +60,7 @@ export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
 
   const handleSaved = async () => {
     setSheetOpen(false);
+    clearPlace(); // 다음 작성 진입이 깨끗하도록 장소 선택 초기화(muklog-place).
     await refresh();
   };
 
@@ -179,6 +185,16 @@ export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
         roomId={roomId}
         onClose={() => setSheetOpen(false)}
         onSaved={() => void handleSaved()}
+        placeSearch={{
+          query: placeSearch.query,
+          onChangeQuery: placeSearch.setQuery,
+          status: placeSearch.status,
+          results: placeSearch.results,
+          errorMessage: placeSearch.errorMessage,
+        }}
+        selectedPlace={selectedPlace}
+        onSelectPlace={selectPlace}
+        onClearPlace={clearPlace}
       />
     </View>
   );

@@ -1,0 +1,6 @@
+{
+  "//": "place-search Edge Function (Deno) — muklog-place. 외부 의존 없음(Deno 내장 fetch/serve만 사용).",
+  "tasks": {
+    "test": "deno test --allow-env"
+  }
+}

@@ -18,6 +18,8 @@ import {
   MuklogEntrySheet,
   useDeleteMuklog,
   useMuklog,
+  usePlaceSearch,
+  usePlaceSelection,
   useUpdateMuklog,
   type MuklogEditInitial,
   type MuklogEditSubmitInput,
@@ -43,6 +45,10 @@ export const MuklogDetailRoute = () => {
 
   const { updateMuklog, loading: updating, error: updateError } = useUpdateMuklog();
   const { deleteMuklog, loading: deleting, error: deleteError } = useDeleteMuklog();
+  // 편집 모드 장소 재검색(muklog-place) — 컨테이너가 검색·선택 상태 소유, 시트에 controlled 주입.
+  //   진입 시 selectedPlace=null(기존 좌표는 시트가 initial 프리필로 보존) → 재검색 시에만 요약카드 토글.
+  const placeSearch = usePlaceSearch();
+  const { selectedPlace, selectPlace, clearPlace } = usePlaceSelection();
 
   // 편집 시트 열림 상태(상세 위 오버레이, plan §4.1).
   const [editOpen, setEditOpen] = useState(false);
@@ -62,6 +68,12 @@ export const MuklogDetailRoute = () => {
         rating: muklog.rating,
         memo: muklog.memo,
         visitedAt: muklog.visitedAt,
+        // place 필드(muklog-place §6) — 편집 진입 프리필 좌표/주소. 재검색 없이 저장해도 손실 0.
+        kakaoPlaceId: muklog.kakaoPlaceId,
+        address: muklog.address,
+        roadAddress: muklog.roadAddress,
+        lat: muklog.lat,
+        lng: muklog.lng,
         // existing 사진: 각 photo가 자신의 storagePath를 보유(useMuklog가 zip) → 인덱스 산술 없이 그대로 매핑.
         //   order_index 갭(reindex 실패 등)에도 안전. 발급 실패 슬롯은 photos에서 빠지나 path 기준 reconcile는 정확.
         photos: muklog.photos.map((p) => ({
@@ -90,6 +102,12 @@ export const MuklogDetailRoute = () => {
         memo: input.memo,
         visitedAt: input.visitedAt,
         photos: input.photos,
+        // place 필드(muklog-place §3.8) — 시트가 합류한 좌표/주소를 update payload로 전달.
+        kakaoPlaceId: input.kakaoPlaceId,
+        address: input.address,
+        roadAddress: input.roadAddress,
+        lat: input.lat,
+        lng: input.lng,
       },
       initialPhotos: editInitial?.photos ?? [],
     });
@@ -141,6 +159,16 @@ export const MuklogDetailRoute = () => {
           onSubmit={handleSubmitEdit}
           submitting={updating}
           submitError={updateError}
+          placeSearch={{
+            query: placeSearch.query,
+            onChangeQuery: placeSearch.setQuery,
+            status: placeSearch.status,
+            results: placeSearch.results,
+            errorMessage: placeSearch.errorMessage,
+          }}
+          selectedPlace={selectedPlace}
+          onSelectPlace={selectPlace}
+          onClearPlace={clearPlace}
         />
       ) : null}
     </>

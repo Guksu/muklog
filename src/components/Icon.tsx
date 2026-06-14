@@ -18,6 +18,8 @@ export const IconName = {
   Person: 'person',
   PersonFill: 'person-fill',
   Location: 'location',
+  // 장소검색(muklog-place) — 킷 mk-log:313/391 검색 인풋 돋보기(assets/icons/search.svg).
+  Search: 'search',
   Bubble: 'bubble',
   BubbleFill: 'bubble-fill',
   Camera: 'camera',
