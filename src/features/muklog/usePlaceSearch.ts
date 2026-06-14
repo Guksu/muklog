@@ -7,14 +7,12 @@ import { useEffect, useRef, useState } from 'react';
 
 import { mapMuklogError } from './errors';
 import { searchPlaces } from './searchPlaces';
-import { type PlaceSearchItem } from './types';
+import { type PlaceSearchItem, type PlaceSearchStatus } from './types';
 
 /** 디바운스 지연(ms) — 타이핑 멈춘 뒤 1회 호출(비용 가드레일). */
 export const PLACE_SEARCH_DEBOUNCE_MS = 350;
 /** 최소 검색 글자수(trim 기준) — 미만이면 미호출(광역 검색 차단). */
 export const PLACE_SEARCH_MIN_LENGTH = 2;
-
-export type PlaceSearchStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export type UsePlaceSearchResult = {
   query: string;

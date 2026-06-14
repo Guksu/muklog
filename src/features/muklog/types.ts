@@ -30,6 +30,9 @@ export type MuklogsState =
 //   생산자: place-search Edge Function이 Kakao raw를 camelCase로 정규화해 { results: PlaceSearchItem[] } 반환.
 //   소비자: searchPlaces(invoke 래퍼) → usePlaceSearch → MuklogEntrySheet 결과 리스트.
 
+/** 장소검색 UI 상태(plan §4.2) — usePlaceSearch.status와 PlaceSearchView/MuklogEditor가 공유하는 단일 출처. */
+export type PlaceSearchStatus = 'idle' | 'loading' | 'ready' | 'error';
+
 /** place-search 응답 1건(camelCase 정규화 — 클라가 Kakao snake/x·y shape에 의존하지 않게 디커플). */
 export type PlaceSearchItem = {
   kakaoPlaceId: string; // Kakao documents[].id

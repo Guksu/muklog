@@ -20,9 +20,11 @@ const LABEL_LETTER_SPACING = 0.5; // 킷 .04em 근사
 export type InviteCodeCardProps = {
   /** 표시·복사할 6자리 초대코드. */
   code: string;
+  /** 컴팩트 모드(킷 mk-home:220 compact) — 솔로배너 등 카드 안에 중첩될 때 패딩 축소(14/16). 기본 false(20). */
+  compact?: boolean;
 };
 
-export const InviteCodeCard = ({ code }: InviteCodeCardProps) => {
+export const InviteCodeCard = ({ code, compact = false }: InviteCodeCardProps) => {
   const theme = useTheme();
   const [copied, setCopied] = React.useState(false);
 
@@ -47,7 +49,9 @@ export const InviteCodeCard = ({ code }: InviteCodeCardProps) => {
   const card: ViewStyle = {
     backgroundColor: theme.color.primaryWeak,
     borderRadius: theme.radius.sheet,
-    padding: theme.spacing[20],
+    // 킷 mk-home:220 padding compact ? 14px16px : 20px.
+    paddingVertical: compact ? theme.spacing[14] : theme.spacing[20],
+    paddingHorizontal: compact ? theme.spacing[16] : theme.spacing[20],
     gap: theme.spacing[14],
   };
 
@@ -61,7 +65,7 @@ export const InviteCodeCard = ({ code }: InviteCodeCardProps) => {
         >
           초대코드
         </Text>
-        <Text variant="h2" color="fg" style={{ letterSpacing: CODE_LETTER_SPACING }}>
+        <Text variant="inviteCode" color="fg" style={{ letterSpacing: CODE_LETTER_SPACING }}>
           {code}
         </Text>
       </View>

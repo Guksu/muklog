@@ -58,7 +58,8 @@ const SheetAction = ({
       style={({ pressed }) => [styles.row, row, pressed && !disabled ? styles.pressed : null]}
     >
       <View style={[styles.badge, badge]}>
-        <Text variant="h3">{emoji}</Text>
+        {/* 킷 mk-home:134 이모지 배지 fontSize 24. */}
+        <Text style={styles.badgeEmoji}>{emoji}</Text>
       </View>
       <View style={styles.body}>
         <Text variant="cardTitle" color="fg">
@@ -68,7 +69,7 @@ const SheetAction = ({
           {desc}
         </Text>
       </View>
-      <Icon name={IconName.ChevronRight} size={18} color="fgMuted" />
+      <Icon name={IconName.ChevronRight} size={18} color="fgAssistive" />
     </Pressable>
   );
 };
@@ -97,8 +98,10 @@ export const AddSheet = ({ visible, onClose, onCreate, onJoin, creating }: AddSh
 };
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth },
+  // 킷 SheetAction 보더 1px solid(mk-home:131) — hairlineWidth(~0.5)보다 또렷.
+  row: { flexDirection: 'row', alignItems: 'center', borderWidth: 1 },
   badge: { alignItems: 'center', justifyContent: 'center' },
+  badgeEmoji: { fontSize: 24 },
   body: { flex: 1 },
   pressed: { opacity: 0.6 },
 });

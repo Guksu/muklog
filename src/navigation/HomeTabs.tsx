@@ -22,15 +22,23 @@ export const HomeTabs = () => {
       initialRouteName={Routes.LogList}
       screenOptions={{
         // 먹로그·지도 탭 공통 커스텀 헤더(mk-home HomeHeader 재현). title/headerRight 대체.
-        header: () => <HomeHeader />,
+        //   탭별 워드마크: 지도 탭 "지도"(킷 mk-home:261), 그 외 "먹로그"(:82). route 라이브러리 콜백 contract.
+        header: ({ route }) => <HomeHeader title={route.name === Routes.MapTab ? '지도' : '먹로그'} />,
         headerShadowVisible: false,
         tabBarActiveTintColor: theme.color.primary,
         // 킷 MkTabBar 비활성 라벨 = text-alternative(fgMuted).
         tabBarInactiveTintColor: theme.color.fgMuted,
-        tabBarStyle: { backgroundColor: theme.color.bg, borderTopColor: theme.color.hairline },
+        // 킷 mk-ui:183 — 바 배경 surface(다크 정합), 상단 구분선 line-alt(hairlineAlt), paddingTop 9(≈spacing[8]).
+        //   하단 패딩(킷 22)은 react-navigation이 home-indicator safe-area inset으로 자동 처리.
+        tabBarStyle: {
+          backgroundColor: theme.color.surface,
+          borderTopColor: theme.color.hairlineAlt,
+          paddingTop: theme.spacing[8],
+        },
+        // 킷 라벨 11px, SemiBold(비활성 600 근사 — react-navigation은 focus별 weight 변경 어려움).
         tabBarLabelStyle: {
-          fontFamily: theme.typography.caption.fontFamily,
-          fontSize: theme.typography.caption.fontSize,
+          fontFamily: 'Pretendard-SemiBold',
+          fontSize: 11,
         },
       }}
     >
@@ -40,10 +48,11 @@ export const HomeTabs = () => {
         options={{
           title: '먹로그',
           // react-navigation 라이브러리 콜백 contract → 객체 인자 예외(컨벤션 §매개변수).
-          tabBarIcon: ({ focused, size }) => (
+          // 킷 mk-ui:192 아이콘 25px 고정.
+          tabBarIcon: ({ focused }) => (
             <Icon
               name={focused ? IconName.BubbleFill : IconName.Bubble}
-              size={size}
+              size={25}
               color={focused ? 'primary' : 'fgAssistive'}
             />
           ),
@@ -54,8 +63,9 @@ export const HomeTabs = () => {
         component={MapTabScreen}
         options={{
           title: '지도',
-          tabBarIcon: ({ focused, size }) => (
-            <Icon name={IconName.Location} size={size} color={focused ? 'primary' : 'fgWeak'} />
+          // 킷 mk-ui:192 — 비활성 아이콘색 text-assistive(fgAssistive, 먹로그 탭과 통일), 25px 고정.
+          tabBarIcon: ({ focused }) => (
+            <Icon name={IconName.Location} size={25} color={focused ? 'primary' : 'fgAssistive'} />
           ),
         }}
       />

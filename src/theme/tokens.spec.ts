@@ -155,6 +155,28 @@ describe('tokens — typography (AC-5)', () => {
     expect(typography.navTitle.fontSize).toBe(16);
     expect(typography.navTitle.fontFamily).toBe('Pretendard-Bold');
   });
+
+  it('ui-fidelity-audit 추가 역할 토큰이 킷 실값과 정합한다', () => {
+    // 시트 타이틀 700/18(킷 mk-ui:167), 상세 섹션 800/16(mk-log:175), 필드 라벨 800/15(mk-log:373).
+    expect(typography.sheetTitle.fontSize).toBe(18);
+    expect(typography.sheetTitle.fontFamily).toBe('Pretendard-Bold');
+    expect(typography.sectionLabel.fontSize).toBe(16);
+    expect(typography.sectionLabel.fontFamily).toBe('Pretendard-Bold');
+    expect(typography.fieldLabel.fontSize).toBe(15);
+    // 메모 본문 500/15(mk-log:177), 별점 숫자 700/15(mk-log:165).
+    expect(typography.memoBody.fontSize).toBe(15);
+    expect(typography.memoBody.fontFamily).toBe('Pretendard-Medium');
+    expect(typography.ratingNum.fontSize).toBe(15);
+    // 초대코드 800/26(mk-home:225), 프로필 닉네임 800/22(mk-log:440).
+    expect(typography.inviteCode.fontSize).toBe(26);
+    expect(typography.profileName.fontSize).toBe(22);
+  });
+});
+
+describe('tokens — scrimStrong (킷 정합)', () => {
+  it('사진 위 글래스 배지 scrim 불투명도가 킷 .32다(mk-log:94)', () => {
+    expect(themes.light.color.scrimStrong).toBe('rgba(0,0,0,0.32)');
+  });
 });
 
 describe('tokens — spacing 보강', () => {
@@ -164,10 +186,17 @@ describe('tokens — spacing 보강', () => {
     expect(spacing[28]).toBe(28);
   });
 
-  it('킷 보강 spacing 7·18·26이 포함된다(plan A8)', () => {
+  it('킷 보강 spacing 7·18·22·26이 포함된다(plan A8 / 에디터 필드 gap 22)', () => {
     const { spacing } = require('./tokens');
     expect(spacing[7]).toBe(7);
     expect(spacing[18]).toBe(18);
+    expect(spacing[22]).toBe(22); // 킷 mk-log:299 에디터 필드 그룹 gap 22
     expect(spacing[26]).toBe(26);
+  });
+});
+
+describe('tokens — fgDisabled (킷 --text-disable)', () => {
+  it('비활성 텍스트색이 킷 --text-disable rgba(55,56,60,.16)다(figma-variables.css:207)', () => {
+    expect(themes.light.color.fgDisabled).toBe('rgba(55,56,60,0.16)');
   });
 });

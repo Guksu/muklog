@@ -39,9 +39,12 @@ const palette = {
   authGradTop:'#EAF0FF', authGradBottom:'#FFFFFF',
   lineStrong:'rgba(112,115,124,0.52)',
   socialAppleFg:'#FFFFFF', socialGoogleFg:'#1F1F1F',
-  // 사진 위 어두운 글래스 배지 베이스 — 킷 MuklogCard 사진수 배지 rgba(0,0,0,.32)+blur.
-  //   RN blur 미지원 → 반투명 검정 근사(불투명도만, 흐림 없음). 카드 커버 위 흰 텍스트 대비 확보.
-  scrimStrong:'rgba(0,0,0,0.42)',
+  // 사진 위 어두운 글래스 배지 베이스 — 킷 MuklogCard 사진수 배지 rgba(0,0,0,.32)+blur(mk-log:94).
+  //   RN blur 미지원 → 반투명 검정 근사(불투명도만, 흐림 없음). 불투명도는 킷 실값 .32 정합(blur 부재 보정용 .42에서 환원).
+  scrimStrong:'rgba(0,0,0,0.32)',
+  // 비활성 텍스트(disabled) — 원티드 --text-disable = --label-disable rgba(55,56,60,.16)(figma-variables.css:207).
+  //   에디터 저장 버튼 비활성 등. fgAssistive(#B0B0B0 불투명)보다 더 옅은 킷 정확값.
+  labelDisable:'rgba(55,56,60,0.16)',
   // 파괴적 액션색(삭제) — 킷 mk-log.jsx 삭제하기 버튼/MenuRow danger의 var(--status-negative, #E5484D).
   //   킷 index.html에 --status-negative 정의가 없어 인라인 폴백 #E5484D가 실값(킷=SSOT) → 그대로 채택.
   //   기존 error(#FF4242)/errorStrong(#E52222)와 의미 분리(error=검증/조회 실패 텍스트, negative=파괴 CTA).
@@ -64,6 +67,7 @@ const lightColor = {
   accentStrong: palette.blue.accentStrong, accentLine: palette.blue.accentLine, accentShadow: palette.accentShadow,
   brand: palette.blue[50],
   fg: palette.warm.ink, fgWeak: palette.warm.ink2, fgMuted: palette.neutral[70], fgAssistive: palette.neutral[80],
+  fgDisabled: palette.labelDisable,
   bg: palette.white, surface: palette.white, surfaceAlt: palette.surfaceAlt,
   border: palette.neutral[95], borderStrong: palette.neutral[90],
   hairline: palette.coolGray.hairline, hairlineAlt: palette.coolGray.hairlineAlt,
@@ -94,6 +98,7 @@ const darkColor = {
   accentStrong: palette.blue[65], accentLine: 'rgba(79,149,255,0.40)', accentShadow: 'rgba(51,102,255,0.45)',
   brand: palette.blue[65],
   fg: palette.neutral[99], fgWeak: palette.neutral[70], fgMuted: palette.neutral[80], fgAssistive: palette.neutral[50],
+  fgDisabled: 'rgba(255,255,255,0.20)',
   bg: '#171717', surface: '#1F1F1F', surfaceAlt: '#171717',
   border: '#2F2F2F', borderStrong: palette.neutral[30],
   hairline: 'rgba(255,255,255,0.16)', hairlineAlt: 'rgba(255,255,255,0.08)',
@@ -102,7 +107,7 @@ const darkColor = {
 
 // 스페이싱 [확인 — 원티드 실제 스케일, px → RN 숫자]
 // 7/18/26 = 킷 다수 gap·padding(아바타 행·시트 액션·헤더 등). 4px 그리드 보강값(plan A8).
-export const spacing = { 0:0, px:0.5, 1:1, 2:2, 4:4, 6:6, 7:7, 8:8, 10:10, 12:12, 14:14, 16:16, 18:18, 20:20, 24:24, 26:26, 28:28, 32:32, 40:40, 48:48, 56:56, 64:64, 72:72, 80:80 } as const;
+export const spacing = { 0:0, px:0.5, 1:1, 2:2, 4:4, 6:6, 7:7, 8:8, 10:10, 12:12, 14:14, 16:16, 18:18, 20:20, 22:22, 24:24, 26:26, 28:28, 32:32, 40:40, 48:48, 56:56, 64:64, 72:72, 80:80 } as const;
 
 // 라운드 [muklog 킷 정합] — control(버튼 14, --mk-radius-btn) / card(카드 22, --mk-radius-card) / sheet(시트 20).
 //   기존 sm/md/lg/xl/full 은 호환 유지(소비처 단계적 이전).
@@ -147,6 +152,14 @@ export const typography = {
   spotCount:  makeTypography({ size: 14, ratio: 1, family: 'Pretendard-SemiBold' }),   // 600/13.5 "맛집 N곳"(정수 근사)
   badge:      makeTypography({ size: 12, ratio: 1, family: 'Pretendard-Bold' }),       // 700/11.5 멤버배지(정수 근사)
   button:     makeTypography({ size: 16, ratio: 1.2, family: 'Pretendard-Bold' }),     // 700/16 버튼(md)
+  // ── 본 감사(ui-fidelity-audit)로 추가한 킷 정합 역할 토큰 ──
+  sheetTitle:  makeTypography({ size: 18, ratio: 1.3, family: 'Pretendard-Bold' }),    // 700/18 시트 타이틀(킷 mk-ui:167)
+  sectionLabel:makeTypography({ size: 16, ratio: 1.2, family: 'Pretendard-Bold' }),    // 800/16 상세 섹션 제목 "메모"/"위치"(킷 mk-log:175,186)
+  fieldLabel:  makeTypography({ size: 15, ratio: 1.2, family: 'Pretendard-Bold' }),    // 800/15 입력 필드 라벨(킷 mk-log Field:373) · 솔로배너 제목(mk-log:39)
+  memoBody:    makeTypography({ size: 15, ratio: 1.7, family: 'Pretendard-Medium' }),  // 500/15 상세 메모 본문(킷 mk-log:177)
+  ratingNum:   makeTypography({ size: 15, ratio: 1, family: 'Pretendard-Bold' }),      // 700/15 상세 별점 숫자(킷 mk-log:165)
+  inviteCode:  makeTypography({ size: 26, ratio: 1, family: 'Pretendard-Bold' }),      // 800/26 초대코드(킷 mk-home:225) — letterSpacing은 사용처에서 .18em
+  profileName: makeTypography({ size: 22, ratio: 1.2, family: 'Pretendard-Bold' }),    // 800/22 프로필 닉네임(킷 mk-log:440)
 } as const;
 
 export const themes = {

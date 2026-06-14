@@ -83,11 +83,12 @@ const LogCard = ({
             </Text>
           </View>
         </View>
-        <Icon name={IconName.ChevronRight} size={20} color="fgMuted" />
+        {/* 킷 mk-home:57 chevron 18 / text-assistive(fgAssistive). */}
+        <Icon name={IconName.ChevronRight} size={18} color="fgAssistive" />
       </View>
 
-      {/* 중간: 미리보기 사진 4슬롯 — 사진 데이터 없음 → 빈 점선 슬롯(가짜 이모지 미사용) */}
-      <View style={[styles.previewRow, { gap: theme.spacing[6], marginTop: theme.spacing[14] }]}>
+      {/* 중간: 미리보기 사진 4슬롯 — 사진 데이터 없음 → 빈 점선 슬롯(가짜 이모지 미사용). 킷 mk-home:61 gap 7. */}
+      <View style={[styles.previewRow, { gap: theme.spacing[7], marginTop: theme.spacing[14] }]}>
         {Array.from({ length: PREVIEW_SLOT_COUNT }).map((_, index) => (
           <View
             key={`slot-${index}`}
@@ -190,7 +191,13 @@ export const LogListScreen = () => {
       <FlatList
         data={state.logs}
         keyExtractor={(item) => item.roomId}
-        contentContainerStyle={{ gap: theme.spacing[16], padding: theme.spacing[20] }}
+        contentContainerStyle={{
+          // 킷 mk-home:87 리스트 패딩 4 / 20 / 24(비대칭).
+          gap: theme.spacing[16],
+          paddingTop: theme.spacing[4],
+          paddingHorizontal: theme.spacing[20],
+          paddingBottom: theme.spacing[24],
+        }}
         ListHeaderComponent={
           <Text variant="sectionCaption" color="fgMuted" style={{ marginBottom: theme.spacing[4] }}>
             둘만의 맛집 지도를 함께 채워가요.

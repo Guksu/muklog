@@ -5,6 +5,7 @@
 //   스타일은 토큰만(raw hex 0). radius=sheet(20 위쪽 라운드는 26 근사 — 킷 26,26,0,0), 딤=반투명 잉크.
 import React from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/theme';
 
@@ -15,6 +16,9 @@ const HANDLE_WIDTH = 40;
 const HANDLE_HEIGHT = 5;
 // 딤 배경(rgba(20,12,8,.32)) — 따뜻한 잉크 톤. 토큰엔 동일 색이 없어 fg(웜 잉크) 위에 투명도로 근사.
 const BACKDROP_OPACITY = 0.32;
+// 패널 상단 캡 — 내용(장소검색 결과 등)이 길어져도 상태바를 침범하지 않게 화면의 88%까지만(나머지는 내부 스크롤).
+//   킷 Sheet는 디바이스 프레임 inset:0 안에서 자라므로 RN에선 maxHeight + 하단 safe-area inset으로 번역.
+const PANEL_MAX_HEIGHT_RATIO = '88%';
 
 export type SheetProps = {
   /** 표시 여부. false면 미렌더(children 마운트 안 함). */
@@ -28,6 +32,7 @@ export type SheetProps = {
 
 export const Sheet = ({ visible, onClose, title, children }: SheetProps) => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   if (!visible) return null;
 
@@ -51,7 +56,8 @@ export const Sheet = ({ visible, onClose, title, children }: SheetProps) => {
               backgroundColor: theme.color.surface,
               paddingTop: theme.spacing[10],
               paddingHorizontal: theme.spacing[20],
-              paddingBottom: theme.spacing[32],
+              // 하단 = 킷 34 근사(20) + 홈 인디케이터 safe-area inset(침범 방지).
+              paddingBottom: insets.bottom + theme.spacing[20],
             },
             theme.shadow.lg,
           ]}
@@ -63,11 +69,16 @@ export const Sheet = ({ visible, onClose, title, children }: SheetProps) => {
             ]}
           />
           {title ? (
-            <Text variant="h3" color="fg" style={[styles.title, { marginBottom: theme.spacing[16] }]}>
+            <Text
+              variant="sheetTitle"
+              color="fg"
+              style={[styles.title, { marginBottom: theme.spacing[16] }]}
+            >
               {title}
             </Text>
           ) : null}
-          {children}
+          {/* body — maxHeight 캡 아래에서 줄어들 수 있게 flexShrink. 내부 ScrollView가 이 영역 안에서 스크롤. */}
+          <View style={styles.body}>{children}</View>
         </Pressable>
       </View>
     </Modal>
@@ -80,7 +91,9 @@ const styles = StyleSheet.create({
   panel: {
     borderTopLeftRadius: SHEET_TOP_RADIUS,
     borderTopRightRadius: SHEET_TOP_RADIUS,
+    maxHeight: PANEL_MAX_HEIGHT_RATIO,
   },
   handle: { width: HANDLE_WIDTH, height: HANDLE_HEIGHT, borderRadius: HANDLE_HEIGHT, alignSelf: 'center' },
   title: { textAlign: 'center' },
+  body: { flexShrink: 1 },
 });

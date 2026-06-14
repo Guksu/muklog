@@ -16,9 +16,9 @@ import { authVisualGradient, useTheme } from '@/theme';
 
 // 킷 태그라인(mk-auth:67).
 const SPLASH_TAGLINE = '둘이 함께 쌓는 맛집 지도';
-// 킷 그라데이션 160deg 근사 + stops 0%/60%(mk-auth:57).
-const GRADIENT_START = { x: 0.2, y: 0 } as const;
-const GRADIENT_END = { x: 0, y: 1 } as const;
+// 킷 그라데이션 160deg(우상→좌하 대각) 근사 + stops 0%/60%(mk-auth:57).
+const GRADIENT_START = { x: 0.15, y: 0 } as const;
+const GRADIENT_END = { x: 0.85, y: 1 } as const;
 const GRADIENT_LOCATIONS = [0, 0.6] as const;
 
 export const SplashView = () => {
@@ -69,12 +69,12 @@ const styles = StyleSheet.create({
   // 킷: 전체 center, gap 22(mk-auth:55-57). 스피너는 하단 absolute라 center 블록과 분리.
   root: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   center: { alignItems: 'center', gap: 22 },
-  // 킷 워드마크 800/38 + 🍽️ 26, baseline gap 8(mk-auth:62-64).
+  // 킷 워드마크 800/38 + 🍽️ 26, baseline gap 8(mk-auth:62-64). lineHeight=38(킷 /1, display 변형 48 보정).
   wordmarkRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  wordmark: { fontSize: 38, letterSpacing: -1 },
+  wordmark: { fontSize: 38, lineHeight: 38, letterSpacing: -1 },
   wordmarkEmoji: { fontSize: 26 },
-  // 킷 태그라인 600/15(mk-auth:66).
-  tagline: { fontSize: 15 },
+  // 킷 태그라인 600/15(mk-auth:66) — SemiBold(bodySm 변형 Medium 보정), lineHeight 15×1.5≈23.
+  tagline: { fontSize: 15, lineHeight: 23, fontFamily: 'Pretendard-SemiBold' },
   // 킷: bottom 54(mk-auth:69).
   spinner: { position: 'absolute', bottom: 54 },
 });

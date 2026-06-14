@@ -32,9 +32,9 @@ export type FoodCoverProps = {
   children?: React.ReactNode;
 };
 
-// 킷 linear-gradient(140deg) 근사 — 좌상단→우하단 대각.
-const GRADIENT_START = { x: 0, y: 0 } as const;
-const GRADIENT_END = { x: 1, y: 1 } as const;
+// 킷 linear-gradient(140deg) 근사 — 좌상단→우하단 대각(수직 쪽으로 약간 치우친 140° 보정).
+const GRADIENT_START = { x: 0.08, y: 0 } as const;
+const GRADIENT_END = { x: 0.92, y: 1 } as const;
 
 export const FoodCover = ({
   category,

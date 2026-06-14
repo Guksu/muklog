@@ -12,8 +12,9 @@ jest.mock('@/features/room', () => {
 });
 
 const mockReplace = jest.fn();
+const mockGoBack = jest.fn();
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ replace: mockReplace }),
+  useNavigation: () => ({ replace: mockReplace, goBack: mockGoBack }),
 }));
 
 import { useJoinRoom, useMyLogsContext } from '@/features/room';

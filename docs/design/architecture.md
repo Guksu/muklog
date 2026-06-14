@@ -134,7 +134,7 @@ AuthGate (앱 진입)  ── (2026-06-12 social-auth: 익명 자동발급 → �
 HomeTabs (Tab Navigator, 디폴트 = 먹로그)
   ├─ 헤더 우측: [+ 버튼] · [프로필 버튼]
   │     └─ + 버튼 → 액션시트 "로그 생성 / 로그 입장"
-  │           ├─ 로그 생성 → 솔로 로그 생성(create_room, 1명) → 목록에 추가
+  │           ├─ 로그 생성 → 솔로 로그 생성(create_room, 1명) → **[RoomCreatedScreen 축하화면]**(🎉 + 초대코드 + "로그 열기"=LogScreen replace / "나중에"=목록) → 목록에 추가 (ui-fidelity-audit: 킷 CreatedScreen 복원)
   │           └─ 로그 입장 → 초대코드 입력 → 해당 로그 조인(정원 2 미만) → 목록에 추가
   ├─ Tab1: 먹로그 (LogList)  ── 내가 속한 로그들을 카드 리스트로 표시
   │     · 카드: 로그 이름/대표 + 멤버 수(솔로/커플) + 생성일 등
@@ -146,7 +146,8 @@ LogScreen (로그 진입 — 한 로그의 공간)
   ├─ 초대 UI: 이 로그의 6자리 초대코드 표시 + 복사 → 파트너 초대(= 커플화). (log-invite 스프린트)
   ├─ MuklogList   맛집 카드 리스트 (대표사진 + 가게명 + 위치 + 날짜)  ── muklog-list 스프린트
   ├─ MuklogDetail 사진 캐러셀(최대5) + 영상 + 메모 + 위치 미니맵
-  └─ MuklogEditor 장소검색(Kakao Local) + 사진5 + 2초 영상(옵션) + 메모 + 별점 + 방문일
+  └─ **MuklogEditor (풀스크린 라우트)** 장소검색(Kakao Local) + 사진5 + 2초 영상(옵션) + 메모 + 별점 + 방문일
+        ※ ui-fidelity-audit(2026-06-14): ~~하단 시트~~ → **풀스크린 화면(Screen+SubBar+저장)**으로 전환. 장소검색은 에디터 내 **searching 상태 → 전용 풀스크린 검색뷰(PlaceSearchView) 스왑**(킷 mk-log 정합), 선택/직접입력/취소 시 폼 복귀. 진입: MuklogList FAB(작성)·MuklogDetail more(편집) → `navigate(MuklogEditor)`.
 
 로그 나가기 (기존 room-leave 재배치)
   ├─ 즉시판(출시): leave_room() 즉시 해지(0명 시 로그 삭제 / 1명 잔존 시 보존) → 목록에서 사라짐
@@ -172,16 +173,17 @@ Profile (헤더 진입)
 | `room-leave` (경량) | 방 나가기(즉시): `leave_room()` RPC + Profile 화면 진입 + 0명 시 방 삭제 / 1명 잔존 시 보존 | #5 일부(즉시판) | ✅ 완료 |
 | `multi-log-home` | **멀티 로그 전환**: 온보딩/멤버십 게이트 제거 → HomeTabs 직행. 먹로그탭=내 로그 목록(카드·memberCount 배지) + 빈 상태. 헤더 +버튼=**로그 생성 단일 액션**(액션시트 없음 — 로그 입장 UI는 log-invite로 트리밍). `list_my_rooms` DEFINER RPC. 마이그레이션 `20260610150000_multi_log_home.sql`(create/join ALREADY_IN_ROOM 가드 제거·join 솔로 조인 허용·정원 2 통일·modes.ts 동기화·**`leave_room(p_room_id)` 인자화 선반영**). 로그 카드 탭 → LogScreen(최소 stub). Profile 나가기 제거. | 구조 전환 | ✅ 완료 |
 | `social-auth` | **인증 정책 전환**: 익명 자동발급 제거 → Google(~~네이티브 `@react-native-google-signin`~~ → google-oauth-web에서 OAuth 웹으로 교체)/Apple(`expo-apple-authentication`) 소셜 로그인 전용. AuthState 5상태(loading/unauthenticated/authenticating/authenticated/error) + LoginScreen(킷 mk-auth) + 인앱 로고 `AppMark` + 로그아웃(Profile). `userId` 계약 보존. OAuth 키 미발급 → 코드/모킹테스트 완성, 라이브는 키 발급 후 이월(미검증). `docs/sprint/sprint-20260612-social-auth/plan.md`. | 인증 정책 변경 | ✅ 완료 |
+| `ui-fidelity-audit` | **전체 화면 비주얼 충실도 전수 감사·수정**: 킷 templates/muklog 대비 전 화면(Login·Splash·LogList·LogScreen·Detail·Profile·MapTab·헤더류·시트) 3축(레이아웃·safe-area / 비주얼·토큰 / 텍스트·카피) 대조·정합. **구조 4건 킷 정합(사용자 결정)**: ① MuklogEntrySheet(하단시트) → **MuklogEditor 풀스크린 라우트**(+SubBar+저장) + 장소검색 **풀스크린 스왑(PlaceSearchView)**, ② **RoomCreatedScreen 축하화면 복원**(multi-log-home의 인라인-only 일부 환원), ③ 공용 **SubBar** 프리미티브 신설 + Join/Profile 헤더 SubBar 정합(headerShown:false), ④ MapTab 헤더/범례 셸(실지도는 map-tab). 공용 Sheet safe-area·maxHeight 캡. (후속) MuklogEditor `Screen edges`에서 `'top'` 제외 — SubBar가 top inset 직접 처리하므로 이중 적용 버그 수정(다른 SubBar 화면과 동일 패턴). 데이터·계약 불변(회귀 0). `docs/sprint/sprint-20260614-ui-fidelity-audit/`. | UI 정합 | ✅ 완료 |
 | `google-oauth-web` | **Google 로그인 OAuth 웹 전환**: 라이브 검증 중 발견 — 네이티브 `@react-native-google-signin`(GIDSignIn)이 idToken에 자동으로 심는 nonce를 노출/제어 불가 → Supabase GoTrue nonce 검증을 통과 못 함(`Passed nonce…`/`Nonces mismatch`). 라이브러리 제거하고 **`signInWithOAuth`(PKCE)+`expo-web-browser`+`exchangeCodeForSession`** 웹 플로우로 교체(`src/features/auth/oauthSignIn.ts`). Apple은 네이티브 유지. `supabase` 클라 `flowType: 'pkce'`, 앱 스킴 `muklog://` 리다이렉트. 백엔드: Supabase Google 프로바이더에 웹 Client ID+Secret + Redirect URL `muklog://**`, Google Console에 Supabase 콜백 등록. 라이브 로그인 검증 완료. (별도 sprint 폴더 없음 — 라이브 디버깅 중 처리) | 인증 통합 수정 | ✅ 완료 |
 | `log-invite` | 로그 진입(LogScreen) 후 초대코드 표시·복사 + **로그 입장(join) UI**(`JoinLogScreen` + +버튼 액션시트 "로그 입장"). join으로 2번째 멤버 합류 시 커플화. (구 `room-promote` 흡수 + multi-log-home에서 트리밍한 join UI. `join_room` RPC·`useJoinRoom`·`code.ts`는 multi-log-home에서 선반영/보존됨) | #1 신규 | ✅ 완료 |
 | `muklog-video` | 2초 영상 캡처/업로드 (카메라 권한 + `muklogs.video_*` + 용량 가드레일). muklog-editor 이후 의존 | #4 확장 | 예정 |
 | ~~`room-tabs`~~ | (대체됨) 멀티 로그 전환으로 HomeTabs/LogScreen 구조가 됨 → `multi-log-home`로 흡수 | #2 | ~~폐기~~ |
 | `muklog-list` | LogScreen 내 먹로그 카드 리스트 | #3 | ✅ 완료 |
 | ~~`muklog-editor`~~ → **슬라이스 분해** | 먹로그 작성/편집이 한 스프린트에 과대 → **`muklog-photos`(사진) / `muklog-place`(Kakao 장소·좌표) / `muklog-edit`(수정 모드)** 3슬라이스로 분해. (1 스프린트=1 기능 원칙) | #4 데이터 입력 | ~~분해~~ |
-| `muklog-photos` | **muklog-editor 첫 슬라이스 = 사진.** 작성 흐름에 사진 최대 5장 첨부 → 비공개 버킷 `muklog-photos`(private)+RLS+signed URL 업로드, `muklog_photos` 테이블 신설, 카드/리스트 대표 썸네일+장수 배지. (Kakao·위치·수정·영상 OUT). `docs/sprint/sprint-20260613-muklog-photos/plan.md`. | #4 데이터 입력 | 진행 |
-| `muklog-place` (예정) | muklog-editor 슬라이스 2 = Kakao 장소검색(Local API Edge Function 프록시) + 좌표/주소/카테고리 자동 채움(`muklogs.lat/lng/address/kakao_place_id`). | #4 | 예정 |
-| `muklog-edit` | muklog-editor 슬라이스 3 = 기존 먹로그 **수정·삭제**. 상세 more 메뉴(편집/삭제)+삭제 확인 시트 렌더·배선, `MuklogEntrySheet` dual-mode(initial 프리필), 사진 reconciliation(유지/삭제/신규+order_index 재부여). **신설: `muklogs_update_own` RLS + `muklog_photos_update_member` RLS(reindex용)**. 삭제는 row(FK CASCADE) + **Storage 파일 정리**. 슬라이스 관계: photos✅→detail✅→**muklog-edit**→place. Kakao 장소/좌표·영상·드래그 재정렬 OUT. `docs/sprint/sprint-20260613-muklog-edit/plan.md`. | #4 | 진행 |
-| `muklog-detail` | **먹로그 상세(읽기 전용)**: 리스트 카드 탭 → 상세 진입(`muklogId`). 사진 전체 캐러셀(order별 signed URL) + 카테고리·별점·방문일 + 메모 + 작성자(파트너 실프로필은 RLS상 OUT, "짝꿍이 기록"+익명 아바타) + 미니맵 stub(좌표 없음). 단일 먹로그 조회 훅 `useMuklog` 신설(`muklog_photos` 임베드 + 배치 signed URL). 슬라이스 관계: muklog-photos✅ → **muklog-detail** → muklog-place/muklog-edit. **수정·삭제(muklog-edit)·공유·실 지도(muklog-place/map-tab)·영상(muklog-video) OUT.** `docs/sprint/sprint-20260613-muklog-detail/plan.md`. | #4 | 진행 |
+| `muklog-photos` | **muklog-editor 첫 슬라이스 = 사진.** 작성 흐름에 사진 최대 5장 첨부 → 비공개 버킷 `muklog-photos`(private)+RLS+signed URL 업로드, `muklog_photos` 테이블 신설, 카드/리스트 대표 썸네일+장수 배지. (Kakao·위치·수정·영상 OUT). `docs/sprint/sprint-20260613-muklog-photos/plan.md`. | #4 데이터 입력 | ✅ 완료 |
+| `muklog-place` | muklog-editor 슬라이스 2 = Kakao 장소검색(Local API Edge Function 프록시 `place-search`) + 좌표/주소/카테고리 자동 채움(`muklogs.lat/lng/address/kakao_place_id`). `usePlaceSearch`(디바운스 350ms+캐싱+min 2글자), `searchPlaces` invoke 래퍼, 자동채움 유틸. `docs/sprint/sprint-20260613-muklog-place/plan.md`. **라이브 활성(2026-06-14)**: Kakao REST 키 발급→Supabase 시크릿 `KAKAO_REST_API_KEY`→Edge Function 배포. ⚠️ **카카오 앱 "카카오맵(OPEN_MAP_AND_LOCAL)" 서비스 활성 필수**(미활성 시 403 `App disabled OPEN_MAP_AND_LOCAL service`→KAKAO_REQUEST_FAILED). 라이브 검색 검증 완료. | #4 | ✅ 완료 |
+| `muklog-edit` | muklog-editor 슬라이스 3 = 기존 먹로그 **수정·삭제**. 상세 more 메뉴(편집/삭제)+삭제 확인 시트 렌더·배선, `MuklogEntrySheet` dual-mode(initial 프리필), 사진 reconciliation(유지/삭제/신규+order_index 재부여). **신설: `muklogs_update_own` RLS + `muklog_photos_update_member` RLS(reindex용)**. 삭제는 row(FK CASCADE) + **Storage 파일 정리**. 슬라이스 관계: photos✅→detail✅→**muklog-edit**→place. Kakao 장소/좌표·영상·드래그 재정렬 OUT. `docs/sprint/sprint-20260613-muklog-edit/plan.md`. | #4 | ✅ 완료 |
+| `muklog-detail` | **먹로그 상세(읽기 전용)**: 리스트 카드 탭 → 상세 진입(`muklogId`). 사진 전체 캐러셀(order별 signed URL) + 카테고리·별점·방문일 + 메모 + 작성자(파트너 실프로필은 RLS상 OUT, "짝꿍이 기록"+익명 아바타) + 미니맵 stub(좌표 없음). 단일 먹로그 조회 훅 `useMuklog` 신설(`muklog_photos` 임베드 + 배치 signed URL). 슬라이스 관계: muklog-photos✅ → **muklog-detail** → muklog-place/muklog-edit. **수정·삭제(muklog-edit)·공유·실 지도(muklog-place/map-tab)·영상(muklog-video) OUT.** `docs/sprint/sprint-20260613-muklog-detail/plan.md`. | #4 | ✅ 완료 |
 | `map-tab` | 지도 탭 (현재위치 + 먹로그 핀 + 일반 음식점 핀) | #5, #6 | 예정 |
 | ~~`room-promote`~~ | (흡수됨) 솔로→커플 전환이 멀티 로그 모델에서 "초대코드로 조인 시 자동 커플화"로 단순화 → `log-invite`로 흡수 | #1 | ~~폐기~~ |
 | `room-lifecycle` (추후) | 예약 삭제 cron: 커플방 24h 미입장 자동삭제(#2) + 나가기 24h 유예/취소(#5). Supabase pg_cron 또는 스케줄 Edge Function. (즉시 나가기는 `room-leave`로 분리 출시) | #2·#5 신규 | **보류(설계만)** |

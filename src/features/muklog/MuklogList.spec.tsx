@@ -1,8 +1,9 @@
 // src/features/muklog/MuklogList.spec.tsx
-// LogScreen 맛집 섹션 — loading/error/empty/ready 분기 + 섹션 헤더 "우리 맛집 N" + FAB→시트 오픈 + 저장→refresh
-//   (plan §6.1 / §5 T10, AC1·AC2·AC11·AC12). useMuklogs/MuklogEntrySheet 모킹으로 섹션 동작만 검증.
+// LogScreen 맛집 섹션 — loading/error/empty/ready 분기 + 섹션 헤더 "우리 맛집 N" + FAB→에디터 라우트 이동
+//   (plan §6.1 / §5 T10, AC1·AC2·AC11·AC12). useMuklogs 모킹으로 섹션 동작만 검증.
+//   ⚠️ FLAG-1: 입력 시트→풀스크린 에디터 라우트 전환. FAB는 navigate(MuklogEditor)만(장소검색은 에디터 컨테이너로 이동).
 import React from 'react';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -11,19 +12,6 @@ import { type Muklog } from './types';
 const mockUseMuklogs = jest.fn();
 const refresh = jest.fn();
 jest.mock('./useMuklogs', () => ({ useMuklogs: () => mockUseMuklogs() }));
-// 장소검색(muklog-place) 컨테이너 훅 — supabase(AsyncStorage) 로드 회피 위해 더블로 대체(섹션 동작과 무관).
-jest.mock('./usePlaceSearch', () => ({
-  usePlaceSearch: () => ({
-    query: '',
-    setQuery: jest.fn(),
-    status: 'idle',
-    results: [],
-    errorMessage: null,
-  }),
-}));
-jest.mock('./usePlaceSelection', () => ({
-  usePlaceSelection: () => ({ selectedPlace: null, selectPlace: jest.fn(), clearPlace: jest.fn() }),
-}));
 
 // 카드 탭 → navigate(MuklogDetail, { muklogId }) 배선 검증용 navigation 모킹(plan §4.3).
 //   useFocusEffect는 마운트 시 콜백을 1회 실행하도록 모킹(포커스 refresh 검증, plan §4.3).
@@ -43,22 +31,6 @@ jest.mock('@react-navigation/native', () => ({
     }, [cb]);
   },
 }));
-
-// 시트는 visible/onSaved + 장소검색 props 전달만 검증(내부는 자체 spec) → 가벼운 더블로 대체.
-const mockSheetProps = jest.fn();
-jest.mock('./MuklogEntrySheet', () => {
-  const { Pressable, Text } = require('react-native');
-  return {
-    MuklogEntrySheet: (props: { visible: boolean; onSaved: () => void }) => {
-      mockSheetProps(props);
-      return props.visible ? (
-        <Pressable accessibilityLabel="시트-저장" onPress={props.onSaved}>
-          <Text>시트 열림</Text>
-        </Pressable>
-      ) : null;
-    },
-  };
-});
 
 import { MuklogList } from './MuklogList';
 
@@ -132,25 +104,11 @@ describe('MuklogList', () => {
     expect(screen.getByText('어니언')).toBeTruthy();
   });
 
-  it('FAB 탭 시 입력 시트를 연다', () => {
-    mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
-    renderList();
-    expect(screen.queryByText('시트 열림')).toBeNull();
-    fireEvent.press(screen.getByLabelText('새 먹로그'));
-    expect(screen.getByText('시트 열림')).toBeTruthy();
-  });
-
-  it('저장 성공 시 refresh를 호출하고 시트를 닫는다 (AC12)', async () => {
+  it('FAB 탭 시 에디터 라우트로 navigate(MuklogEditor, { roomId })를 호출한다 (AC2, FLAG-1)', () => {
     mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
     renderList();
     fireEvent.press(screen.getByLabelText('새 먹로그'));
-
-    await act(async () => {
-      fireEvent.press(screen.getByLabelText('시트-저장'));
-    });
-
-    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText('시트 열림')).toBeNull();
+    expect(mockNavigate).toHaveBeenCalledWith('MuklogEditor', { roomId: 'r1' });
   });
 });
 
@@ -240,17 +198,5 @@ describe('MuklogList — 상세 진입 배선 (plan §4.3)', () => {
   });
 });
 
-describe('MuklogList — 장소검색 컨테이너 배선 (muklog-place, T10)', () => {
-  it('시트에 placeSearch + selectedPlace/onSelectPlace/onClearPlace를 주입한다', () => {
-    mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
-    renderList();
-    const props = mockSheetProps.mock.calls.at(-1)?.[0] as Record<string, unknown>;
-    // 컨테이너가 usePlaceSearch 번들 + 선택 상태/콜백을 controlled로 전달.
-    expect(props.placeSearch).toEqual(
-      expect.objectContaining({ query: '', status: 'idle', results: [] }),
-    );
-    expect(props.selectedPlace).toBeNull();
-    expect(typeof props.onSelectPlace).toBe('function');
-    expect(typeof props.onClearPlace).toBe('function');
-  });
-});
+// 장소검색 컨테이너 배선(usePlaceSearch/usePlaceSelection)은 FLAG-1 전환으로 MuklogEditorRoute로 이동 →
+//   해당 검증은 MuklogEditorRoute.spec / MuklogEditor.spec에서 다룬다.

@@ -65,7 +65,7 @@ describe('PlusHeaderButton — 액션시트 + 생성/입장 분기', () => {
     expect(screen.getByText('초대코드로 입장')).toBeTruthy();
   });
 
-  it('"새 로그 만들기" → createRoom() → 성공 시 LogScreen navigate + refresh() (AC7)', async () => {
+  it('"새 로그 만들기" → createRoom() → 성공 시 RoomCreated 축하화면 navigate + refresh() (AC7, FLAG-3)', async () => {
     createRoom.mockResolvedValueOnce({ roomId: 'r1', inviteCode: 'ABCDEF', mode: 'couple' });
     renderWithTheme(<PlusHeaderButton />);
 
@@ -76,7 +76,8 @@ describe('PlusHeaderButton — 액션시트 + 생성/입장 분기', () => {
       expect(createRoom).toHaveBeenCalledWith();
     });
     expect(refresh).toHaveBeenCalled();
-    expect(mockNavigate).toHaveBeenCalledWith('LogScreen', { roomId: 'r1' });
+    // FLAG-3: LogScreen 직행 → 생성 완료 축하화면(초대코드 공유) 경유.
+    expect(mockNavigate).toHaveBeenCalledWith('RoomCreated', { roomId: 'r1', code: 'ABCDEF' });
     expect(Alert.alert).not.toHaveBeenCalled();
   });
 

@@ -1,8 +1,10 @@
 // src/features/muklog/MuklogList.tsx
 // LogScreen 맛집 섹션 — mk-log.jsx LogScreen 섹션(54–78) 재현 (plan §6.1 / §5 T10, AC1·AC2·AC11·AC12).
-//   섹션 헤더("우리 맛집 N" + "최근 순") + 상태 분기(loading/error/empty/ready) + MuklogCard 리스트 + FAB → 입력 시트.
-//   N = 조회된 리스트 길이(D7, 추가 쿼리 없음). 저장 성공 → refresh + 시트 닫기(AC2·AC12).
-//   useMuklogs(진입 1회+refresh)·useCreateMuklog(시트 내부)를 소유. 스타일은 토큰만(raw hex 0), 이모지 허용.
+//   섹션 헤더("우리 맛집 N" + "최근 순") + 상태 분기(loading/error/empty/ready) + MuklogCard 리스트 + FAB → 에디터.
+//   N = 조회된 리스트 길이(D7, 추가 쿼리 없음). 저장은 에디터 화면에서 → 복귀 시 포커스 refresh로 갱신(AC2·AC12).
+//   ⚠️ FLAG-1: 입력 시트(MuklogEntrySheet) → 풀스크린 에디터 라우트(MuklogEditor)로 전환. FAB는 navigate만 한다.
+//     장소검색/선택 상태는 에디터 컨테이너(MuklogEditorRoute)가 소유 — 리스트에서 제거.
+//   useMuklogs(진입 1회+refresh)를 소유. 스타일은 토큰만(raw hex 0), 이모지 허용.
 //
 // 소비: LogScreen이 초대 카드 아래에 <MuklogList roomId meId /> 마운트(roomId=route.params, meId=auth uid).
 import React, { useRef, useState } from 'react';
@@ -16,10 +18,7 @@ import { useTheme } from '@/theme';
 import { categoryEmoji, categoryLabel } from './categories';
 import { filterMuklogsByCategory, muklogCategoriesInUse } from './filterByCategory';
 import { MuklogCard } from './MuklogCard';
-import { MuklogEntrySheet } from './MuklogEntrySheet';
 import { useMuklogs } from './useMuklogs';
-import { usePlaceSearch } from './usePlaceSearch';
-import { usePlaceSelection } from './usePlaceSelection';
 
 export type MuklogListProps = {
   /** 조회 대상 로그 id(LogScreen route.params.roomId). */
@@ -32,10 +31,6 @@ export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
   const theme = useTheme();
   const navigation = useNavigation<NavigationProp<AppStackParamList>>();
   const { state, refresh } = useMuklogs({ roomId });
-  const [sheetOpen, setSheetOpen] = useState(false);
-  // 장소검색(muklog-place) — 컨테이너가 검색·선택 상태 소유, 시트에 controlled 주입. 자동채움 동기화는 시트.
-  const placeSearch = usePlaceSearch();
-  const { selectedPlace, selectPlace, clearPlace } = usePlaceSelection();
   // 카테고리 필터(B2) — null="전체". 선택 상태만 화면 보유, 도출/필터는 순수 유틸(filterByCategory).
   const [category, setCategory] = useState<string | null>(null);
 
@@ -58,11 +53,8 @@ export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
   // 섹션 헤더의 N(D7) — ready일 때만 실제 개수, 그 외 0. N은 필터 무관 전체 수(킷 mk-log.jsx:55).
   const count = state.status === 'ready' ? state.muklogs.length : 0;
 
-  const handleSaved = async () => {
-    setSheetOpen(false);
-    clearPlace(); // 다음 작성 진입이 깨끗하도록 장소 선택 초기화(muklog-place).
-    await refresh();
-  };
+  // FAB → 풀스크린 에디터(작성 모드) 진입. 저장은 에디터에서, 복귀 시 포커스 refresh로 목록 갱신.
+  const handleOpenEditor = () => navigation.navigate(Routes.MuklogEditor, { roomId });
 
   return (
     <View style={styles.container}>
@@ -161,11 +153,11 @@ export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
         ) : null}
       </ScrollView>
 
-      {/* FAB — 새 먹로그 입력 시트 오픈 */}
+      {/* FAB — 새 먹로그 에디터(풀스크린) 진입 */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="새 먹로그"
-        onPress={() => setSheetOpen(true)}
+        onPress={handleOpenEditor}
         style={[
           styles.fab,
           {
@@ -173,29 +165,17 @@ export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
             borderRadius: theme.radius.full,
             bottom: theme.spacing[26],
             right: theme.spacing[18],
+            // 킷 mk-log:495 FAB 글로우 0 8px 22px var(--mk-accent-shadow) — 컬러(블루) 그림자. shadow.md(검정) 대신 accent 틴트.
+            shadowColor: theme.color.accentShadow,
+            shadowOpacity: 1,
+            shadowRadius: 22,
+            shadowOffset: { width: 0, height: 8 },
+            elevation: 8,
           },
-          theme.shadow.md,
         ]}
       >
         <Icon name={IconName.Plus} size={26} color="primaryFg" />
       </Pressable>
-
-      <MuklogEntrySheet
-        visible={sheetOpen}
-        roomId={roomId}
-        onClose={() => setSheetOpen(false)}
-        onSaved={() => void handleSaved()}
-        placeSearch={{
-          query: placeSearch.query,
-          onChangeQuery: placeSearch.setQuery,
-          status: placeSearch.status,
-          results: placeSearch.results,
-          errorMessage: placeSearch.errorMessage,
-        }}
-        selectedPlace={selectedPlace}
-        onSelectPlace={selectPlace}
-        onClearPlace={clearPlace}
-      />
     </View>
   );
 };

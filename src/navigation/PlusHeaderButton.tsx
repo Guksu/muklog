@@ -1,10 +1,11 @@
 // src/navigation/PlusHeaderButton.tsx
 // HomeTabs 헤더 우측의 +버튼 (plan §6.3 / §5 T7). log-invite: 단일 생성 → 액션시트(AddSheet) 분기로 갱신.
-//   + 탭 → AddSheet 오픈. "새 로그 만들기" → createRoom() → 성공 시 그 로그 LogScreen navigate + refresh()(D2).
+//   + 탭 → AddSheet 오픈. "새 로그 만들기" → createRoom() → 성공 시 refresh() + RoomCreated 축하화면 navigate(FLAG-3).
+//     ⚠️ FLAG-3 갱신: 기존 "생성→LogScreen 직행"에서 축하화면(초대코드 공유)을 경유하도록 변경. 축하화면에서 로그 열기/나중에 분기.
 //   "초대코드로 입장" → JoinLog 라우트 navigate. 생성 실패 시 Alert(매핑 메시지)·navigate/refresh 미발생.
-//   creating(loading) 중 +버튼 비활성(중복 1차 방지). ⚠️ 기존 "생성=화면 전환 없음" spec은 의도적으로 갱신됨.
+//   creating(loading) 중 +버튼 비활성(중복 1차 방지).
 //
-// 생산자(소비): useCreateRoom(RPC) + useMyLogsContext(refresh) + useNavigation(navigate).
+// 생산자(소비): useCreateRoom(RPC → {roomId, inviteCode}) + useMyLogsContext(refresh) + useNavigation(navigate).
 import React from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet } from 'react-native';
 import { useNavigation, type NavigationProp } from '@react-navigation/native';
@@ -26,10 +27,10 @@ export const PlusHeaderButton = () => {
   const handleCreate = async () => {
     setSheetOpen(false);
     try {
-      const { roomId } = await createRoom();
-      // D2: 생성자가 코드를 바로 보도록 그 로그의 LogScreen으로 이동 + 목록 갱신(+1).
+      const { roomId, inviteCode } = await createRoom();
+      // 목록 갱신(+1) 후 생성 완료 축하화면으로 이동(초대코드 공유 → 로그 열기/나중에 분기, FLAG-3).
       await myLogs.refresh();
-      navigation.navigate(Routes.LogScreen, { roomId });
+      navigation.navigate(Routes.RoomCreated, { roomId, code: inviteCode });
     } catch (err) {
       // 헤더 버튼이라 인라인 영역이 없음 → 네이티브 Alert로 매핑된 메시지 표시(navigate/refresh 없음).
       Alert.alert('로그를 만들지 못했어요', mapRoomError({ error: err }));

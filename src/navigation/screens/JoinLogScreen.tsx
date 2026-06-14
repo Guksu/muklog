@@ -10,7 +10,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { Button, Screen, Text } from '@/components';
+import { Button, Screen, SubBar, Text } from '@/components';
 import { isInviteCodeComplete, useJoinRoom, useMyLogsContext } from '@/features/room';
 import { useTheme } from '@/theme';
 
@@ -41,6 +41,8 @@ export const JoinLogScreen = () => {
 
   return (
     <Screen edges={['left', 'right', 'bottom']} style={styles.screen}>
+      {/* 킷 mk-home:150 SubBar "초대코드 입장"(좌측정렬). 네이티브 헤더는 AppNavigator에서 headerShown:false. */}
+      <SubBar title="초대코드 입장" onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={[
           styles.content,

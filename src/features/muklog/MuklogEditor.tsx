@@ -1,23 +1,30 @@
-// src/features/muklog/MuklogEntrySheet.tsx
-// 먹로그 입력 시트(작성/편집 dual-mode) — 킷 mk-log.jsx MuklogEditor 재현 (plan §3.5 / §5 ④).
+// src/features/muklog/MuklogEditor.tsx
+// 먹로그 입력 에디터(작성/편집 dual-mode) — 킷 mk-log.jsx MuklogEditor 재현 (FLAG-1 풀스크린 전환).
+//   ⚠️ 구조 변경(ui-fidelity FLAG-1): 하단 Sheet(MuklogEntrySheet) → 풀스크린 화면(Screen + SubBar).
+//     · SubBar: 좌측 뒤로(onBack) + 타이틀 + 우측 "저장"/"수정" 액션(킷 mk-log:295 right 슬롯).
+//     · 저장 버튼이 SubBar.right로 이동(기존 하단 인라인 Button 제거). 폼/저장/사진/장소 로직은 불변.
 //   킷 MuklogEditor: isEdit = !!initial → 제목·저장 토스트·초기값 분기(작성/편집 겸용).
 //   필드: 장소명(필수)·카테고리(8종 칩)·별점(editable Stars)·메모·방문일(기본 today, 미래 차단).
 //   사진(킷 mk-log:319-339): 작성=PickedPhoto[](local) / 편집=EditorPhoto[](existing remote + new local 혼합).
 //     existing × 누르면 슬롯 제거(toDelete 후보), 신규 추가는 합산 5장 제한. order = 배열 인덱스.
 //   저장 경계: 작성=내부 useCreateMuklog(회귀 유지). 편집=onSubmit(developer가 useUpdateMuklog 연결).
-//     검증/저장/사진 reconciliation은 developer(훅)가 담당 — 시트는 입력 수집·콜백 트리거만.
+//     검증/저장/사진 reconciliation은 developer(훅)가 담당 — 에디터는 입력 수집·콜백 트리거만.
 //   스타일은 토큰만(raw hex 0), 이모지 허용(킷 기준).
+//   FLAG-1b: 장소검색 풀스크린 스왑(searching state) — searchBtn/placeChosen+"변경" → PlaceSearchView(ui-publisher 비주얼,
+//     킷 mk-log:383-414)로 스왑, 결과 선택/직접입력(§4.2 0건 폴백) 시 폼 복귀. usePlaceSearch 계약·자동채움·payload 불변.
+//   ⚠️ 비주얼 폴리시 대기(ui-publisher): searchBtn(mk-log:312)·placeChosen "변경"(mk-log:309). 검색뷰=PlaceSearchView(완료),
+//     저장버튼(mk-log:296, 적용완료). 본 패스는 구조/배선(상태머신)만 — accessibilityLabel/계약은 테스트 의존.
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { Button, Sheet, Stars, Text } from '@/components';
+import { Icon, IconName, Screen, Stars, SubBar, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 import { MUKLOG_CATEGORIES, MUKLOG_CATEGORY_KEYS, type MuklogCategoryKey } from './categories';
 import { mapMuklogError } from './errors';
 import { mapKakaoCategory } from './kakaoCategory';
 import { PhotoPickerGrid } from './PhotoPickerGrid';
-import { PlaceSearchField, type PlaceSearchStatus } from './PlaceSearchField';
+import { PlaceSearchView } from './PlaceSearchView';
 import { PlaceSelectedSummary } from './PlaceSelectedSummary';
 import {
   type EditorPhoto,
@@ -25,16 +32,17 @@ import {
   type PickedPhoto,
   type PlaceFields,
   type PlaceSearchItem,
+  type PlaceSearchStatus,
 } from './types';
 import { useCreateMuklog } from './useCreateMuklog';
 import { useMuklogPhotoPicker } from './useMuklogPhotoPicker';
 import { todayLocalDate } from './validate';
 
-// 결과 항목 → 매핑 카테고리(커버/라벨) 기본 해석. 컨테이너가 resolveCategory 미주입 시 시트가 자체 제공.
+// 결과 항목 → 매핑 카테고리(커버/라벨) 기본 해석. 컨테이너가 resolveCategory 미주입 시 에디터가 자체 제공.
 const defaultResolveCategory = ({ item }: { item: PlaceSearchItem }): MuklogCategoryKey | null =>
   mapKakaoCategory({ categoryName: item.categoryName, categoryGroupCode: item.categoryGroupCode });
 
-// 시트가 저장 payload로 합류하는 place 필드 묶음(좌표/주소/kakaoPlaceId + area). 자동채움·프리필의 단일 보관소.
+// 에디터가 저장 payload로 합류하는 place 필드 묶음(좌표/주소/kakaoPlaceId + area). 자동채움·프리필의 단일 보관소.
 type SheetPlaceData = {
   area: string | null;
   address: string | null;
@@ -92,7 +100,7 @@ export type MuklogPlaceSearchControl = {
 
 /** 선택된 장소(있으면 검색/수동입력 대신 요약카드 — 킷 place?placeChosen:searchBtn 토글).
  *  표시 필드(placeName/category/roadAddress/area) + payload 합류 좌표(address/kakaoPlaceId/lat/lng).
- *  컨테이너가 placeFieldsFromItem(PlaceSelection) 결과를 그대로 주입 → 시트가 sync effect로 자동채움. */
+ *  컨테이너가 placeFieldsFromItem(PlaceSelection) 결과를 그대로 주입 → 에디터가 sync effect로 자동채움. */
 export type MuklogSelectedPlace = {
   placeName: string;
   category?: MuklogCategoryKey | string | null;
@@ -104,14 +112,12 @@ export type MuklogSelectedPlace = {
   lng?: number | null;
 };
 
-export type MuklogEntrySheetProps = {
-  /** 표시 여부. false면 미렌더. */
-  visible: boolean;
+export type MuklogEditorProps = {
   /** 저장 대상 로그 id. */
   roomId: string;
-  /** 딤/취소 시 닫기. */
-  onClose: () => void;
-  /** 저장 성공 시 호출(부모가 refresh + 닫기). */
+  /** SubBar 뒤로/취소 — 컨테이너가 navigation.goBack 연결. */
+  onBack: () => void;
+  /** 저장 성공 시 호출(컨테이너가 goBack + 복귀 화면 refresh). */
   onSaved: () => void;
   // ── 편집 모드 (plan §3.5) ────────────────────────────────────────────────────────
   /** 주어지면 편집 모드(킷 isEdit = !!initial). 없으면 작성 모드(기존 동작). */
@@ -140,10 +146,9 @@ export type MuklogEntrySheetProps = {
   onClearPlace?: () => void;
 };
 
-export const MuklogEntrySheet = ({
-  visible,
+export const MuklogEditor = ({
   roomId,
-  onClose,
+  onBack,
   onSaved,
   initial,
   onSubmit,
@@ -156,7 +161,7 @@ export const MuklogEntrySheet = ({
   onSelectPlace,
   selectedPlace = null,
   onClearPlace,
-}: MuklogEntrySheetProps) => {
+}: MuklogEditorProps) => {
   const theme = useTheme();
   // 킷 isEdit = !!initial. 편집 모드 = 저장이 onSubmit(외부 훅), 작성 모드 = 내부 useCreateMuklog.
   const isEdit = initial !== undefined;
@@ -183,8 +188,11 @@ export const MuklogEntrySheet = ({
   );
   // 내부 picker 권한 거부 등 사진 단계 에러(작성 uncontrolled일 때만 발생).
   const [photoError, setPhotoError] = useState<string | null>(null);
+  // 장소검색 풀스크린 스왑(FLAG-1b, 킷 mk-log:293) — true면 에디터 폼 대신 전용 검색뷰를 렌더.
+  //   placeSearch 주입 시에만 진입 가능(searchBtn/변경). 결과 선택 또는 직접입력 시 false로 복귀.
+  const [searching, setSearching] = useState(false);
 
-  // ── 장소(muklog-place) — 선택 표시는 컨테이너 controlled(selectedPlace prop), payload 합류는 시트(ui-spec §5) ──
+  // ── 장소(muklog-place) — 선택 표시는 컨테이너 controlled(selectedPlace prop), payload 합류는 에디터(ui-spec §5) ──
   //   placeData = 저장 payload로 합류하는 place 필드의 단일 보관소.
   //     · 편집 진입 시 initial 프리필 → 재검색 없이 저장해도 좌표 손실 0(§6).
   //     · selectedPlace 주입(검색 선택) 시 sync effect가 갱신(자동채움 §5.4·D1).
@@ -225,15 +233,37 @@ export const MuklogEntrySheet = ({
     ],
   );
 
-  // 결과 행 탭 → 컨테이너로 전달(컨테이너가 selectedPlace 세팅 → sync effect가 자동채움). 시트는 선택 표시 state 미보유.
-  const handleSelectPlace = ({ item }: { item: PlaceSearchItem }) => {
-    onSelectPlace?.({ item });
-  };
-
-  // 선택 해제(plan D2) — 컨테이너에 알리고(selectedPlace=null), 시트의 placeData 좌표/주소/kakaoPlaceId NULL 리셋(area 유지).
+  // 선택 해제(plan D2) — 컨테이너에 알리고(selectedPlace=null), 에디터의 placeData 좌표/주소/kakaoPlaceId NULL 리셋(area 유지).
+  //   장소명은 유지(D2) → selectedPlace=null이 되면 manual-chosen 카드로 전환(이름 보존, 좌표만 NULL).
   const handleClearPlace = () => {
     onClearPlace?.();
     setPlaceData((prev) => ({ ...EMPTY_PLACE_DATA, area: prev.area }));
+  };
+
+  // ── 장소검색 풀스크린 스왑(FLAG-1b) ──────────────────────────────────────────────────
+  const openSearch = () => setSearching(true);
+
+  // 검색뷰 결과 선택 → 컨테이너에 전달(selectedPlace 세팅 → sync effect 자동채움) 후 폼 복귀.
+  const handlePickInSearch = ({ item }: { item: PlaceSearchItem }) => {
+    onSelectPlace?.({ item });
+    setSearching(false);
+  };
+
+  // manual-chosen 카드 해제 — 좌표·장소명 전부 리셋(searchBtn으로 복귀). selectedPlace 해제(D2)와 달리 이름까지 비움.
+  const handleClearChosen = () => {
+    onClearPlace?.();
+    setPlaceName('');
+    setPlaceData({ ...EMPTY_PLACE_DATA });
+  };
+
+  // 검색 0건/실패 시 "직접 입력"(§4.2 폴백) — 검색어를 장소명으로 채택(좌표 없음) 후 폼 복귀.
+  const handleUseManual = () => {
+    const name = (placeSearch?.query ?? '').trim();
+    if (name.length === 0) return;
+    onClearPlace?.(); // 컨테이너 selectedPlace=null(수동 입력엔 kakao 데이터 없음).
+    setPlaceName(name.slice(0, PLACE_NAME_MAX));
+    setPlaceData({ ...EMPTY_PLACE_DATA });
+    setSearching(false);
   };
 
   // 작성 모드 사진: controlled(onAddPhoto 주입) 우선, 아니면 내부 picker 훅.
@@ -315,7 +345,7 @@ export const MuklogEntrySheet = ({
         });
         onSaved();
       } catch {
-        // 에러는 submitError(부모 useUpdateMuklog.error)로 인라인 표시. 시트 유지(입력 보존).
+        // 에러는 submitError(부모 useUpdateMuklog.error)로 인라인 표시. 화면 유지(입력 보존).
       }
       return;
     }
@@ -341,7 +371,7 @@ export const MuklogEntrySheet = ({
       if (!controlled) picker.reset();
       onSaved();
     } catch {
-      // 에러는 useCreateMuklog가 error 상태로 노출 → 아래 인라인 표시. 시트 유지.
+      // 에러는 useCreateMuklog가 error 상태로 노출 → 아래 인라인 표시. 화면 유지.
     }
   };
 
@@ -354,53 +384,152 @@ export const MuklogEntrySheet = ({
     paddingVertical: theme.spacing[14],
   };
 
+  const saveLabel = isEdit ? '수정' : '저장';
+  // SubBar 우측 저장 액션 — 킷 mk-log:296: font 800/16(=button), 활성 accent-strong / 비활성 text-disable(fgDisabled).
+  const saveAction = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={saveLabel}
+      accessibilityState={{ disabled: !canSave, busy: loading }}
+      disabled={!canSave}
+      onPress={() => void handleSave()}
+      hitSlop={theme.spacing[8]}
+      style={styles.saveAction}
+    >
+      {loading ? (
+        <ActivityIndicator testID="editor-save-spinner" color={theme.color.accentStrong} />
+      ) : (
+        <Text variant="button" color={canSave ? 'accentStrong' : 'fgDisabled'}>
+          {saveLabel}
+        </Text>
+      )}
+    </Pressable>
+  );
+
+  // ── 장소검색 풀스크린뷰(FLAG-1b) — searching일 때 폼 대신 PlaceSearchView(ui-publisher 비주얼, 킷 mk-log:383-414)로 스왑 ──
+  //   결과 선택=handlePickInSearch(자동채움+복귀) / "직접 입력"(0건 폴백, §4.2)=handleUseManual(검색어 채택+복귀) / 뒤로=복귀.
+  if (searching && placeSearch) {
+    return (
+      <PlaceSearchView
+        query={placeSearch.query}
+        onChangeQuery={placeSearch.onChangeQuery}
+        status={placeSearch.status}
+        results={placeSearch.results}
+        errorMessage={placeSearch.errorMessage}
+        resolveCategory={placeSearch.resolveCategory ?? defaultResolveCategory}
+        onSelectResult={handlePickInSearch}
+        onUseManualInput={handleUseManual}
+        onBack={() => setSearching(false)}
+        backLabel="검색 취소"
+      />
+    );
+  }
+
   return (
-    <Sheet visible={visible} onClose={onClose} title={isEdit ? '먹로그 편집' : '새 먹로그 🍽️'}>
-      <ScrollView keyboardShouldPersistTaps="handled">
+    <Screen edges={['left', 'right', 'bottom']} style={styles.screen}>
+      {/* 'top' 제외: SubBar가 insets.top을 직접 처리(LogScreen/Join/Profile/RoomCreated 동일 패턴). 포함 시 top inset 이중 적용. */}
+      <SubBar title={isEdit ? '먹로그 편집' : '새 먹로그'} onBack={onBack} right={saveAction} />
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        style={styles.scroll}
+        contentContainerStyle={{
+          paddingHorizontal: theme.spacing[20],
+          paddingTop: theme.spacing[8],
+          paddingBottom: theme.spacing[28],
+        }}
+      >
         {/* 장소 (필수) — 킷 mk-log MuklogEditor place 필드. 선택됨이면 요약카드, 아니면 검색+수동입력(ui-spec §5.1). */}
-        <Text variant="bodySm" color="fg" style={styles.label}>
-          어디서 먹었나요? *
+        {/* 킷 mk-log:373-374 라벨 + accent "*"(필수). */}
+        <Text variant="fieldLabel" color="fg" style={styles.label}>
+          어디서 먹었나요? <Text variant="fieldLabel" color="primary">*</Text>
         </Text>
         {selectedPlace ? (
-          // 선택 후 — 킷 placeChosen(요약카드). 검색 pill·수동입력 대체. (컨테이너 controlled selectedPlace)
-          <PlaceSelectedSummary
-            placeName={selectedPlace.placeName}
-            category={selectedPlace.category}
-            roadAddress={selectedPlace.roadAddress}
-            area={selectedPlace.area}
-            onClear={handleClearPlace}
-          />
-        ) : (
+          // 선택됨(검색 결과) — 킷 placeChosen 요약카드 + "변경"(재검색). onClear=좌표 해제(이름 유지, D2).
           <>
-            {/* 검색 영역(controlled) — placeSearch 주입 시만. 미주입 시 수동 입력만(회귀 안전). */}
-            {placeSearch ? (
-              <View style={{ marginBottom: theme.spacing[10] }}>
-                <PlaceSearchField
-                  query={placeSearch.query}
-                  onChangeQuery={placeSearch.onChangeQuery}
-                  status={placeSearch.status}
-                  results={placeSearch.results}
-                  errorMessage={placeSearch.errorMessage}
-                  resolveCategory={placeSearch.resolveCategory ?? defaultResolveCategory}
-                  onSelectResult={handleSelectPlace}
-                />
-              </View>
-            ) : null}
-            {/* 수동 입력(폴백) — 선택 결과 자동채움 대상이자 직접 입력 경로. */}
-            <TextInput
-              accessibilityLabel="장소 이름"
-              value={placeName}
-              onChangeText={setPlaceName}
-              maxLength={PLACE_NAME_MAX}
-              placeholder="장소 이름을 입력하세요"
-              placeholderTextColor={theme.color.fgMuted}
-              style={[styles.input, fieldInput]}
+            <PlaceSelectedSummary
+              placeName={selectedPlace.placeName}
+              category={selectedPlace.category}
+              roadAddress={selectedPlace.roadAddress}
+              area={selectedPlace.area}
+              onClear={handleClearPlace}
             />
+            {placeSearch ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="장소 변경"
+                onPress={openSearch}
+                hitSlop={theme.spacing[8]}
+                style={[styles.changeBtn, { marginTop: theme.spacing[8] }]}
+              >
+                <Text variant="badge" color="accentStrong">
+                  변경
+                </Text>
+              </Pressable>
+            ) : null}
           </>
+        ) : placeSearch ? (
+          placeName.trim().length > 0 ? (
+            // 장소명만 있음(편집 프리필 / 직접입력 / 좌표해제 후) — manual-chosen 카드 + "변경".
+            <>
+              <PlaceSelectedSummary
+                placeName={placeName}
+                category={category}
+                roadAddress={placeData.roadAddress}
+                area={placeData.area}
+                onClear={handleClearChosen}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="장소 변경"
+                onPress={openSearch}
+                hitSlop={theme.spacing[8]}
+                style={[styles.changeBtn, { marginTop: theme.spacing[8] }]}
+              >
+                <Text variant="badge" color="accentStrong">
+                  변경
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            // 미선택 — 킷 searchBtn(돋보기 + "장소 검색 (카카오)") → 풀스크린 검색뷰 진입.
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="장소 검색하기"
+              onPress={openSearch}
+              style={[
+                styles.searchBtn,
+                {
+                  borderColor: theme.color.hairline,
+                  backgroundColor: theme.color.surface,
+                  // 킷 lk.searchBtn(mk-log:497): radius 16(xl), border 1.5, padding 15/16.
+                  borderRadius: theme.radius.xl,
+                  paddingVertical: theme.spacing[14],
+                  paddingHorizontal: theme.spacing[16],
+                  gap: theme.spacing[8],
+                },
+              ]}
+            >
+              <Icon name={IconName.Search} size={20} color="fgMuted" />
+              <Text variant="body" color="fgMuted">
+                장소 검색 (카카오)
+              </Text>
+            </Pressable>
+          )
+        ) : (
+          // placeSearch 미주입(방어/회귀 안전) — 수동 입력만.
+          <TextInput
+            accessibilityLabel="장소 이름"
+            value={placeName}
+            onChangeText={setPlaceName}
+            maxLength={PLACE_NAME_MAX}
+            placeholder="장소 이름을 입력하세요"
+            placeholderTextColor={theme.color.fgMuted}
+            style={[styles.input, fieldInput]}
+          />
         )}
 
         {/* 카테고리 (8종 칩) */}
-        <Text variant="bodySm" color="fg" style={[styles.label, { marginTop: theme.spacing[16] }]}>
+        <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
           카테고리
         </Text>
         <View style={styles.chipRow}>
@@ -433,7 +562,7 @@ export const MuklogEntrySheet = ({
         </View>
 
         {/* 사진 (0~5) — 킷 mk-log.jsx:319-339. 편집은 existing+new 혼합 슬롯. */}
-        <View style={{ marginTop: theme.spacing[16] }}>
+        <View style={{ marginTop: theme.spacing[22] }}>
           <PhotoPickerGrid
             label="사진"
             photos={gridPhotos}
@@ -449,13 +578,13 @@ export const MuklogEntrySheet = ({
         </View>
 
         {/* 별점 */}
-        <Text variant="bodySm" color="fg" style={[styles.label, { marginTop: theme.spacing[16] }]}>
+        <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
           별점
         </Text>
         <Stars value={rating} size={32} editable onChange={setRating} />
 
         {/* 메모 */}
-        <Text variant="bodySm" color="fg" style={[styles.label, { marginTop: theme.spacing[16] }]}>
+        <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
           메모
         </Text>
         <TextInput
@@ -465,13 +594,13 @@ export const MuklogEntrySheet = ({
           maxLength={MEMO_MAX}
           multiline
           numberOfLines={4}
-          placeholder="무엇을 먹었고 어땠는지 남겨보세요 💕"
+          placeholder="무엇을 먹었고 어땠는지, 둘의 추억을 남겨보세요 💕"
           placeholderTextColor={theme.color.fgMuted}
           style={[styles.input, styles.memo, fieldInput]}
         />
 
         {/* 방문일 (기본 today, 미래 차단은 검증이 최종 방어) */}
-        <Text variant="bodySm" color="fg" style={[styles.label, { marginTop: theme.spacing[16] }]}>
+        <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
           방문일
         </Text>
         <TextInput
@@ -489,24 +618,21 @@ export const MuklogEntrySheet = ({
             {error}
           </Text>
         ) : null}
-
-        <Button
-          title={isEdit ? '수정' : '저장'}
-          accessibilityLabel={isEdit ? '수정' : '저장'}
-          loading={loading}
-          disabled={!canSave}
-          onPress={() => void handleSave()}
-          style={{ marginTop: theme.spacing[20] }}
-        />
       </ScrollView>
-    </Sheet>
+    </Screen>
   );
 };
 
 const styles = StyleSheet.create({
+  screen: { padding: 0 },
+  scroll: { flex: 1 },
   label: { marginBottom: 10 },
   input: { borderWidth: StyleSheet.hairlineWidth },
   memo: { minHeight: 96, textAlignVertical: 'top' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderWidth: StyleSheet.hairlineWidth },
+  saveAction: { paddingVertical: 8, paddingHorizontal: 6, minWidth: 44, alignItems: 'flex-end' },
+  // FLAG-1b: 장소 검색 진입 버튼(킷 searchBtn mk-log:497, border 1.5) / "변경" 링크(킷 mk-log:309 우측 정렬). 검색뷰=PlaceSearchView.
+  searchBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5 },
+  changeBtn: { alignSelf: 'flex-end' },
 });

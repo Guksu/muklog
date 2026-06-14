@@ -364,7 +364,7 @@ export const MuklogDetailScreen = ({
           {/* 별점 + 평점 — 킷 mk-log:163-166. rating null이면 "미평가". */}
           <View style={[styles.ratingRow, { gap: theme.spacing[8] }]}>
             <Stars value={muklog.rating} size={STARS_SIZE} />
-            <Text variant="cardTitle" color={hasRating ? 'fg' : 'fgMuted'} style={styles.ratingText}>
+            <Text variant="ratingNum" color={hasRating ? 'fg' : 'fgMuted'} style={styles.ratingText}>
               {ratingText}
             </Text>
           </View>
@@ -376,11 +376,11 @@ export const MuklogDetailScreen = ({
           </View>
 
           {/* 메모 — 킷 mk-log:175-183. 섹션 제목 + 카드(본문 + 작성자 행). */}
-          <Text variant="emptyTitle" color="fg" style={[styles.sectionTitle, { marginBottom: theme.spacing[10] }]}>
+          <Text variant="sectionLabel" color="fg" style={[styles.sectionTitle, { marginBottom: theme.spacing[10] }]}>
             메모
           </Text>
           <View style={[card, { padding: theme.spacing[16] }]}>
-            <Text variant="bodyLg" color={hasMemo ? 'fgWeak' : 'fgMuted'} style={styles.memoText}>
+            <Text variant="memoBody" color={hasMemo ? 'fgWeak' : 'fgMuted'} style={styles.memoText}>
               {memoText}
             </Text>
             {/* 작성자 행 — 킷 mk-log:178-182. 상단 헤어라인 + 26px 아바타 + 라벨 + 방문일. */}
@@ -412,7 +412,7 @@ export const MuklogDetailScreen = ({
           </View>
 
           {/* 위치(미니맵) — 킷 mk-log:186-191. 좌표 없음(hasCoords=false) → stub 플레이스홀더(실지도 OUT). */}
-          <Text variant="emptyTitle" color="fg" style={[styles.sectionTitle, { marginTop: theme.spacing[24], marginBottom: theme.spacing[10] }]}>
+          <Text variant="sectionLabel" color="fg" style={[styles.sectionTitle, { marginTop: theme.spacing[24], marginBottom: theme.spacing[10] }]}>
             위치
           </Text>
           <View
@@ -614,7 +614,7 @@ const styles = StyleSheet.create({
   infoLabel: { width: 48 },
   infoValue: { flex: 1, textAlign: 'right' },
   sectionTitle: {},
-  // 메모 줄간격 — 킷 mk-log:177 line-height 1.7(15px×1.7≈26). bodyLg(18) lineHeight는 토큰 기본.
+  // 메모 줄간격 — 킷 mk-log:177 500/15/1.7. variant=memoBody(15, lineHeight 26)로 토큰에서 처리(별도 스타일 불요).
   memoText: {},
   authorRow: { flexDirection: 'row', alignItems: 'center' },
   // 미니맵 stub — 킷 MiniMap height 150, radius 18(card.action). 실지도 OUT → 중앙 플레이스홀더.

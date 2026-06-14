@@ -45,4 +45,9 @@ describe('InviteCodeCard', () => {
     renderWithTheme(<InviteCodeCard code="ABCDEF" />);
     expect(screen.getByTestId(`icon-${IconName.Link}`)).toBeTruthy();
   });
+
+  it('compact 모드(솔로배너 중첩)에서도 코드를 표시한다 (킷 mk-home:220 padding 축소)', () => {
+    renderWithTheme(<InviteCodeCard code="ABCDEF" compact />);
+    expect(screen.getByText('ABCDEF')).toBeTruthy();
+  });
 });

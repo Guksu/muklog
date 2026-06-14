@@ -99,14 +99,14 @@ const SoloInviteBanner = ({ code }: { code: string }) => {
     <View style={banner}>
       <View style={[styles.bannerHead, { gap: theme.spacing[8] }]}>
         <RNText style={styles.bannerEmoji}>💌</RNText>
-        <Text variant="navTitle" color="fg" style={styles.bannerHeading}>
+        <Text variant="fieldLabel" color="fg" style={styles.bannerHeading}>
           연인을 초대해보세요
         </Text>
       </View>
       <Text variant="bodySm" color="fgWeak">
         이 코드를 보내면 둘이 함께 기록하는 커플 로그가 돼요.
       </Text>
-      <InviteCodeCard code={code} />
+      <InviteCodeCard code={code} compact />
     </View>
   );
 };

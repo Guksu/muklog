@@ -38,6 +38,13 @@ supabase secrets set KAKAO_REST_API_KEY=<Kakao Developers REST 키>
 
 > ⚠️ **키 미발급 시 이월**(social-auth 선례): REST 키가 없으면 라이브 검증은 키 발급 후로 이월.
 > 코드/모킹 테스트는 완성돼 있으며, 키 미설정 시 함수는 안전하게 `KAKAO_KEY_MISSING`을 반환(앱은 수동입력 폴백).
+>
+> ⚠️ **카카오맵(로컬) 서비스 활성 필수** (2026-06-14 라이브 검증에서 확인): REST 키가 유효해도 Kakao 앱에서
+> **카카오맵(OPEN_MAP_AND_LOCAL) 서비스가 비활성**이면 Local API가 `403 {"errorType":"NotAuthorizedError",
+> "message":"App(...) disabled OPEN_MAP_AND_LOCAL service."}`을 반환 → 함수는 `KAKAO_REQUEST_FAILED`(502)로 매핑.
+> 해결: **카카오 개발자 콘솔 → 내 애플리케이션 → 앱 → 제품 설정 → 카카오맵 → 활성화 ON**. (시크릿/재배포 불필요, 즉시 반영.)
+> 진단 팁: `curl -G -H "Authorization: KakaoAK <REST키>" --data-urlencode "query=스타벅스" https://dapi.kakao.com/v2/local/search/keyword.json`
+> → 200=정상 / 401=키 오류 / 403=카카오맵 미활성.
 
 ## 인증
 

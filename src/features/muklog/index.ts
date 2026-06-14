@@ -18,21 +18,18 @@ export { processMuklogPhoto, PHOTO_MAX_EDGE, PHOTO_COMPRESS } from './photoImage
 export { MuklogCard, type MuklogCardProps } from './MuklogCard';
 export { MuklogList, type MuklogListProps } from './MuklogList';
 export {
-  MuklogEntrySheet,
-  type MuklogEntrySheetProps,
+  MuklogEditor,
+  type MuklogEditorProps,
   type MuklogEditSubmitInput,
-} from './MuklogEntrySheet';
+} from './MuklogEditor';
 export { PhotoPickerGrid, type PhotoPickerGridProps } from './PhotoPickerGrid';
 // 장소검색(muklog-place) presentational — 킷 mk-log PlaceSearch/placeChosen 번역.
+//   ⚠️ FLAG-1b: 인라인 PlaceSearchField → 풀스크린 PlaceSearchView로 전환(MuklogEditor searching 스왑). PlaceSearchField 제거됨.
 export { PlaceResultRow, type PlaceResultRowProps } from './PlaceResultRow';
-export {
-  PlaceSearchField,
-  type PlaceSearchFieldProps,
-  type PlaceSearchStatus,
-} from './PlaceSearchField';
+export { PlaceSearchView, type PlaceSearchViewProps } from './PlaceSearchView';
 export { PlaceSelectedSummary, type PlaceSelectedSummaryProps } from './PlaceSelectedSummary';
 // 장소검색(muklog-place) data 계층 — 검색 훅 + invoke 래퍼 + Kakao 매핑 유틸(developer).
-//   PlaceSearchStatus 타입은 PlaceSearchField가 이미 export(동일 정의) — 중복 방지 위해 여기선 미재노출.
+//   PlaceSearchStatus 타입은 types.ts 단일 출처(아래 타입 export 블록).
 export {
   usePlaceSearch,
   PLACE_SEARCH_DEBOUNCE_MS,
@@ -65,6 +62,7 @@ export {
   type MuklogEditInitial,
   type UpdateMuklogInput,
   type PlaceSearchItem,
+  type PlaceSearchStatus,
   type PlaceFields,
   type PlaceSelection,
 } from './types';

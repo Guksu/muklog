@@ -8,6 +8,7 @@ export { Card, type CardProps } from './Card';
 export { Badge, type BadgeProps } from './Badge';
 export { MemberBadge, type MemberBadgeProps } from './MemberBadge';
 export { Sheet, type SheetProps } from './Sheet';
+export { SubBar, type SubBarProps } from './SubBar';
 export { Stars, type StarsProps } from './Stars';
 export { Chip, type ChipProps } from './Chip';
 export { FoodCover, type FoodCoverProps } from './FoodCover';

@@ -19,8 +19,14 @@ import { PlusHeaderButton } from './PlusHeaderButton';
 import { Routes, type AppStackParamList } from './routes';
 
 const HEADER_AVATAR_SIZE = 36;
-const WORDMARK = '먹로그';
+// 킷 mk-home: 먹로그 탭 title="먹로그"(:82), 지도 탭 title="지도"(:261). 탭별 워드마크 텍스트.
+const DEFAULT_WORDMARK = '먹로그';
 const WORDMARK_EMOJI = '🍽️';
+
+export type HomeHeaderProps = {
+  /** 헤더 워드마크 텍스트(탭별). 기본 '먹로그'. 지도 탭은 '지도'. */
+  title?: string;
+};
 
 // 본인 프로필(닉네임/아바타)을 조회해 헤더 아바타로 렌더. userId가 있을 때만 마운트(useProfile 보장).
 //   url 없으면 userId 결정적 디폴트(이모지+컬러)로 표시(plan §3.3).
@@ -37,7 +43,7 @@ const HomeHeaderAvatar = ({ userId }: { userId: string }) => {
   );
 };
 
-export const HomeHeader = () => {
+export const HomeHeader = ({ title = DEFAULT_WORDMARK }: HomeHeaderProps) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp<AppStackParamList>>();
@@ -58,7 +64,7 @@ export const HomeHeader = () => {
     >
       <View style={[styles.left, { gap: theme.spacing[7] }]}>
         <Text variant="wordmark" color="fg" style={styles.wordmark}>
-          {WORDMARK}
+          {title}
         </Text>
         {/* 킷 워드마크 이모지 19px, 베이스라인 정렬. */}
         <Text style={styles.wordmarkEmoji}>{WORDMARK_EMOJI}</Text>

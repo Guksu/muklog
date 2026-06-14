@@ -7,8 +7,9 @@
 // 생산자: useProfile(조회)/useUpdateProfile(저장·업로드)/useMyLogs(통계). 소비자: 상태별 UX. 스타일=토큰만(raw hex 0).
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 
-import { Avatar, Button, Icon, IconName, Screen, Sheet, Text } from '@/components';
+import { Avatar, Button, Icon, IconName, Screen, Sheet, SubBar, Text } from '@/components';
 import { useAuth } from '@/features/auth';
 import {
   computeProfileStats,
@@ -51,6 +52,7 @@ export const ProfileScreen = () => {
 
 const ProfileContent = ({ userId }: { userId: string }) => {
   const theme = useTheme();
+  const navigation = useNavigation();
   const { signOut } = useAuth();
   const { state, refresh } = useProfile({ userId });
   const { saveNickname, changeAvatar, savingNickname, uploadingAvatar, error } = useUpdateProfile({
@@ -146,6 +148,8 @@ const ProfileContent = ({ userId }: { userId: string }) => {
 
   return (
     <Screen edges={['bottom', 'left', 'right']} style={styles.flush}>
+      {/* 킷 mk-log:428 SubBar "프로필"(좌측정렬). 네이티브 헤더는 AppNavigator에서 headerShown:false. */}
+      <SubBar title="프로필" onBack={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* 아바타 + 카메라 배지 + 닉네임 */}
         <View style={styles.avatarSection}>
@@ -173,7 +177,7 @@ const ProfileContent = ({ userId }: { userId: string }) => {
           </Pressable>
 
           <View style={[styles.nicknameRow, { marginTop: theme.spacing[12] }]}>
-            <Text variant="h3" color="fg">
+            <Text variant="profileName" color="fg">
               {profile.nickname ?? '닉네임 미설정'}
             </Text>
             <Pressable

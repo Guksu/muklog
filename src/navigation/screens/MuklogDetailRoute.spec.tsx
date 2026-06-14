@@ -6,60 +6,31 @@ import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 const mockGoBack = jest.fn();
+const mockNavigate = jest.fn();
 let mockRouteParams: { muklogId?: string } | undefined = { muklogId: 'm1' };
+// useFocusEffect는 마운트 시 콜백 1회 실행(첫 포커스). refireFocus()로 재포커스(에디터 복귀)를 흉내낸다.
+let lastFocusCallback: (() => void) | null = null;
+const refireFocus = () => lastFocusCallback?.();
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ goBack: mockGoBack }),
+  useNavigation: () => ({ goBack: mockGoBack, navigate: mockNavigate }),
   useRoute: () => ({ params: mockRouteParams }),
+  useFocusEffect: (cb: () => void) => {
+    const React = require('react');
+    React.useEffect(() => {
+      lastFocusCallback = cb;
+      cb();
+    }, [cb]);
+  },
 }));
 
 const mockUseMuklog = jest.fn();
 const refresh = jest.fn();
-const mockUpdateMuklog = jest.fn();
 const mockDeleteMuklog = jest.fn();
-jest.mock('@/features/muklog', () => {
-  const { Pressable, Text } = require('react-native');
-  return {
-    useMuklog: (arg: unknown) => mockUseMuklog(arg),
-    useUpdateMuklog: () => ({ updateMuklog: mockUpdateMuklog, loading: false, error: null }),
-    useDeleteMuklog: () => ({ deleteMuklog: mockDeleteMuklog, loading: false, error: null }),
-    // 장소검색(muklog-place) — 컨테이너 훅 더블(검색·선택 상태). 편집 시트 더블이 무시하므로 빈 동작.
-    usePlaceSearch: () => ({
-      query: '',
-      setQuery: jest.fn(),
-      status: 'idle',
-      results: [],
-      errorMessage: null,
-    }),
-    usePlaceSelection: () => ({ selectedPlace: null, selectPlace: jest.fn(), clearPlace: jest.fn() }),
-    // 편집 시트 더블 — visible/initial/onSubmit/onSaved만 노출(내부는 자체 spec).
-    MuklogEntrySheet: (props: Record<string, unknown>) =>
-      props.visible ? (
-        <Pressable
-          accessibilityLabel="시트-편집저장"
-          onPress={async () => {
-            const onSubmit = props.onSubmit as Function;
-            await onSubmit({
-              input: {
-                muklogId: 'm1',
-                roomId: 'r1',
-                placeName: '바뀐이름',
-                category: null,
-                area: null,
-                rating: null,
-                memo: null,
-                visitedAt: '2026-02-14',
-                photos: [],
-              },
-            });
-            const onSaved = props.onSaved as Function;
-            onSaved();
-          }}
-        >
-          <Text>편집 시트 열림</Text>
-        </Pressable>
-      ) : null,
-  };
-});
+// ⚠️ FLAG-1: 편집이 시트 오버레이 → 풀스크린 에디터 라우트 이동으로 전환. 컨테이너는 useUpdateMuklog/장소훅/시트를 더는 안 씀.
+jest.mock('@/features/muklog', () => ({
+  useMuklog: (arg: unknown) => mockUseMuklog(arg),
+  useDeleteMuklog: () => ({ deleteMuklog: mockDeleteMuklog, loading: false, error: null }),
+}));
 
 const mockUseAuth = jest.fn();
 jest.mock('@/features/auth', () => ({ useAuth: () => mockUseAuth() }));
@@ -125,7 +96,6 @@ beforeEach(() => {
   mockUseMuklog.mockReturnValue({ state: { status: 'loading' }, refresh });
   mockUseAuth.mockReturnValue({ state: { status: 'authenticated', userId: 'me-uid' } });
   mockUseProfile.mockReturnValue({ state: { status: 'ready', profile: { nickname: '나', avatarUrl: 'http://a' } } });
-  mockUpdateMuklog.mockResolvedValue({ id: 'm1' });
   mockDeleteMuklog.mockResolvedValue(undefined);
 });
 
@@ -194,35 +164,21 @@ describe('MuklogDetailRoute — 편집/삭제 배선 (plan §4·§5)', () => {
     expect(screen.getByText('canManage:false')).toBeTruthy();
   });
 
-  it('onEdit → 편집 시트를 연다(initial 주입)', () => {
+  it('onEdit → 풀스크린 에디터 라우트로 navigate(MuklogEditor, { roomId, muklogId }) (FLAG-1)', () => {
     mockUseMuklog.mockReturnValue({ state: readyMuklog(), refresh });
     render(<MuklogDetailRoute />);
-    expect(screen.queryByText('편집 시트 열림')).toBeNull();
     fireEvent.press(screen.getByLabelText('probe-edit'));
-    expect(screen.getByText('편집 시트 열림')).toBeTruthy();
+    expect(mockNavigate).toHaveBeenCalledWith('MuklogEditor', { roomId: 'r1', muklogId: 'm1' });
   });
 
-  it('편집 저장 → useUpdateMuklog(input + initialPhotos) 호출 후 시트 닫기 + refresh', async () => {
+  it('재포커스(에디터 편집 후 복귀) 시 상세를 refresh한다(첫 포커스는 가드)', () => {
     mockUseMuklog.mockReturnValue({ state: readyMuklog(), refresh });
     render(<MuklogDetailRoute />);
-    fireEvent.press(screen.getByLabelText('probe-edit'));
-
-    await act(async () => {
-      fireEvent.press(screen.getByLabelText('시트-편집저장'));
+    expect(refresh).not.toHaveBeenCalled(); // 첫 포커스(마운트 로드)는 가드.
+    act(() => {
+      refireFocus();
     });
-
-    expect(mockUpdateMuklog).toHaveBeenCalledTimes(1);
-    const arg = mockUpdateMuklog.mock.calls[0][0] as {
-      input: { placeName: string };
-      initialPhotos: { storagePath: string; orderIndex: number }[];
-    };
-    expect(arg.input.placeName).toBe('바뀐이름');
-    // initialPhotos = useMuklog 결과 매핑(photoStoragePaths[orderIndex]).
-    expect(arg.initialPhotos).toEqual([
-      { storagePath: 'r1/m1/a.jpg', orderIndex: 0, uri: 'http://signed/a' },
-    ]);
-    await waitFor(() => expect(refresh).toHaveBeenCalled());
-    expect(screen.queryByText('편집 시트 열림')).toBeNull();
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it('onConfirmDelete → useDeleteMuklog(photoStoragePaths) 호출 후 goBack', async () => {

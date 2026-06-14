@@ -8,34 +8,27 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { useTheme } from '@/theme';
-
 import { HomeTabs } from './HomeTabs';
 import { Routes, type AppStackParamList } from './routes';
 import { JoinLogScreen } from './screens/JoinLogScreen';
 import { LogScreen } from './screens/LogScreen';
 import { MuklogDetailRoute } from './screens/MuklogDetailRoute';
+import { MuklogEditorRoute } from './screens/MuklogEditorRoute';
 import { ProfileScreen } from './screens/ProfileScreen';
+import { RoomCreatedRoute } from './screens/RoomCreatedRoute';
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
 export const AppNavigator = () => {
-  const theme = useTheme();
-  // 헤더 표시 상세 화면 공통 옵션(뒤로가기 표시). 토큰만 사용.
-  const detailHeaderOptions = {
-    headerShown: true,
-    headerStyle: { backgroundColor: theme.color.bg },
-    headerTitleStyle: { color: theme.color.fg, fontFamily: theme.typography.h3.fontFamily },
-    headerTintColor: theme.color.fg,
-    headerShadowVisible: false,
-  };
+  // 모든 스택 화면이 자체 헤더(SubBar/HomeHeader/LogScreen 헤더)를 그린다 → 네이티브 헤더 전역 숨김.
   return (
     <Stack.Navigator initialRouteName={Routes.HomeTabs} screenOptions={{ headerShown: false }}>
       <Stack.Screen name={Routes.HomeTabs} component={HomeTabs} />
+      {/* Profile·JoinLog은 화면 자체 SubBar(킷 mk-log:428 / mk-home:150)를 그린다 → 네이티브 헤더 숨김(이중 헤더 방지, FLAG-4). */}
       <Stack.Screen
         name={Routes.Profile}
         component={ProfileScreen}
-        options={{ ...detailHeaderOptions, title: '프로필' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name={Routes.LogScreen}
@@ -45,11 +38,23 @@ export const AppNavigator = () => {
       <Stack.Screen
         name={Routes.JoinLog}
         component={JoinLogScreen}
-        options={{ ...detailHeaderOptions, title: '초대코드 입장' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name={Routes.MuklogDetail}
         component={MuklogDetailRoute}
+        options={{ headerShown: false }}
+      />
+      {/* FLAG-1: 먹로그 에디터(풀스크린, 자체 SubBar) — 작성/편집 겸용. 네이티브 헤더 숨김(이중 헤더 방지). */}
+      <Stack.Screen
+        name={Routes.MuklogEditor}
+        component={MuklogEditorRoute}
+        options={{ headerShown: false }}
+      />
+      {/* FLAG-3: 로그 생성 완료 축하(자체 SubBar). 네이티브 헤더 숨김. */}
+      <Stack.Screen
+        name={Routes.RoomCreated}
+        component={RoomCreatedRoute}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

@@ -24,6 +24,8 @@ jest.mock('@/features/profile', () => {
 });
 jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
 jest.mock('@/features/room', () => ({ useMyLogs: jest.fn() }));
+// SubBar(뒤로) 사용을 위한 navigation 모킹 — goBack만 필요.
+jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ goBack: jest.fn() }) }));
 
 // Alert.alert: 확인 버튼(onPress)을 즉시 호출하도록 모킹(로그아웃 확인 흐름 검증).
 import { Alert } from 'react-native';

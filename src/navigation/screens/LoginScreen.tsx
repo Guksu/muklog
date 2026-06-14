@@ -30,9 +30,9 @@ export type LoginScreenProps = {
 
 // 킷 상단 비주얼 카피(mk-auth:99-101) — <br/> → '\n'.
 const LOGIN_COPY = '데이트하며 다닌 맛집을\n사진·메모·위치로 둘이 함께 기록해요.';
-// 킷 그라데이션 160deg 근사(거의 수직, 약간 좌하향) + stops 0%/70%(mk-auth:91).
-const GRADIENT_START = { x: 0.2, y: 0 } as const;
-const GRADIENT_END = { x: 0, y: 1 } as const;
+// 킷 그라데이션 160deg(우상→좌하 대각) 근사 + stops 0%/70%(mk-auth:91).
+const GRADIENT_START = { x: 0.15, y: 0 } as const;
+const GRADIENT_END = { x: 0.85, y: 1 } as const;
 const GRADIENT_LOCATIONS = [0, 0.7] as const;
 
 export const LoginScreen = ({
@@ -129,12 +129,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   copyBlock: { alignItems: 'center' },
-  // 킷 워드마크: muklog(800/34) + 🍽️(23), baseline 정렬 gap 7(mk-auth:95-98).
+  // 킷 워드마크: muklog(800/34) + 🍽️(23), baseline 정렬 gap 7(mk-auth:95-98). lineHeight=34(킷 /1, emptyTitle 변형 27 보정 — 글리프 클리핑 방지).
   wordmarkRow: { flexDirection: 'row', alignItems: 'baseline', gap: 7 },
-  wordmark: { fontSize: 34, letterSpacing: -1 },
+  wordmark: { fontSize: 34, lineHeight: 34, letterSpacing: -1 },
   wordmarkEmoji: { fontSize: 23 },
-  // 킷 카피 600/15.5/1.6, margin-top 14, center(mk-auth:99).
-  copy: { textAlign: 'center', marginTop: 14, fontSize: 15.5, lineHeight: 25 },
+  // 킷 카피 600/15.5/1.6(SemiBold), margin-top 14, center(mk-auth:99) — bodySm 변형 Medium 보정.
+  copy: { textAlign: 'center', marginTop: 14, fontSize: 15.5, lineHeight: 25, fontFamily: 'Pretendard-SemiBold' },
   // 킷: 버튼 영역 flex none, padding 0 24 40, gap 11(mk-auth:106).
   actions: { paddingHorizontal: 24, paddingBottom: 40, gap: 11 },
   error: { textAlign: 'center' },
