@@ -14,5 +14,8 @@ export const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
     autoRefreshToken: true,
     // RN에는 URL 세션 콜백이 없으므로 비활성(웹 전용 기능).
     detectSessionInUrl: false,
+    // OAuth 웹 플로우(Google)는 PKCE — signInWithOAuth가 code verifier를 storage에 저장하고,
+    // 리다이렉트의 ?code= 를 exchangeCodeForSession이 교환한다(native idToken nonce 한계 회피).
+    flowType: 'pkce',
   },
 });

@@ -26,13 +26,13 @@ jest.mock('@/lib/supabase', () => ({
   },
 }));
 
-// --- 네이티브 소셜 헬퍼 모킹 ---
-const mockConfigureGoogle = jest.fn();
-const mockGoogleNative = jest.fn();
+// --- 소셜 헬퍼 모킹 (Google=OAuth 웹 플로우 / Apple=네이티브) ---
+const mockGoogleOAuth = jest.fn();
 const mockAppleNative = jest.fn();
+jest.mock('./oauthSignIn', () => ({
+  signInWithGoogleOAuth: (...a: unknown[]) => mockGoogleOAuth(...a),
+}));
 jest.mock('./socialSignIn', () => ({
-  configureGoogleSignIn: (...a: unknown[]) => mockConfigureGoogle(...a),
-  signInWithGoogleNative: (...a: unknown[]) => mockGoogleNative(...a),
   signInWithAppleNative: (...a: unknown[]) => mockAppleNative(...a),
 }));
 
@@ -122,29 +122,23 @@ describe('AuthProvider — signInWithGoogle', () => {
     mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
   });
 
-  it('성공: authenticating(google) → signInWithIdToken(google) → onAuthStateChange → authenticated', async () => {
-    mockGoogleNative.mockResolvedValue({ ok: true, token: 'g-token' });
-    mockSignInWithIdToken.mockResolvedValue({
-      data: { user: { id: 'gid' } },
-      error: null,
-    });
+  it('성공: authenticating(google) → OAuth → ensureProfile → authenticated', async () => {
+    mockGoogleOAuth.mockResolvedValue({ ok: true, userId: 'gid' });
+    mockUpsert.mockResolvedValue({ error: null });
     renderProvider();
     await waitFor(() => expect(screen.getByText('unauthenticated')).toBeTruthy());
 
     await act(async () => {
       await captured?.signInWithGoogle();
     });
-    expect(mockSignInWithIdToken).toHaveBeenCalledWith({ provider: 'google', token: 'g-token' });
-    // onAuthStateChange가 세션 전달 → authenticated.
-    await act(async () => {
-      authChangeCb?.('SIGNED_IN', { user: { id: 'gid' } });
-    });
+    // OAuth 성공 → ensureProfileAndAuth(userId) → authenticated. idToken 경로 미사용.
+    expect(mockSignInWithIdToken).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByText('authenticated:gid')).toBeTruthy());
     expect(captured?.loginError).toBeNull();
   });
 
-  it('취소: unauthenticated + loginError=null, signInWithIdToken 미호출', async () => {
-    mockGoogleNative.mockResolvedValue({
+  it('취소: unauthenticated + loginError=null', async () => {
+    mockGoogleOAuth.mockResolvedValue({
       ok: false,
       cancelled: true,
       token: AuthErrorToken.GoogleCancelled,
@@ -154,29 +148,16 @@ describe('AuthProvider — signInWithGoogle', () => {
     await act(async () => {
       await captured?.signInWithGoogle();
     });
-    expect(mockSignInWithIdToken).not.toHaveBeenCalled();
     expect(captured?.state.status).toBe('unauthenticated');
     expect(captured?.loginError).toBeNull();
   });
 
-  it('NoIdToken: unauthenticated + 메시지, supabase 미호출', async () => {
-    mockGoogleNative.mockResolvedValue({
+  it('실패(TokenExchangeFailed): unauthenticated + 메시지', async () => {
+    mockGoogleOAuth.mockResolvedValue({
       ok: false,
       cancelled: false,
-      token: AuthErrorToken.NoIdToken,
+      token: AuthErrorToken.TokenExchangeFailed,
     });
-    renderProvider();
-    await waitFor(() => expect(screen.getByText('unauthenticated')).toBeTruthy());
-    await act(async () => {
-      await captured?.signInWithGoogle();
-    });
-    expect(mockSignInWithIdToken).not.toHaveBeenCalled();
-    expect(captured?.loginError).toBe('로그인 정보를 받지 못했어요. 다시 시도해 주세요.');
-  });
-
-  it('signInWithIdToken 실패: unauthenticated + TokenExchangeFailed 메시지', async () => {
-    mockGoogleNative.mockResolvedValue({ ok: true, token: 'g-token' });
-    mockSignInWithIdToken.mockResolvedValue({ data: { user: null }, error: { message: 'rejected' } });
     renderProvider();
     await waitFor(() => expect(screen.getByText('unauthenticated')).toBeTruthy());
     await act(async () => {

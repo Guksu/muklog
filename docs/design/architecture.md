@@ -14,7 +14,7 @@
 | 백엔드 | **Supabase BaaS** | Postgres + Storage + Auth + Realtime을 한 번에. 무료 티어가 넉넉하고 과금이 예측 가능 → **AWS 비용폭탄 위험 제거** |
 | DB | **Supabase Postgres** | 백엔드에 포함. 관계형 모델이 방/멤버/먹로그 구조에 적합 |
 | 사진 저장 | **Supabase Storage** | 먹로그당 최대 5장. CDN 포함 |
-| 인증 | ~~**Supabase 익명 인증 + 초대코드**~~ → **Google/Apple 소셜 로그인 전용** (2026-06-12 `social-auth`) | ~~회원가입 마찰 없음. 앱 실행 시 익명 세션 자동 발급~~ → 익명 자동 발급은 유령 계정 누적·소유권 모호로 폐기. 명시적 로그인 화면 → Google(네이티브 SDK)/Apple(expo-apple-authentication) idToken → `signInWithIdToken`. 세션 영속(AsyncStorage)·`profiles` 보장 후 진입. (초대코드는 로그 합류 수단으로 유지) |
+| 인증 | ~~**Supabase 익명 인증 + 초대코드**~~ → **Google/Apple 소셜 로그인 전용** (2026-06-12 `social-auth`). **Google은 OAuth 웹 플로우로 전환** (2026-06-14 `google-oauth-web`) | ~~회원가입 마찰 없음. 앱 실행 시 익명 세션 자동 발급~~ → 익명 자동 발급은 유령 계정 누적·소유권 모호로 폐기. 명시적 로그인 화면. **Apple = 네이티브 idToken → `signInWithIdToken`**. **Google = OAuth 웹 플로우(PKCE): `signInWithOAuth` → `expo-web-browser` 인앱 브라우저 → `muklog://` 리다이렉트 → `exchangeCodeForSession`** (네이티브 `@react-native-google-signin`은 GIDSignIn이 idToken에 자동으로 심는 nonce를 노출/제어하지 못해 GoTrue nonce 검증 통과 불가 → 라이브러리 제거하고 웹 플로우로 전환). 세션 영속(AsyncStorage)·`profiles` 보장 후 진입. (초대코드는 로그 합류 수단으로 유지) |
 | 프로필 | **닉네임 + 아바타 편집 가능** | 사용자 추가 요청 |
 | ~~방 모드~~ → **로그 멤버십 모델** | **1인 多로그(멀티룸) + 솔로 시작·초대로 커플화** | 한 사용자가 **여러 로그(=방)**에 동시 소속 가능. 로그는 1명으로 시작(솔로), 로그 안에서 초대코드로 파트너 합류 시 2명(커플). 생성 시 솔로/커플 선택 제거 — 커플 여부는 멤버 수에서 파생. **"1인 1방" 불변식·온보딩 게이트 폐기.** (구 `room-modes`의 생성 시 모드 선택을 대체) |
 | 미디어 | **사진(최대 5장) + 2초 영상 1개(옵션)** | 셋로그(Setlog)식 짧은 영상 기록. 카메라 권한 필요, 영상은 용량 가드레일(길이·해상도·압축) 필수 |
@@ -28,7 +28,7 @@
 ```
 [React Native (Expo Dev Client)]
    ├── Supabase JS SDK ──► Supabase
-   │                         ├── Auth (Google/Apple 소셜 — signInWithIdToken)
+   │                         ├── Auth (Apple 네이티브 idToken·signInWithIdToken / Google OAuth 웹 플로우·PKCE)
    │                         ├── Postgres (RLS)
    │                         ├── Storage (muklog-photos)
    │                         └── Realtime (방 단위 구독)
@@ -124,7 +124,9 @@ muklog_photos                    -- 먹로그당 최대 5장 (영상 1개와는 
 AuthGate (앱 진입)  ── (2026-06-12 social-auth: 익명 자동발급 → 소셜 로그인 전용)
   ├─ loading        → SplashView (getSession 부트스트랩)
   ├─ unauthenticated → [LoginScreen]  (Apple/Google 버튼 · Android는 Apple 숨김)
-  │     └─ 소셜 로그인 성공 → profiles 보장 → authenticated
+  │     ├─ Apple  → 네이티브 idToken → signInWithIdToken
+  │     ├─ Google → OAuth 웹 플로우(인앱 브라우저 → muklog:// 리다이렉트 → exchangeCodeForSession) (2026-06-14 google-oauth-web)
+  │     └─ 로그인 성공 → profiles 보장 → authenticated
   ├─ authenticated  → 곧바로 [HomeTabs]  (※ Onboarding/멤버십 게이트 폐기)
   └─ error          → AuthErrorView(재시도)
   ※ ~~익명 세션 확보 → 곧바로 HomeTabs~~ (구 정책, social-auth로 대체)
@@ -169,7 +171,8 @@ Profile (헤더 진입)
 | `room-modes` | 솔로/커플 방 모드 (생성 흐름 모드 선택 + 정원 트리거 모드화 + `rooms.mode`/삭제 라이프사이클 스키마 필드) | #1 확장 | ✅ 완료 |
 | `room-leave` (경량) | 방 나가기(즉시): `leave_room()` RPC + Profile 화면 진입 + 0명 시 방 삭제 / 1명 잔존 시 보존 | #5 일부(즉시판) | ✅ 완료 |
 | `multi-log-home` | **멀티 로그 전환**: 온보딩/멤버십 게이트 제거 → HomeTabs 직행. 먹로그탭=내 로그 목록(카드·memberCount 배지) + 빈 상태. 헤더 +버튼=**로그 생성 단일 액션**(액션시트 없음 — 로그 입장 UI는 log-invite로 트리밍). `list_my_rooms` DEFINER RPC. 마이그레이션 `20260610150000_multi_log_home.sql`(create/join ALREADY_IN_ROOM 가드 제거·join 솔로 조인 허용·정원 2 통일·modes.ts 동기화·**`leave_room(p_room_id)` 인자화 선반영**). 로그 카드 탭 → LogScreen(최소 stub). Profile 나가기 제거. | 구조 전환 | ✅ 완료 |
-| `social-auth` | **인증 정책 전환**: 익명 자동발급 제거 → Google(네이티브 `@react-native-google-signin`)/Apple(`expo-apple-authentication`) 소셜 로그인 전용. AuthState 5상태(loading/unauthenticated/authenticating/authenticated/error) + LoginScreen(킷 mk-auth) + 인앱 로고 `AppMark` + 로그아웃(Profile). `userId` 계약 보존. OAuth 키 미발급 → 코드/모킹테스트 완성, 라이브는 키 발급 후 이월(미검증). `docs/sprint/sprint-20260612-social-auth/plan.md`. | 인증 정책 변경 | ✅ 완료 |
+| `social-auth` | **인증 정책 전환**: 익명 자동발급 제거 → Google(~~네이티브 `@react-native-google-signin`~~ → google-oauth-web에서 OAuth 웹으로 교체)/Apple(`expo-apple-authentication`) 소셜 로그인 전용. AuthState 5상태(loading/unauthenticated/authenticating/authenticated/error) + LoginScreen(킷 mk-auth) + 인앱 로고 `AppMark` + 로그아웃(Profile). `userId` 계약 보존. OAuth 키 미발급 → 코드/모킹테스트 완성, 라이브는 키 발급 후 이월(미검증). `docs/sprint/sprint-20260612-social-auth/plan.md`. | 인증 정책 변경 | ✅ 완료 |
+| `google-oauth-web` | **Google 로그인 OAuth 웹 전환**: 라이브 검증 중 발견 — 네이티브 `@react-native-google-signin`(GIDSignIn)이 idToken에 자동으로 심는 nonce를 노출/제어 불가 → Supabase GoTrue nonce 검증을 통과 못 함(`Passed nonce…`/`Nonces mismatch`). 라이브러리 제거하고 **`signInWithOAuth`(PKCE)+`expo-web-browser`+`exchangeCodeForSession`** 웹 플로우로 교체(`src/features/auth/oauthSignIn.ts`). Apple은 네이티브 유지. `supabase` 클라 `flowType: 'pkce'`, 앱 스킴 `muklog://` 리다이렉트. 백엔드: Supabase Google 프로바이더에 웹 Client ID+Secret + Redirect URL `muklog://**`, Google Console에 Supabase 콜백 등록. 라이브 로그인 검증 완료. (별도 sprint 폴더 없음 — 라이브 디버깅 중 처리) | 인증 통합 수정 | ✅ 완료 |
 | `log-invite` | 로그 진입(LogScreen) 후 초대코드 표시·복사 + **로그 입장(join) UI**(`JoinLogScreen` + +버튼 액션시트 "로그 입장"). join으로 2번째 멤버 합류 시 커플화. (구 `room-promote` 흡수 + multi-log-home에서 트리밍한 join UI. `join_room` RPC·`useJoinRoom`·`code.ts`는 multi-log-home에서 선반영/보존됨) | #1 신규 | ✅ 완료 |
 | `muklog-video` | 2초 영상 캡처/업로드 (카메라 권한 + `muklogs.video_*` + 용량 가드레일). muklog-editor 이후 의존 | #4 확장 | 예정 |
 | ~~`room-tabs`~~ | (대체됨) 멀티 로그 전환으로 HomeTabs/LogScreen 구조가 됨 → `multi-log-home`로 흡수 | #2 | ~~폐기~~ |

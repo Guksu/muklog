@@ -23,12 +23,8 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { supabase } from '@/lib/supabase';
 
 import { AuthErrorToken, messageForAuthError } from './errors';
-import {
-  configureGoogleSignIn,
-  signInWithAppleNative,
-  signInWithGoogleNative,
-  type NativeSignInResult,
-} from './socialSignIn';
+import { signInWithGoogleOAuth } from './oauthSignIn';
+import { signInWithAppleNative, type NativeSignInResult } from './socialSignIn';
 
 export type AuthState =
   | { status: 'loading' }
@@ -45,7 +41,7 @@ const IdTokenProvider = {
 
 type AuthContextValue = {
   state: AuthState;
-  /** Google 소셜 로그인 시도. authenticating(google) → idToken → signInWithIdToken. */
+  /** Google 소셜 로그인 시도. authenticating(google) → OAuth 웹 플로우 → exchangeCodeForSession. */
   signInWithGoogle: () => Promise<void>;
   /** Apple 소셜 로그인 시도(iOS 전용). authenticating(apple) → identityToken → signInWithIdToken. */
   signInWithApple: () => Promise<void>;
@@ -89,7 +85,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // 네이티브 헬퍼 결과를 상태 전이로 매핑(Google/Apple 공통).
+  // Apple 네이티브 결과를 상태 전이로 매핑.
   //   ok        → signInWithIdToken → onAuthStateChange가 ensureProfileAndAuth→authenticated 수행.
   //   cancelled → unauthenticated + loginError=null.
   //   실패      → unauthenticated + loginError=메시지.
@@ -127,8 +123,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signInWithGoogle = async () => {
     setLoginError(null);
     setState({ status: 'authenticating', provider: 'google' });
-    const nativeResult = await signInWithGoogleNative();
-    await runSocialSignIn({ provider: 'google', nativeResult });
+    const result = await signInWithGoogleOAuth();
+    if (!result.ok) {
+      if (mountedRef.current) {
+        setState({ status: 'unauthenticated' });
+        setLoginError(messageForAuthError({ token: result.token }));
+      }
+      return;
+    }
+    // exchangeCodeForSession이 세션을 설정 → onAuthStateChange가 처리하지만, 일관성을 위해 직접 보장.
+    setLoginError(null);
+    await ensureProfileAndAuth({ userId: result.userId });
   };
 
   const signInWithApple = async () => {
@@ -146,15 +151,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoginError(null);
     }
   };
-
-  useEffect(
-    function configureGoogleOnMount() {
-      // GoogleSignin.configure는 앱 부팅 시 1회(plan ③). env 누락은 throw하지만,
-      // 부트스트랩/로그인과 독립적으로 한 번만 수행한다.
-      configureGoogleSignIn();
-    },
-    [],
-  );
 
   useEffect(
     function bootstrapAuth() {

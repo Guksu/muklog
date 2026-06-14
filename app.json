@@ -41,13 +41,7 @@
         }
       ],
       "./plugins/withFmtConstevalFix",
-      "expo-apple-authentication",
-      [
-        "@react-native-google-signin/google-signin",
-        {
-          "iosUrlScheme": "com.googleusercontent.apps.970995894158-i1sha929svp5e2nq5mb0pl189cm73p75"
-        }
-      ]
+      "expo-apple-authentication"
     ],
     "extra": {
       "eas": {
