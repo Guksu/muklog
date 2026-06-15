@@ -56,19 +56,32 @@ describe('mapRoomError — log-invite 신규 토큰 (2종, get_room, C2)', () =>
     );
   });
 
-  it('ROOM_ERROR_MESSAGES는 정확히 9개의 토큰 키를 가진다 (기존 7 + log-invite 2, C2 단일 출처)', () => {
+  it('ROOM_ERROR_MESSAGES는 정확히 10개의 토큰 키를 가진다 (기존 9 + log-name 1, C2 단일 출처)', () => {
     expect(Object.keys(ROOM_ERROR_MESSAGES).sort()).toEqual(
       [
         'ALREADY_IN_ROOM',
         'CODE_GENERATION_FAILED',
         'INVALID_CODE',
         'INVALID_MODE',
+        'NAME_TOO_LONG',
         'NOT_AUTHENTICATED',
         'NOT_A_MEMBER',
         'ROOM_FULL',
         'ROOM_NOT_FOUND',
         'SOLO_ROOM_NOT_JOINABLE',
       ].sort(),
+    );
+  });
+});
+
+describe('mapRoomError — log-name 신규 토큰 (1종, rename_room, C2)', () => {
+  it('NAME_TOO_LONG', () => {
+    expect(mapRoomError({ error: new Error('NAME_TOO_LONG') })).toBe('이름은 20자까지 쓸 수 있어요.');
+  });
+
+  it('Postgres가 NAME_TOO_LONG 토큰을 텍스트로 감싸도 포함 매칭한다', () => {
+    expect(mapRoomError({ error: new Error('ERROR: NAME_TOO_LONG (SQLSTATE P0001)') })).toBe(
+      '이름은 20자까지 쓸 수 있어요.',
     );
   });
 });

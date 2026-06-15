@@ -16,12 +16,14 @@ const row = (over?: Partial<{
   member_count: number;
   created_at: string;
   joined_at: string;
+  name: string | null;
 }>) => ({
   room_id: 'r1',
   mode: 'couple',
   member_count: 2,
   created_at: '2026-06-10T00:00:00.000Z',
   joined_at: '2026-06-10T01:00:00.000Z',
+  name: null,
   ...over,
 });
 
@@ -33,7 +35,7 @@ describe('useMyLogs', () => {
   it('rows를 받으면 ready로 전이하고 snake→camel로 매핑한다 (C1)', async () => {
     rpc.mockResolvedValueOnce({
       data: [
-        row({ room_id: 'r1', mode: 'couple', member_count: 2 }),
+        row({ room_id: 'r1', mode: 'couple', member_count: 2, name: '우리 맛집' }),
         row({ room_id: 'r2', mode: 'solo', member_count: 1, joined_at: '2026-06-09T00:00:00.000Z' }),
       ],
       error: null,
@@ -54,6 +56,7 @@ describe('useMyLogs', () => {
           memberCount: 2,
           createdAt: '2026-06-10T00:00:00.000Z',
           joinedAt: '2026-06-10T01:00:00.000Z',
+          name: '우리 맛집',
         },
         {
           roomId: 'r2',
@@ -61,9 +64,29 @@ describe('useMyLogs', () => {
           memberCount: 1,
           createdAt: '2026-06-10T00:00:00.000Z',
           joinedAt: '2026-06-09T00:00:00.000Z',
+          name: null,
         },
       ],
     });
+  });
+
+  it('name 컬럼 매핑: 값 있으면 MyLog.name, null/누락이면 null (C3)', async () => {
+    rpc.mockResolvedValueOnce({
+      data: [
+        row({ room_id: 'r1', name: '맛집로그' }),
+        row({ room_id: 'r2', name: null }),
+        // name 키 자체가 누락된 행(투영 이전 환경 방어) → null
+        { room_id: 'r3', mode: 'solo', member_count: 1, created_at: '2026-06-10T00:00:00.000Z', joined_at: '2026-06-10T00:00:00.000Z' },
+      ],
+      error: null,
+    });
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('ready');
+    });
+    const logs = result.current.state.status === 'ready' ? result.current.state.logs : [];
+    expect(logs.map((l) => l.name)).toEqual(['맛집로그', null, null]);
   });
 
   it('빈 배열이면 ready + logs:[] 로 전이한다 (빈 상태=정상, 에러 아님) (C9)', async () => {

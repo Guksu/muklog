@@ -43,4 +43,9 @@ describe('Icon', () => {
     renderWithTheme(<Icon name={IconName.Search} />);
     expect(screen.getByTestId('icon-search')).toBeTruthy();
   });
+
+  it('pencil 글리프(로그 이름 편집, log-name)를 렌더한다', () => {
+    renderWithTheme(<Icon name={IconName.Pencil} />);
+    expect(screen.getByTestId('icon-pencil')).toBeTruthy();
+  });
 });

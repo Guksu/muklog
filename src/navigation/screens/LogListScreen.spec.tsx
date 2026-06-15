@@ -7,10 +7,11 @@ import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
-// 배럴 모킹: 순수 errors는 실 구현(mapRoomError) 사용, 훅/컨텍스트만 모킹(supabase 비유입).
+// 배럴 모킹: 순수 errors/logName(displayLogName)은 실 구현 사용, 훅/컨텍스트만 모킹(supabase 비유입).
 jest.mock('@/features/room', () => {
   const errors = jest.requireActual('@/features/room/errors');
-  return { ...errors, useMyLogsContext: jest.fn(), useCreateRoom: jest.fn() };
+  const logName = jest.requireActual('@/features/room/logName');
+  return { ...errors, ...logName, useMyLogsContext: jest.fn(), useCreateRoom: jest.fn() };
 });
 
 // 본인 프로필(카드/CTA 닉네임 표시)
@@ -42,12 +43,14 @@ const log = (over?: Partial<{
   memberCount: number;
   createdAt: string;
   joinedAt: string;
+  name: string | null;
 }>) => ({
   roomId: 'r1',
   mode: 'couple',
   memberCount: 2,
   createdAt: '2026-06-10T00:00:00.000Z',
   joinedAt: '2026-06-10T01:00:00.000Z',
+  name: null,
   ...over,
 });
 
@@ -181,6 +184,35 @@ describe('LogListScreen — 카드(list)', () => {
     expect(screen.getByText('맛집을 기록해보세요')).toBeTruthy();
     // 거짓 음성("없어요") 카피는 제거됨.
     expect(screen.queryByText('아직 기록한 맛집이 없어요')).toBeNull();
+  });
+
+  it('log.name이 있으면 카드 제목으로 이름을 그대로 표시한다 (T7·displayLogName)', () => {
+    useMyLogsContextMock.mockReturnValue({
+      state: { status: 'ready', logs: [log({ roomId: 'r1', name: '우리 맛집', memberCount: 2 })] },
+      refresh,
+    });
+    renderWithTheme(<LogListScreen />);
+    expect(screen.getByText('우리 맛집')).toBeTruthy();
+    // 이름이 있으면 폴백("민지 ♥ 짝꿍")은 안 보인다.
+    expect(screen.queryByText('민지 ♥ 짝꿍')).toBeNull();
+  });
+
+  it('log.name=null & 커플이면 "{본인닉} ♥ 짝꿍" 폴백 제목을 표시한다 (T7)', () => {
+    useMyLogsContextMock.mockReturnValue({
+      state: { status: 'ready', logs: [log({ roomId: 'r1', name: null, memberCount: 2 })] },
+      refresh,
+    });
+    renderWithTheme(<LogListScreen />);
+    expect(screen.getByText('민지 ♥ 짝꿍')).toBeTruthy();
+  });
+
+  it('log.name=null & 솔로면 "{본인닉}의 기록" 폴백 제목을 표시한다 (T7)', () => {
+    useMyLogsContextMock.mockReturnValue({
+      state: { status: 'ready', logs: [log({ roomId: 'r1', name: null, memberCount: 1 })] },
+      refresh,
+    });
+    renderWithTheme(<LogListScreen />);
+    expect(screen.getByText('민지의 기록')).toBeTruthy();
   });
 
   it('카드 하단에 "새 로그 시작하기" CTA가 있고, 누르면 createRoom→refresh를 호출한다', async () => {

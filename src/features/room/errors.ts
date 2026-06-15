@@ -19,6 +19,9 @@ export const ROOM_ERROR_MESSAGES: Record<string, string> = {
   //   ⚠️ SQL(raise) ↔ 이 매핑이 단일 출처 — 20260611120000_log_invite.sql 과 동기화 유지.
   NOT_A_MEMBER: '이 로그에 접근할 권한이 없어요.',
   ROOM_NOT_FOUND: '로그를 찾을 수 없어요.',
+  // log-name 신규 토큰 (plan §3.4, C2). rename_room(p_room_id, p_name) RPC가 raise.
+  //   ⚠️ SQL(raise) ↔ 이 매핑이 단일 출처 — 20260615120000_log_name.sql 과 동기화 유지.
+  NAME_TOO_LONG: '이름은 20자까지 쓸 수 있어요.',
 };
 
 /** 토큰 미일치(네트워크/그 외) 시 기본 메시지. */

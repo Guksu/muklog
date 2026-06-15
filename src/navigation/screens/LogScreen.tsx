@@ -30,7 +30,13 @@ import {
 } from '@/components';
 import { useAuth } from '@/features/auth';
 import { useProfile } from '@/features/profile';
-import { useRoom } from '@/features/room';
+import {
+  displayLogName,
+  LogNameSheet,
+  LogTitleButton,
+  useRenameRoom,
+  useRoom,
+} from '@/features/room';
 import { MuklogList } from '@/features/muklog';
 import { useTheme } from '@/theme';
 
@@ -38,10 +44,6 @@ import { Routes, type AppStackParamList } from '../routes';
 
 const HEADER_AVATAR_SIZE = 28;
 const COPIED_FEEDBACK_MS = 2000;
-
-// 로그명: 솔로="{닉}의 기록" / 커플="{닉} ♥ 짝꿍"(파트너 실데이터 미보유 → "짝꿍" 폴백, plan §117).
-const logTitle = ({ nickname, isCouple }: { nickname: string; isCouple: boolean }): string =>
-  isCouple ? `${nickname} ♥ 짝꿍` : `${nickname}의 기록`;
 
 // 커플 컴팩트 초대코드 행 — link 아이콘 + "초대코드 XXXXXX" + 복사(클립보드).
 const CompactInviteRow = ({ code }: { code: string }) => {
@@ -124,11 +126,15 @@ export const LogScreen = () => {
   // ⚠️ 훅은 조건부 호출 불가 → roomId/meId 없을 때도 안전한 값으로 호출하고 렌더에서 분기.
   const { state, refresh } = useRoom({ roomId: roomId ?? '' });
   const { state: profileState } = useProfile({ userId: meId });
+  const { renameRoom, loading: renaming, error: renameError } = useRenameRoom();
   const meNickname =
     profileState.status === 'ready' && profileState.profile.nickname
       ? profileState.profile.nickname
       : '나';
   const meAvatarUrl = profileState.status === 'ready' ? profileState.profile.avatarUrl : null;
+
+  // 이름 편집 시트 open 상태(로컬 UI). 저장 성공 시 닫고 useRoom.refresh로 헤더 갱신(비-낙관적, plan §3.4).
+  const [editOpen, setEditOpen] = React.useState(false);
 
   if (!roomId) {
     return (
@@ -168,6 +174,44 @@ export const LogScreen = () => {
   const { room } = state;
   const isCouple = room.memberCount >= 2;
 
+  // 헤더/시트 표시명·placeholder 단일 출처(displayLogName, 결정2 B'). selfNickname=본인 닉(파트너 닉 미사용).
+  const title = displayLogName({
+    name: room.name,
+    memberCount: room.memberCount,
+    selfNickname: meNickname,
+  });
+  // 시트 placeholder = 이름 없을 때의 폴백명(displayLogName name:null). 입력 초기값은 이름 있으면 name·없으면 빈 문자열.
+  const fallbackName = displayLogName({
+    name: null,
+    memberCount: room.memberCount,
+    selfNickname: meNickname,
+  });
+
+  // 저장: 입력 원문(draft)을 renameRoom에 전달(정규화는 훅 내부) → 성공 시 시트 닫고 refresh로 헤더 갱신.
+  //   실패(throw)는 useRenameRoom이 error를 세팅하고 시트는 열린 채(입력 보존·재시도). refresh는 1회만(비용 §8).
+  const handleSaveName = async (next: string) => {
+    try {
+      await renameRoom({ roomId, name: next });
+      setEditOpen(false);
+      await refresh();
+    } catch {
+      // error 메시지는 useRenameRoom.error → LogNameSheet error prop으로 표시. 시트 유지.
+    }
+  };
+
+  // 헤더 아바타 겹침 슬롯(LogTitleButton.avatarSlot로 주입). 데이터(아바타 url·커플 여부)는 여기서 구성.
+  const avatarSlot = (
+    <View style={styles.avatarStack}>
+      <Avatar url={meAvatarUrl} userId={meId} size={HEADER_AVATAR_SIZE} />
+      {isCouple ? (
+        // 파트너 실데이터 미보유 → 익명 아바타(🙂) 겹침(marginLeft -9, 킷 23).
+        <View style={{ marginLeft: -9 }}>
+          <Avatar url={null} userId={null} nickname={null} size={HEADER_AVATAR_SIZE} />
+        </View>
+      ) : null}
+    </View>
+  );
+
   return (
     <Screen edges={['left', 'right', 'bottom']} style={styles.screen}>
       {/* 상단 헤더 — 뒤로가기 + 아바타 겹침 + 로그명(킷 mk-log:18-29). 킷 헤더엔 멤버 배지 없음(커플 여부는 아바타 겹침으로 표현).
@@ -192,21 +236,8 @@ export const LogScreen = () => {
           accessibilityLabel="뒤로 가기"
           onPress={() => navigation.goBack()}
         />
-        {/* 킷 mk-log:20 — 아바타 겹침 + 로그명을 inner row(gap 8, marginLeft 2)로 묶어 flex 1. */}
-        <View style={[styles.headerMain, { gap: theme.spacing[8] }]}>
-          <View style={styles.avatarStack}>
-            <Avatar url={meAvatarUrl} userId={meId} size={HEADER_AVATAR_SIZE} />
-            {isCouple ? (
-              // 파트너 실데이터 미보유 → 익명 아바타(🙂) 겹침(marginLeft -9, 킷 23).
-              <View style={{ marginLeft: -9 }}>
-                <Avatar url={null} userId={null} nickname={null} size={HEADER_AVATAR_SIZE} />
-              </View>
-            ) : null}
-          </View>
-          <Text variant="navTitle" color="fg" numberOfLines={1} style={styles.logTitle}>
-            {logTitle({ nickname: meNickname, isCouple })}
-          </Text>
-        </View>
+        {/* 킷 mk-log:32-41 — 아바타 겹침 + 로그명 + ✏️를 하나의 탭 가능 버튼으로(탭 → 이름 편집 시트 open). */}
+        <LogTitleButton title={title} avatarSlot={avatarSlot} onEdit={() => setEditOpen(true)} />
       </View>
 
       {/* 초대 영역 — 솔로=강조 카드 / 커플=컴팩트 코드 행. */}
@@ -220,6 +251,17 @@ export const LogScreen = () => {
 
       {/* 맛집 리스트 + 카테고리 필터 칩 + 섹션 헤더 + 입력 FAB — MuklogList(developer 배선). */}
       <MuklogList roomId={roomId} meId={meId} />
+
+      {/* 로그 이름 편집 시트(킷 mk-log:91-102) — pencil 탭으로 open. 저장 → renameRoom → 성공 시 close + refresh. */}
+      <LogNameSheet
+        open={editOpen}
+        initialValue={room.name ?? ''}
+        placeholder={fallbackName}
+        saving={renaming}
+        error={renameError}
+        onClose={() => setEditOpen(false)}
+        onSave={(next) => void handleSaveName(next)}
+      />
     </Screen>
   );
 };
@@ -227,11 +269,9 @@ export const LogScreen = () => {
 const styles = StyleSheet.create({
   screen: { padding: 0 },
   center: { textAlign: 'center' },
-  // 킷 mk-log:18 — paddingBottom 6, 좌우는 인라인(8/12). 뒤로가기↔본문 간격은 headerMain marginLeft.
+  // 킷 mk-log:18 — paddingBottom 6, 좌우는 인라인(8/12). 뒤로가기↔본문 간격은 LogTitleButton marginLeft.
   header: { flexDirection: 'row', alignItems: 'center', paddingBottom: 6 },
-  headerMain: { flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: 2 },
   avatarStack: { flexDirection: 'row', alignItems: 'center' },
-  logTitle: { flex: 1 },
   compactRow: { flexDirection: 'row', alignItems: 'center' },
   compactCode: { flex: 1 },
   // 솔로 배너(킷 mk-log:36-42) — 헤딩 행(💌+텍스트), 이모지는 클리핑 헤드룸 위해 lineHeight 지정.

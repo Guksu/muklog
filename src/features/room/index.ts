@@ -6,6 +6,13 @@ export { useRoom, type RoomDetail, type RoomDetailState } from './useRoom';
 export { useCreateRoom, type CreateRoomResult } from './useCreateRoom';
 export { useJoinRoom, type JoinRoomResult } from './useJoinRoom';
 export { useLeaveRoom, type LeaveRoomResult } from './useLeaveRoom';
+export { useRenameRoom, type RenameRoomResult } from './useRenameRoom';
+export {
+  LOG_NAME_MAX_LENGTH,
+  normalizeLogName,
+  isLogNameTooLong,
+  displayLogName,
+} from './logName';
 export { mapRoomError, ROOM_ERROR_MESSAGES, DEFAULT_ROOM_ERROR_MESSAGE } from './errors';
 export { ROOM_MODES, ROOM_CAPACITY, type RoomMode } from './modes';
 export {
@@ -14,3 +21,6 @@ export {
   normalizeInviteCodeInput,
   isInviteCodeComplete,
 } from './code';
+// 로그 이름(log-name) 프리젠테이션 컴포넌트 — developer가 데이터/배선을 붙인다.
+export { LogNameSheet, type LogNameSheetProps } from './components/LogNameSheet';
+export { LogTitleButton, type LogTitleButtonProps } from './components/LogTitleButton';

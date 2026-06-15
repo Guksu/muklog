@@ -20,6 +20,7 @@ export type MyLog = {
   memberCount: number; // 1=혼자 / 2=둘이 (DEFINER 집계)
   createdAt: string; // ISO
   joinedAt: string; // ISO
+  name: string | null; // 사용자 지정 로그 이름(null=미지정 → 카드에서 폴백 표기, log-name)
 };
 
 export type MyLogsState =
@@ -34,6 +35,7 @@ type MyLogRow = {
   member_count: number;
   created_at: string;
   joined_at: string;
+  name?: string | null; // list_my_rooms name 투영(log-name). 누락/null 모두 null로 흡수.
 };
 
 /**
@@ -47,6 +49,7 @@ const toMyLog = ({ row }: { row: MyLogRow }): MyLog => ({
   memberCount: row.member_count,
   createdAt: row.created_at,
   joinedAt: row.joined_at,
+  name: row.name ?? null,
 });
 
 /**

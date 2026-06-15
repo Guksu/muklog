@@ -25,10 +25,78 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
-// 배럴 모킹: useRoom만 모킹(supabase 비유입). 나머지 순수 export는 실 구현 유지.
+// 배럴 모킹: useRoom·useRenameRoom 모킹 + displayLogName/code는 실 구현(표시명 로직 직접 검증).
+//   LogNameSheet/LogTitleButton는 경량 테스트 더블로 대체 — 실 구현은 @/components를 거쳐 배럴을 재유입(순환)시켜
+//   TDZ를 유발한다. 배선 로직(open/save/error/disabled)만 검증하면 충분(킷 비주얼 충실도는 qa-visual·각 컴포넌트 spec).
 jest.mock('@/features/room', () => {
-  const actual = jest.requireActual('@/features/room/code');
-  return { ...actual, useRoom: jest.fn() };
+  const ReactLib = require('react');
+  const { Pressable, Text, TextInput, View } = require('react-native');
+  const h = ReactLib.createElement;
+  const code = jest.requireActual('@/features/room/code');
+  const logName = jest.requireActual('@/features/room/logName');
+  // 더블: 제목 + ✏️를 하나의 탭 버튼으로(label "로그 이름 편집"). avatarSlot는 그대로 렌더.
+  const LogTitleButton = ({
+    title,
+    onEdit,
+    avatarSlot,
+  }: {
+    title: string;
+    onEdit: () => void;
+    avatarSlot?: unknown;
+  }) =>
+    h(Pressable, { accessibilityLabel: '로그 이름 편집', onPress: onEdit }, avatarSlot, h(Text, null, title));
+  // 더블: open일 때만 입력(label "로그 이름")·힌트·에러·저장(label "저장") 렌더. draft 로컬 state.
+  const LogNameSheet = ({
+    open,
+    initialValue,
+    placeholder,
+    onSave,
+    saving = false,
+    error = null,
+  }: {
+    open: boolean;
+    initialValue: string;
+    placeholder: string;
+    onSave: (next: string) => void;
+    saving?: boolean;
+    error?: string | null;
+  }) => {
+    const [draft, setDraft] = ReactLib.useState(initialValue);
+    ReactLib.useEffect(() => {
+      if (open) setDraft(initialValue);
+    }, [open, initialValue]);
+    if (!open) return null;
+    return h(
+      View,
+      null,
+      h(TextInput, {
+        accessibilityLabel: '로그 이름',
+        value: draft,
+        onChangeText: setDraft,
+        placeholder,
+      }),
+      h(Text, null, '우리만의 이름을 지어보세요. 비워두면 기본 이름으로 돌아가요.'),
+      error ? h(Text, null, error) : null,
+      h(
+        Pressable,
+        {
+          accessibilityLabel: '저장',
+          accessibilityState: { disabled: saving },
+          disabled: saving,
+          onPress: () => onSave(draft),
+        },
+        h(Text, null, '저장'),
+      ),
+    );
+  };
+  return {
+    ...code,
+    ...logName,
+    useRoom: jest.fn(),
+    useRenameRoom: jest.fn(),
+    LogTitleButton,
+    LogNameSheet,
+  };
 });
 
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn().mockResolvedValue(true) }));
@@ -51,15 +119,17 @@ jest.mock('@/features/muklog', () => {
   };
 });
 
-import { fireEvent } from '@testing-library/react-native';
+import { fireEvent, waitFor } from '@testing-library/react-native';
 
-import { useRoom } from '@/features/room';
+import { useRoom, useRenameRoom } from '@/features/room';
 import { useProfile } from '@/features/profile';
 import { LogScreen } from './LogScreen';
 
 const useRoomMock = useRoom as jest.Mock;
+const useRenameRoomMock = useRenameRoom as jest.Mock;
 const useProfileMock = useProfile as jest.Mock;
 const refresh = jest.fn();
+const renameRoom = jest.fn();
 
 const setRoomState = (state: unknown) => {
   useRoomMock.mockReturnValue({ state, refresh });
@@ -68,9 +138,12 @@ const setRoomState = (state: unknown) => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockGoBack.mockClear();
+  refresh.mockReset();
+  renameRoom.mockReset();
   mockTopInset.current = 0;
   mockParams.current = { roomId: 'r1' };
   setRoomState({ status: 'loading' });
+  useRenameRoomMock.mockReturnValue({ renameRoom, loading: false, error: null });
   useProfileMock.mockReturnValue({
     state: { status: 'ready', profile: { nickname: '민지', avatarUrl: null } },
     refresh: jest.fn(),
@@ -179,12 +252,110 @@ describe('LogScreen', () => {
   it('헤더에 뒤로가기 버튼이 있고 탭하면 navigation.goBack을 호출한다 (킷 mk-log:19)', () => {
     setRoomState({
       status: 'ready',
-      room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 1, mode: 'couple' },
+      room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 1, mode: 'couple', name: null },
     });
     renderWithTheme(<LogScreen />);
     const back = screen.getByLabelText('뒤로 가기');
     expect(back).toBeTruthy();
     fireEvent.press(back);
     expect(mockGoBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LogScreen — 로그 이름(log-name, T6)', () => {
+  const readyRoom = (over?: Record<string, unknown>) => ({
+    status: 'ready',
+    room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 2, mode: 'couple', name: null, ...over },
+  });
+
+  it('room.name이 있으면 헤더 제목으로 이름을 표시한다 (displayLogName)', () => {
+    setRoomState(readyRoom({ name: '우리 맛집' }));
+    renderWithTheme(<LogScreen />);
+    expect(screen.getByText('우리 맛집')).toBeTruthy();
+    expect(screen.queryByText('민지 ♥ 짝꿍')).toBeNull();
+  });
+
+  it('room.name=null이면 폴백 제목("{본인닉} ♥ 짝꿍")을 표시한다', () => {
+    setRoomState(readyRoom({ name: null, memberCount: 2 }));
+    renderWithTheme(<LogScreen />);
+    expect(screen.getByText('민지 ♥ 짝꿍')).toBeTruthy();
+  });
+
+  it('헤더 제목 버튼(✏️)을 탭하면 이름 편집 시트가 열린다', () => {
+    setRoomState(readyRoom({ name: '우리 맛집' }));
+    renderWithTheme(<LogScreen />);
+    // 시트 닫힘 상태: 힌트/입력(accessibilityLabel "로그 이름")이 없음.
+    expect(screen.queryByLabelText('로그 이름')).toBeNull();
+    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    // 시트 열림: 입력 + 힌트 노출.
+    expect(screen.getByLabelText('로그 이름')).toBeTruthy();
+    expect(screen.getByText('우리만의 이름을 지어보세요. 비워두면 기본 이름으로 돌아가요.')).toBeTruthy();
+  });
+
+  it('이름 입력 후 저장하면 renameRoom(정규화 전 원문) 호출 → 성공 시 refresh + 시트 닫힘', async () => {
+    renameRoom.mockResolvedValueOnce({ roomId: 'r1', name: '새이름' });
+    setRoomState(readyRoom({ name: null }));
+    renderWithTheme(<LogScreen />);
+
+    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    fireEvent.changeText(screen.getByLabelText('로그 이름'), '새이름');
+    fireEvent.press(screen.getByLabelText('저장'));
+
+    await waitFor(() => {
+      expect(renameRoom).toHaveBeenCalledWith({ roomId: 'r1', name: '새이름' });
+    });
+    // 성공 후 useRoom.refresh 1회 + 시트 닫힘.
+    await waitFor(() => {
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(screen.queryByLabelText('로그 이름')).toBeNull();
+    });
+  });
+
+  it('빈 입력으로 저장하면 renameRoom에 빈 문자열을 전달한다(서버 정규화 null → 폴백 복귀)', async () => {
+    renameRoom.mockResolvedValueOnce({ roomId: 'r1', name: null });
+    setRoomState(readyRoom({ name: '기존이름', memberCount: 1 }));
+    renderWithTheme(<LogScreen />);
+
+    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    fireEvent.changeText(screen.getByLabelText('로그 이름'), '');
+    fireEvent.press(screen.getByLabelText('저장'));
+
+    await waitFor(() => {
+      expect(renameRoom).toHaveBeenCalledWith({ roomId: 'r1', name: '' });
+    });
+  });
+
+  it('저장 실패 시 시트가 닫히지 않고 refresh도 호출하지 않는다(입력 보존·재시도)', async () => {
+    renameRoom.mockRejectedValueOnce(new Error('NAME_TOO_LONG'));
+    useRenameRoomMock.mockReturnValue({
+      renameRoom,
+      loading: false,
+      error: '이름은 20자까지 쓸 수 있어요.',
+    });
+    setRoomState(readyRoom({ name: null }));
+    renderWithTheme(<LogScreen />);
+
+    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    fireEvent.changeText(screen.getByLabelText('로그 이름'), 'x');
+    fireEvent.press(screen.getByLabelText('저장'));
+
+    await waitFor(() => {
+      expect(renameRoom).toHaveBeenCalled();
+    });
+    // 실패: 시트 유지 + 에러 메시지 표시 + refresh 미호출.
+    expect(screen.getByLabelText('로그 이름')).toBeTruthy();
+    expect(screen.getByText('이름은 20자까지 쓸 수 있어요.')).toBeTruthy();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('saving 중이면 저장 버튼이 로딩(비활성)이다', () => {
+    useRenameRoomMock.mockReturnValue({ renameRoom, loading: true, error: null });
+    setRoomState(readyRoom({ name: null }));
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    const save = screen.getByLabelText('저장');
+    expect(save.props.accessibilityState?.disabled ?? save.props.disabled).toBeTruthy();
   });
 });

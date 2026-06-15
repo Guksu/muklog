@@ -176,6 +176,7 @@ Profile (헤더 진입)
 | `ui-fidelity-audit` | **전체 화면 비주얼 충실도 전수 감사·수정**: 킷 templates/muklog 대비 전 화면(Login·Splash·LogList·LogScreen·Detail·Profile·MapTab·헤더류·시트) 3축(레이아웃·safe-area / 비주얼·토큰 / 텍스트·카피) 대조·정합. **구조 4건 킷 정합(사용자 결정)**: ① MuklogEntrySheet(하단시트) → **MuklogEditor 풀스크린 라우트**(+SubBar+저장) + 장소검색 **풀스크린 스왑(PlaceSearchView)**, ② **RoomCreatedScreen 축하화면 복원**(multi-log-home의 인라인-only 일부 환원), ③ 공용 **SubBar** 프리미티브 신설 + Join/Profile 헤더 SubBar 정합(headerShown:false), ④ MapTab 헤더/범례 셸(실지도는 map-tab). 공용 Sheet safe-area·maxHeight 캡. (후속) MuklogEditor `Screen edges`에서 `'top'` 제외 — SubBar가 top inset 직접 처리하므로 이중 적용 버그 수정(다른 SubBar 화면과 동일 패턴). 데이터·계약 불변(회귀 0). `docs/sprint/sprint-20260614-ui-fidelity-audit/`. | UI 정합 | ✅ 완료 |
 | `google-oauth-web` | **Google 로그인 OAuth 웹 전환**: 라이브 검증 중 발견 — 네이티브 `@react-native-google-signin`(GIDSignIn)이 idToken에 자동으로 심는 nonce를 노출/제어 불가 → Supabase GoTrue nonce 검증을 통과 못 함(`Passed nonce…`/`Nonces mismatch`). 라이브러리 제거하고 **`signInWithOAuth`(PKCE)+`expo-web-browser`+`exchangeCodeForSession`** 웹 플로우로 교체(`src/features/auth/oauthSignIn.ts`). Apple은 네이티브 유지. `supabase` 클라 `flowType: 'pkce'`, 앱 스킴 `muklog://` 리다이렉트. 백엔드: Supabase Google 프로바이더에 웹 Client ID+Secret + Redirect URL `muklog://**`, Google Console에 Supabase 콜백 등록. 라이브 로그인 검증 완료. (별도 sprint 폴더 없음 — 라이브 디버깅 중 처리) | 인증 통합 수정 | ✅ 완료 |
 | `log-invite` | 로그 진입(LogScreen) 후 초대코드 표시·복사 + **로그 입장(join) UI**(`JoinLogScreen` + +버튼 액션시트 "로그 입장"). join으로 2번째 멤버 합류 시 커플화. (구 `room-promote` 흡수 + multi-log-home에서 트리밍한 join UI. `join_room` RPC·`useJoinRoom`·`code.ts`는 multi-log-home에서 선반영/보존됨) | #1 신규 | ✅ 완료 |
+| `log-name` | **로그(방) 이름**: `rooms.name`(nullable) + `rename_room(p_room_id,p_name)` DEFINER RPC(멤버 누구나 수정·name-only·trim/20자) + `list_my_rooms`/`get_room` name 투영. LogScreen 헤더 제목 탭(✏️)→`LogNameSheet` 편집, LogList 카드+헤더 표시. 이름 없으면 **본인 닉 폴백**(솔로 `{닉}의 기록`/커플 `{닉} ♥ 짝꿍` — 파트너는 RLS상 "짝꿍" 고정). `displayLogName`·`normalizeLogName`·`useRenameRoom`. 대표 이미지/Realtime 동기화 OUT(후속). QA 2분할 통과(811 green). 라이브: `supabase db push` 후 스모크. `docs/sprint/sprint-20260615-log-name/`. | architecture §7 '로그 이름' | ✅ 완료(DB push·스모크 이월) |
 | `muklog-video` | 2초 영상 캡처/업로드 (카메라 권한 + `muklogs.video_*` + 용량 가드레일). muklog-editor 이후 의존 | #4 확장 | 예정 |
 | ~~`room-tabs`~~ | (대체됨) 멀티 로그 전환으로 HomeTabs/LogScreen 구조가 됨 → `multi-log-home`로 흡수 | #2 | ~~폐기~~ |
 | `muklog-list` | LogScreen 내 먹로그 카드 리스트 | #3 | ✅ 완료 |
@@ -212,7 +213,7 @@ Profile (헤더 진입)
 - **예약 삭제 인프라 미정 사항**: pg_cron(확장 활성화 필요) vs 스케줄 Edge Function 중 택1, cron 주기(예: 매시 vs 매일), 삭제 시 Storage 파일 정리 방식 — `room-lifecycle` 스프린트 착수 시 확정.
 - ~~솔로방의 커플 전환(초대코드 사후 발급)~~ → **멀티 로그 모델로 흡수.** 모든 로그는 솔로로 시작, 로그 내 초대코드로 조인 시 자동 커플화(`log-invite`).
 - **멀티 로그 전환(2026-06-10 결정 → `multi-log-home` ✅ 완료)**: 1인 多로그 + 온보딩 폐기 + HomeTabs(로그 목록)/LogScreen 2단 구조. 후속 미정 사항:
-  - **로그 식별/이름**: 이번엔 **미도입(자동/생략)으로 결정** — 카드는 멤버 배지(혼자/둘이) + 생성일(YYYY.MM.DD)만 표시. 사용자 지정 이름·대표 이미지는 별도 "로그 이름" 슬라이스로 추후.
+  - ~~**로그 식별/이름**: 이번엔 미도입(자동/생략)~~ → **`log-name` ✅ 완료(2026-06-15)**: `rooms.name` + `rename_room` RPC + 카드/헤더 표시·헤더 ✏️ 편집, 이름 없으면 본인 닉 폴백. **대표 이미지(로그 커버)는 여전히 후속**(`log-cover` 슬라이스).
   - **지도 탭(HomeTabs 레벨)**: 모든 로그의 핀 통합 표시 vs 로그별 — `map-tab` 시 확정.
   - **Realtime**: 다수 로그 동시 구독 비용/방식 — 콘텐츠 스프린트 시 검토(비용 가드레일).
   - **나가기 진입점**: **확정 — Profile 나가기 버튼 제거**, 로그별 나가기는 차기 LogScreen 내부(`leave_room(p_room_id)` 재설계 동반)로 이전. `leave_room()` RPC는 dormant 유지.

@@ -35,6 +35,8 @@ export const IconName = {
   // 상세 more 메뉴/삭제(muklog-edit) — 킷 mk-log:144 more-horizontal / mk-log:200 trash.
   MoreHorizontal: 'more-horizontal',
   Trash: 'trash',
+  // 로그 이름 편집 진입점(log-name) — 킷 mk-log:40 헤더 제목 옆 ✏️(I name="pencil").
+  Pencil: 'pencil',
 } as const;
 export type IconName = (typeof IconName)[keyof typeof IconName];
 

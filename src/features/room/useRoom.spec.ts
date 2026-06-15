@@ -28,7 +28,7 @@ describe('useRoom', () => {
 
   it('성공 시 snake→camel 매핑된 ready 상태가 된다 (C1 경계)', async () => {
     rpc.mockResolvedValueOnce({
-      data: { room_id: 'r1', invite_code: 'ABCDEF', member_count: 2, mode: 'couple' },
+      data: { room_id: 'r1', invite_code: 'ABCDEF', member_count: 2, mode: 'couple', name: '우리 맛집' },
       error: null,
     });
     const { result } = renderHook(() => useRoom({ roomId: 'r1' }));
@@ -38,8 +38,38 @@ describe('useRoom', () => {
     });
     expect(result.current.state).toEqual({
       status: 'ready',
-      room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 2, mode: 'couple' },
+      room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 2, mode: 'couple', name: '우리 맛집' },
     });
+  });
+
+  it('name 키가 없으면(투영 이전 환경) ready 유지 + name=null (누락=정상, 에러 아님) (C4)', async () => {
+    rpc.mockResolvedValueOnce({
+      data: { room_id: 'r1', invite_code: 'ABCDEF', member_count: 1, mode: 'solo' },
+      error: null,
+    });
+    const { result } = renderHook(() => useRoom({ roomId: 'r1' }));
+
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('ready');
+    });
+    expect(result.current.state).toEqual({
+      status: 'ready',
+      room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 1, mode: 'solo', name: null },
+    });
+  });
+
+  it('name이 null이면 그대로 null로 매핑한다', async () => {
+    rpc.mockResolvedValueOnce({
+      data: { room_id: 'r1', invite_code: 'ABCDEF', member_count: 1, mode: 'solo', name: null },
+      error: null,
+    });
+    const { result } = renderHook(() => useRoom({ roomId: 'r1' }));
+
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('ready');
+    });
+    const room = result.current.state.status === 'ready' ? result.current.state.room : null;
+    expect(room?.name).toBeNull();
   });
 
   it('rpcError(NOT_A_MEMBER) → error 상태 + 매핑된 한국어 메시지', async () => {
@@ -85,7 +115,7 @@ describe('useRoom', () => {
     });
 
     rpc.mockResolvedValueOnce({
-      data: { room_id: 'r1', invite_code: 'WXYZ23', member_count: 1, mode: 'solo' },
+      data: { room_id: 'r1', invite_code: 'WXYZ23', member_count: 1, mode: 'solo', name: '새이름' },
       error: null,
     });
     await act(async () => {
@@ -95,7 +125,7 @@ describe('useRoom', () => {
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'ready',
-        room: { roomId: 'r1', inviteCode: 'WXYZ23', memberCount: 1, mode: 'solo' },
+        room: { roomId: 'r1', inviteCode: 'WXYZ23', memberCount: 1, mode: 'solo', name: '새이름' },
       });
     });
   });

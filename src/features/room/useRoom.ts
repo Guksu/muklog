@@ -20,6 +20,7 @@ export type RoomDetail = {
   inviteCode: string;
   memberCount: number; // 1=혼자 / 2=둘이 (DEFINER 집계)
   mode: RoomMode;
+  name: string | null; // 사용자 지정 로그 이름(null=미지정 → 헤더에서 폴백 표기, log-name)
 };
 
 export type RoomDetailState =
@@ -33,6 +34,7 @@ type RoomRow = {
   invite_code?: string;
   member_count?: number;
   mode?: RoomMode;
+  name?: string | null; // get_room name 키(log-name). nullable — 누락 검사에 포함하지 않음(누락=정상).
 };
 
 /**
@@ -58,6 +60,7 @@ export const useRoom = ({ roomId }: { roomId: string }) => {
     }
 
     const row = (data ?? {}) as RoomRow;
+    // ⚠️ name은 누락 검사에 포함하지 않는다(nullable → 누락/null=정상, BAD_RESPONSE로 오판 금지, C4).
     if (!row.room_id || !row.invite_code || row.member_count == null || !row.mode) {
       // 응답 형 누락 → BAD_RESPONSE 패턴(기본 메시지). 토큰 미일치라 mapRoomError가 기본 메시지로 흡수.
       setState({ status: 'error', message: mapRoomError({ error: new Error('GET_ROOM_BAD_RESPONSE') }) });
@@ -71,6 +74,7 @@ export const useRoom = ({ roomId }: { roomId: string }) => {
         inviteCode: row.invite_code,
         memberCount: row.member_count,
         mode: row.mode,
+        name: row.name ?? null,
       },
     });
   };

@@ -18,7 +18,13 @@ import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import { Avatar, Button, Card, Icon, IconName, MemberBadge, Screen, Text } from '@/components';
 import { useAuth } from '@/features/auth';
 import { useProfile } from '@/features/profile';
-import { mapRoomError, useCreateRoom, useMyLogsContext, type MyLog } from '@/features/room';
+import {
+  displayLogName,
+  mapRoomError,
+  useCreateRoom,
+  useMyLogsContext,
+  type MyLog,
+} from '@/features/room';
 import { useTheme } from '@/theme';
 
 import { Routes, type AppStackParamList } from '../routes';
@@ -26,10 +32,6 @@ import { formatLogDate } from './formatLogDate';
 
 const PREVIEW_SLOT_COUNT = 4;
 const CARD_AVATAR_SIZE = 42;
-
-// 카드 타이틀: 솔로="{닉}의 기록" / 커플="{닉} ♥ 짝꿍"(짝꿍 실데이터 미존재 → 익명 표기).
-const cardTitle = ({ nickname, isCouple }: { nickname: string; isCouple: boolean }): string =>
-  isCouple ? `${nickname} ♥ 짝꿍` : `${nickname}의 기록`;
 
 // 본인 닉네임/아바타. userId가 있을 때만 useProfile을 마운트해야 하므로 상위에서 분기.
 //   userId도 함께 노출 → Avatar가 url 없을 때 결정적 디폴트(이모지+컬러)를 파생(plan §3.3).
@@ -74,7 +76,12 @@ const LogCard = ({
         </View>
         <View style={styles.cardHeaderBody}>
           <Text variant="cardTitle" color="fg" numberOfLines={1}>
-            {cardTitle({ nickname: self.nickname, isCouple })}
+            {/* log-name: 이름 있으면 name, 없으면 본인 닉 기반 폴백(displayLogName, 결정2 B'). */}
+            {displayLogName({
+              name: log.name,
+              memberCount: log.memberCount,
+              selfNickname: self.nickname,
+            })}
           </Text>
           <View style={[styles.cardMeta, { gap: theme.spacing[8], marginTop: theme.spacing[4] }]}>
             <MemberBadge memberCount={log.memberCount} />
