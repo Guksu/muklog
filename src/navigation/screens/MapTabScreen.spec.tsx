@@ -3,7 +3,7 @@
 //   (plan §4·§5-1 MapTabScreen) loading/denied/empty/마커탭→선택카드/error+refresh.
 //   네이티브 지도 렌더는 스모크(디바이스) → WebView는 MapWebView 모킹으로 대체, onMessage만 직접 호출.
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -97,11 +97,14 @@ const pin = (over?: Record<string, unknown>) => ({
   ...over,
 });
 
+const requestSpy = jest.fn();
+const refreshCoordsSpy = jest.fn();
 const setPermission = (over?: Record<string, unknown>) => {
   useLocationPermissionMock.mockReturnValue({
     status: LocationPermissionStatus.Granted,
     coords: { lat: 37.5, lng: 127.0 },
-    request: jest.fn(),
+    request: requestSpy,
+    refreshCoords: refreshCoordsSpy,
     ...over,
   });
 };
@@ -117,6 +120,8 @@ beforeEach(() => {
   useLocationPermissionMock.mockReset();
   useNearbyPlacesMock.mockReset();
   setBoundsSpy.mockReset();
+  requestSpy.mockReset();
+  refreshCoordsSpy.mockReset();
   injectedScripts.length = 0;
   setPermission();
   setNearby();
@@ -262,5 +267,69 @@ describe('MapTabScreen', () => {
     // slice1 권한 안내는 그대로(nearby 에러가 덮지 않음).
     expect(screen.getByText('위치 권한을 허용하면 현재 위치를 볼 수 있어요')).toBeTruthy();
     expect(screen.getByTestId('map-webview-mock')).toBeTruthy();
+  });
+
+  // ── map-locate-button 증분 (plan §3.7·§5 T4·T5·T6) ──────────────
+  it('현재위치 FAB를 항상 렌더한다(권한 거부에서도)', () => {
+    setPermission({ status: LocationPermissionStatus.Denied, coords: null });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+    expect(screen.getByTestId('map-locate-button')).toBeTruthy();
+  });
+
+  it('T4: granted에서 FAB 탭 → refreshCoords 1회 → 반환 coords로 RECENTER inject 1회', async () => {
+    refreshCoordsSpy.mockResolvedValueOnce({ lat: 37.6, lng: 127.1 });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+
+    fireEvent.press(screen.getByTestId('map-locate-button'));
+
+    await waitFor(() => expect(refreshCoordsSpy).toHaveBeenCalledTimes(1));
+    expect(requestSpy).not.toHaveBeenCalled();
+    const recenter = injectedScripts.filter((s) => s.includes('"type":"RECENTER"'));
+    expect(recenter).toHaveLength(1);
+    expect(recenter[0]).toContain('__muklogRecenter');
+    expect(recenter[0]).toContain('"lat":37.6');
+    expect(recenter[0]).toContain('"lng":127.1');
+  });
+
+  it('T5: 미결정에서 FAB 탭 → permission.request 호출(요청 후 거부면 inject 없음)', async () => {
+    setPermission({ status: LocationPermissionStatus.Undetermined, coords: null });
+    refreshCoordsSpy.mockResolvedValueOnce(null); // 요청 후 거부 → refreshCoords가 null(granted 아님).
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+    // 진입 effect가 undetermined일 때 1회 request(기존 회귀 동작) — 탭 경로만 분리 검증.
+    requestSpy.mockClear();
+
+    fireEvent.press(screen.getByTestId('map-locate-button'));
+
+    await waitFor(() => expect(requestSpy).toHaveBeenCalledTimes(1));
+    expect(injectedScripts.some((s) => s.includes('"type":"RECENTER"'))).toBe(false);
+  });
+
+  it('T6: 거부에서 FAB 탭 → refreshCoords·RECENTER inject 모두 없음(no-op)', async () => {
+    setPermission({ status: LocationPermissionStatus.Denied, coords: null });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+
+    fireEvent.press(screen.getByTestId('map-locate-button'));
+
+    // 비동기 경로가 있더라도 호출이 일어나지 않음을 확정(다음 틱까지 대기).
+    await waitFor(() => expect(screen.getByTestId('map-locate-button')).toBeTruthy());
+    expect(requestSpy).not.toHaveBeenCalled();
+    expect(refreshCoordsSpy).not.toHaveBeenCalled();
+    expect(injectedScripts.some((s) => s.includes('"type":"RECENTER"'))).toBe(false);
+  });
+
+  it('T6: granted지만 refreshCoords가 null이면 RECENTER inject 없음(no-op, 에러배너 없음)', async () => {
+    refreshCoordsSpy.mockResolvedValueOnce(null);
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+
+    fireEvent.press(screen.getByTestId('map-locate-button'));
+
+    await waitFor(() => expect(refreshCoordsSpy).toHaveBeenCalledTimes(1));
+    expect(injectedScripts.some((s) => s.includes('"type":"RECENTER"'))).toBe(false);
+    expect(screen.queryByText('지도를 불러오지 못했어요')).toBeNull();
   });
 });

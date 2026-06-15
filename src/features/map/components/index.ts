@@ -3,6 +3,7 @@
 export { SelectedSpotCard, type SelectedSpotCardProps } from './SelectedSpotCard';
 export { NearbySpotCard, type NearbySpotCardProps } from './NearbySpotCard';
 export { MapLegend } from './MapLegend';
+export { MapLocateButton, type MapLocateButtonProps } from './MapLocateButton';
 export {
   MapStatusOverlay,
   MapStatusTone,

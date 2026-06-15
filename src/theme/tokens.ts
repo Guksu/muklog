@@ -53,6 +53,10 @@ const palette = {
   //   기존 셸이 fgMuted(#9B9B9B 쿨뉴트럴)로 근사했으나 킷은 웜그레이라 톤 불일치 → 전용 토큰으로 정합(map-tab 슬라이스 1).
   //   슬라이스 1엔 주변 음식점 핀이 없어 범례 dot에만 쓰이나, 슬라이스 2(map-tab-nearby)의 주변 핀 색을 미리 고정한다.
   mapNearbyPin:'#B6ABA0',
+  // 지도 현재위치 FAB 아이콘색 — 킷 mk-home.jsx:270·298 locate 전용 블루 #3B82F6(SSOT, --mk-* 변수 아닌 인라인 실값).
+  //   브랜드 primary(#3366FF)와 미세 차이지만 킷이 verbatim으로 #3B82F6를 쓰므로(킷=디자인 기준) 전용 토큰으로 정합.
+  //   me 마커(파란 점)도 킷에서 같은 계열이나 그 비주얼은 WebView 격리 영역(mapHtml, developer)이라 별도.
+  mapLocate:'#3B82F6',
 } as const;
 
 // 그라데이션 stops(시맨틱 color 맵은 단일 string 토큰만 담으므로 배열은 별도 export).
@@ -94,6 +98,8 @@ const lightColor = {
   negative: palette.statusNegative, negativeFg: palette.white,
   // 지도 "주변 음식점" 핀/범례 dot 웜그레이(킷 #B6ABA0). 라이트/다크 공통(지도 위 마커라 톤 고정).
   mapNearbyPin: palette.mapNearbyPin,
+  // 지도 현재위치 FAB 아이콘 블루(킷 #3B82F6). 라이트/다크 공통(흰 surface FAB 위 고정 톤).
+  mapLocate: palette.mapLocate,
 } as const;
 
 // 시맨틱 컬러 (다크) — 시맨틱만 오버라이드. 신규 키도 동일 키로 미러링(tsc 키 일관성, 엣지1).
@@ -127,6 +133,9 @@ export const shadow = {
   md: { shadowColor:'#000', shadowOpacity:0.08, shadowRadius:12, shadowOffset:{width:0,height:4}, elevation:3 },
   lg: { shadowColor:'#000', shadowOpacity:0.12, shadowRadius:24, shadowOffset:{width:0,height:8}, elevation:6 },
   card: { shadowColor:palette.shadowWarm, shadowOpacity:0.10, shadowRadius:10, shadowOffset:{width:0,height:2}, elevation:2 },
+  // fab = 떠 있는 원형 버튼(지도 현재위치 FAB) — 킷 mk-home:292 box-shadow:0 4px 14px rgba(0,0,0,.18) 정합.
+  //   RN은 shadowRadius가 CSS blur와 1:1은 아니나 14로 근사. 컬러 그림자 아님(검정, 킷과 동일).
+  fab: { shadowColor:'#000', shadowOpacity:0.18, shadowRadius:14, shadowOffset:{width:0,height:4}, elevation:5 },
 } as const;
 
 // 타이포 [프로젝트 정의 — Pretendard 기반]. RN: rem→px(×16), lineHeight는 절대값.

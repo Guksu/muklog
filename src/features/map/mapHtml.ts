@@ -2,7 +2,8 @@
 // Kakao Map JS SDK 임베드 HTML 생성 (plan §3.5·§9.2 라이브러리 확정·§7 경계면).
 //   생산자: MapWebView가 source.html로 주입. 소비자: WebView 런타임(Kakao JS SDK).
 //   계약: SDK 로드 완료→READY postMessage / 마커 탭→MARKER_TAP(id) / 로드 실패→ERROR(reason).
-//         RN→WebView는 window.__muklogInit(INIT)·window.__muklogSetMarkers(SET_MARKERS) 핸들러로 수신.
+//         RN→WebView는 window.__muklogInit(INIT)·window.__muklogSetMarkers(SET_MARKERS)·
+//         window.__muklogRecenter(RECENTER: panTo + me 마커 갱신) 핸들러로 수신.
 //   ⚠️ jsKey는 호출부에서 env/extra(KAKAO_JS_KEY)로 주입 — 이 파일/plan/dev-notes에 키 값 미기록(placeholder만).
 //   현재위치는 RN expo-location이 INIT.me로 주입(WebView geolocation 미사용 — plan §9.2 리스크 메모).
 //   마커 색: 킷 --mk-accent(#3366FF) 정합. 비주얼 토큰의 단일 출처는 RN theme이나, WebView 내부는
@@ -44,6 +45,7 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
 
     var mkMap = null;
     var mkOverlays = [];
+    var mkMeOverlay = null; // INIT에서 생성한 현재위치(파란 점) 오버레이 참조 보관(재센터 시 위치 갱신용).
 
     // 현재 viewport(bbox)를 RN에 통지(slice2). idle 다발/과호출 억제는 RN(useNearbyPlaces)이 전담.
     function emitBounds() {
@@ -98,11 +100,12 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
         if (payload.me) {
           var meEl = document.createElement('div');
           meEl.style.cssText = 'width:16px;height:16px;border-radius:8px;background:#3366FF;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,0.15);';
-          var meOverlay = new kakao.maps.CustomOverlay({
+          // 모듈 스코프 보관 — __muklogRecenter가 위치를 갱신할 수 있도록 참조 유지.
+          mkMeOverlay = new kakao.maps.CustomOverlay({
             position: new kakao.maps.LatLng(payload.me.lat, payload.me.lng),
             content: meEl,
           });
-          meOverlay.setMap(mkMap);
+          mkMeOverlay.setMap(mkMap);
         }
         renderMarkers(payload.markers);
         // slice2: 드래그·줌 종료(idle)마다 현재 bbox 통지 → RN이 nearby 조회(디바운스/캐시/임계는 RN).
@@ -124,6 +127,22 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     // RN → WebView: 마커 갱신(refresh).
     window.__muklogSetMarkers = function (payload) {
       renderMarkers(payload.markers);
+    };
+
+    // RN → WebView: 현재위치로 재센터(panTo) + me 마커 갱신. 지도 재init 없음(경량 — 마커 깜빡임/중복 없음).
+    window.__muklogRecenter = function (payload) {
+      if (!mkMap || !payload || !payload.me) return;
+      var pos = new kakao.maps.LatLng(payload.me.lat, payload.me.lng);
+      mkMap.panTo(pos); // 부드러운 이동, 줌 레벨 미변경.
+      if (mkMeOverlay) {
+        mkMeOverlay.setPosition(pos); // 기존 파란 점 위치만 갱신.
+      } else {
+        // INIT 시 me 없던 경우(권한 늦게 허용) → 마커 신규 생성(INIT.me와 동일 비주얼).
+        var meEl = document.createElement('div');
+        meEl.style.cssText = 'width:16px;height:16px;border-radius:8px;background:#3366FF;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,0.15);';
+        mkMeOverlay = new kakao.maps.CustomOverlay({ position: pos, content: meEl });
+        mkMeOverlay.setMap(mkMap);
+      }
     };
 
     function loadKakao() {

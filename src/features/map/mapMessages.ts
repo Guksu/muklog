@@ -34,3 +34,13 @@ export const buildSetMarkersScript = ({ markers }: { markers: MapMarker[] }): st
   const payload = JSON.stringify({ type: MapOutboundType.SetMarkers, markers });
   return `window.__muklogSetMarkers && window.__muklogSetMarkers(${payload}); true;`;
 };
+
+/**
+ * 현재위치로 재센터(RECENTER) 스크립트를 만든다(panTo + me 마커 갱신).
+ * @param me 현재위치 좌표 — non-null 계약(null/미획득 가드는 호출부 MapTabScreen이 책임, plan §3.3·§3.6)
+ * @returns injectJavaScript에 넣을 JS 문자열
+ */
+export const buildRecenterScript = ({ me }: { me: Coords }): string => {
+  const payload = JSON.stringify({ type: MapOutboundType.Recenter, me });
+  return `window.__muklogRecenter && window.__muklogRecenter(${payload}); true;`;
+};

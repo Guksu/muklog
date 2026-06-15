@@ -80,4 +80,106 @@ describe('useLocationPermission', () => {
     await waitFor(() => expect(result.current.status).toBe(LocationPermissionStatus.Granted));
     expect(result.current.coords).toBeNull();
   });
+
+  // ── map-locate-button: refreshCoords (plan §3.6·§5-1 T7) ──────────
+  describe('refreshCoords', () => {
+    it('granted일 때 getCurrentPositionAsync 1회 호출·coords 갱신·새 coords 반환', async () => {
+      requestPermMock.mockResolvedValueOnce({ status: 'granted' });
+      // 진입 request 시 1회, refreshCoords 시 1회 — 두 번째가 fresh 좌표.
+      getPositionMock
+        .mockResolvedValueOnce({ coords: { latitude: 37.5, longitude: 127.0 } })
+        .mockResolvedValueOnce({ coords: { latitude: 37.6, longitude: 127.1 } });
+
+      const { result } = renderHook(() => useLocationPermission());
+      await act(async () => {
+        await result.current.request();
+      });
+      await waitFor(() => expect(result.current.status).toBe(LocationPermissionStatus.Granted));
+
+      getPositionMock.mockClear();
+      let returned: unknown;
+      await act(async () => {
+        returned = await result.current.refreshCoords();
+      });
+      expect(getPositionMock).toHaveBeenCalledTimes(1);
+      expect(returned).toEqual({ lat: 37.6, lng: 127.1 });
+      expect(result.current.coords).toEqual({ lat: 37.6, lng: 127.1 });
+    });
+
+    it('granted 아니면 getCurrentPositionAsync 미호출·null 반환', async () => {
+      const { result } = renderHook(() => useLocationPermission());
+      let returned: unknown = 'sentinel';
+      await act(async () => {
+        returned = await result.current.refreshCoords();
+      });
+      expect(returned).toBeNull();
+      expect(getPositionMock).not.toHaveBeenCalled();
+    });
+
+    it('실패(throw) 시 직전 coords로 폴백 반환(throw 전파 안 함)', async () => {
+      requestPermMock.mockResolvedValueOnce({ status: 'granted' });
+      getPositionMock.mockResolvedValueOnce({ coords: { latitude: 37.5, longitude: 127.0 } });
+
+      const { result } = renderHook(() => useLocationPermission());
+      await act(async () => {
+        await result.current.request();
+      });
+      await waitFor(() => expect(result.current.coords).toEqual({ lat: 37.5, lng: 127.0 }));
+
+      getPositionMock.mockRejectedValueOnce(new Error('gps timeout'));
+      let returned: unknown;
+      await act(async () => {
+        returned = await result.current.refreshCoords();
+      });
+      // 직전 coords 폴백.
+      expect(returned).toEqual({ lat: 37.5, lng: 127.0 });
+    });
+
+    it('직전 coords 없이 실패하면 null 반환', async () => {
+      requestPermMock.mockResolvedValueOnce({ status: 'granted' });
+      // 진입 request 시 위치 획득 실패 → coords null 유지.
+      getPositionMock.mockRejectedValueOnce(new Error('init gps fail'));
+
+      const { result } = renderHook(() => useLocationPermission());
+      await act(async () => {
+        await result.current.request();
+      });
+      await waitFor(() => expect(result.current.status).toBe(LocationPermissionStatus.Granted));
+
+      getPositionMock.mockRejectedValueOnce(new Error('gps timeout'));
+      let returned: unknown = 'sentinel';
+      await act(async () => {
+        returned = await result.current.refreshCoords();
+      });
+      expect(returned).toBeNull();
+    });
+
+    it('in-flight 재진입 시 getCurrentPositionAsync 중복 호출 0(가드)', async () => {
+      requestPermMock.mockResolvedValueOnce({ status: 'granted' });
+      getPositionMock.mockResolvedValueOnce({ coords: { latitude: 37.5, longitude: 127.0 } });
+
+      const { result } = renderHook(() => useLocationPermission());
+      await act(async () => {
+        await result.current.request();
+      });
+      await waitFor(() => expect(result.current.status).toBe(LocationPermissionStatus.Granted));
+
+      getPositionMock.mockClear();
+      // 응답을 잡아두는 deferred — 첫 호출 in-flight 동안 두 번째 호출 발사.
+      let resolveGet: (v: unknown) => void = () => {};
+      getPositionMock.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveGet = resolve;
+        }),
+      );
+
+      await act(async () => {
+        const first = result.current.refreshCoords();
+        const second = result.current.refreshCoords();
+        resolveGet({ coords: { latitude: 37.9, longitude: 127.9 } });
+        await Promise.all([first, second]);
+      });
+      expect(getPositionMock).toHaveBeenCalledTimes(1);
+    });
+  });
 });

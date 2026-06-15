@@ -1,9 +1,10 @@
 // src/navigation/screens/MapTabScreen.tsx
 // 지도 탭 — 권한·핀·지도 상태 오케스트레이션 (map-tab 슬라이스 1, plan §4·§5·ui-spec §3 조립 가이드).
 //
-// 배선(소비): useMuklogPins(핀) + useLocationPermission(현재위치) + ui-publisher 컴포넌트
-//   (MapWebView·MapLegend·MapStatusOverlay·SelectedSpotCard). 순수 유틸 mapHtml·pinsToMapMarkers·
-//   initialRegion·parseMapMessage·buildInitScript·buildSetMarkersScript로 WebView 메시지 계약(§3.5)을 배선한다.
+// 배선(소비): useMuklogPins(핀) + useLocationPermission(현재위치·refreshCoords) + ui-publisher 컴포넌트
+//   (MapWebView·MapLegend·MapStatusOverlay·SelectedSpotCard·MapLocateButton). 순수 유틸 mapHtml·
+//   pinsToMapMarkers·initialRegion·parseMapMessage·buildInitScript·buildSetMarkersScript·buildRecenterScript로
+//   WebView 메시지 계약(§3.5)을 배선한다. handleLocate: FAB 탭 → 위치 재취득 → RECENTER inject(map-locate-button).
 //
 // 정책: 진입 1회 핀 조회 + 권한 1회 요청 + 명시적 refresh만(폴링/Realtime 없음, 비용 가드레일 §8).
 //   현재위치는 RN expo-location으로 받아 INIT.me로 주입(WebView geolocation 미사용 — plan §9.2).
@@ -13,6 +14,7 @@ import { StyleSheet, View } from 'react-native';
 
 import {
   MapLegend,
+  MapLocateButton,
   MapStatusOverlay,
   MapStatusTone,
   MapWebView,
@@ -21,7 +23,11 @@ import {
   type MapWebViewHandle,
   type MapWebViewMessageEvent,
 } from '@/features/map/components';
-import { buildInitScript, buildSetMarkersScript } from '@/features/map/mapMessages';
+import {
+  buildInitScript,
+  buildRecenterScript,
+  buildSetMarkersScript,
+} from '@/features/map/mapMessages';
 import { formatDistance } from '@/features/map/formatDistance';
 import { initialRegion } from '@/features/map/initialRegion';
 import { mapHtml } from '@/features/map/mapHtml';
@@ -81,6 +87,19 @@ export const MapTabScreen = () => {
     );
   };
 
+  // 현재위치 FAB 탭(plan §3.7) — 탭당 1회 위치 재취득 후 RECENTER inject(폴링 없음, 비용 가드 §8).
+  //   미결정이면 권한 요청 → 거부면 no-op(기존 permissionDenied 배너가 안내, 중복 금지).
+  //   refreshCoords가 granted 아니거나 실패+직전coords없음이면 null → no-op(무한 로딩·에러배너 없음).
+  const handleLocate = async () => {
+    if (permission.status === LocationPermissionStatus.Undetermined) {
+      await permission.request();
+    }
+    if (permission.status === LocationPermissionStatus.Denied) return;
+    const me = await permission.refreshCoords();
+    if (!me) return;
+    webviewRef.current?.injectJavaScript(buildRecenterScript({ me }));
+  };
+
   // WebView → RN 메시지 디스패치(파싱은 parseMapMessage). 비JSON/미지는 조용히 무시.
   const handleMessage = (event: MapWebViewMessageEvent) => {
     const message = parseMapMessage({ raw: event.nativeEvent.data });
@@ -132,6 +151,7 @@ export const MapTabScreen = () => {
     selected && !selected.saved
       ? nearby.items.find((it) => it.kakaoPlaceId === selected.id) ?? null
       : null;
+  // 하단 스팟 카드 도킹 여부 — FAB가 카드에 가려지지 않게 위로 띄우는 데 사용(ui-spec §4).
 
   // 상태 → 오버레이(tone/message) 판단(ui-spec §3 매핑). 우선순위: 지도 SDK 에러 → 핀 에러 → 로딩 → 빈/권한안내.
   const overlay = ((): {
@@ -185,6 +205,13 @@ export const MapTabScreen = () => {
             />
           </View>
         ) : null}
+
+        {/* 현재위치 FAB — 지도 영역(MapWebView) 우하단 16px 고정(킷 mk-home:290-298: 지도 div 내 right/bottom 16).
+            카드(SelectedSpot/NearbySpot)는 MapWebView 바깥 형제라, 도킹 시 MapWebView(flex:1)가 줄고
+            FAB는 지도 영역 바닥 16px 고정이라 자동으로 카드 위에 온다 — offset 변동 없이 항상 같은 위치. */}
+        <View style={[styles.locate, { right: theme.spacing[16], bottom: theme.spacing[16] }]}>
+          <MapLocateButton testID="map-locate-button" onPress={handleLocate} />
+        </View>
       </MapWebView>
 
       {/* 선택 스팟 카드 — saved 핀 탭 시 하단 도킹(내 맛집). */}
@@ -213,4 +240,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   legend: { position: 'absolute' },
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  // 현재위치 FAB — 우하단 절대배치(right/bottom은 인라인 토큰, ui-spec §4.2).
+  locate: { position: 'absolute' },
 });

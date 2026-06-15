@@ -87,6 +87,7 @@ export type MapInboundType = (typeof MapInboundType)[keyof typeof MapInboundType
 export const MapOutboundType = {
   Init: 'INIT',
   SetMarkers: 'SET_MARKERS',
+  Recenter: 'RECENTER', // 현재위치로 panTo + me 마커 갱신(map-locate-button)
 } as const;
 export type MapOutboundType = (typeof MapOutboundType)[keyof typeof MapOutboundType];
 

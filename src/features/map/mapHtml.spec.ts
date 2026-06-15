@@ -56,4 +56,22 @@ describe('mapHtml', () => {
     expect(html).toContain('getSouthWest');
     expect(html).toContain('getNorthEast');
   });
+
+  // ── map-locate-button 증분 ─────────────────────────────────────
+  it('__muklogRecenter 핸들러를 정의하고 panTo로 재센터한다', () => {
+    expect(html).toContain('window.__muklogRecenter');
+    expect(html).toContain('panTo');
+  });
+
+  it('__muklogInit이 me 오버레이를 mkMeOverlay에 보관한다(재센터 시 갱신용)', () => {
+    expect(html).toContain('mkMeOverlay');
+    // INIT에서 보관(할당)하고 재센터에서 위치 갱신(setPosition).
+    expect(html).toContain('mkMeOverlay =');
+    expect(html).toContain('setPosition');
+  });
+
+  it('__muklogRecenter는 !mkMap / !payload.me 가드를 둔다(런타임 null 방어)', () => {
+    expect(html).toContain('!mkMap');
+    expect(html).toContain('!payload.me');
+  });
 });

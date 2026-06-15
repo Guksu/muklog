@@ -48,4 +48,9 @@ describe('Icon', () => {
     renderWithTheme(<Icon name={IconName.Pencil} />);
     expect(screen.getByTestId('icon-pencil')).toBeTruthy();
   });
+
+  it('locate 글리프(지도 현재위치 FAB, map-locate-button)를 렌더한다', () => {
+    renderWithTheme(<Icon name={IconName.Locate} />);
+    expect(screen.getByTestId('icon-locate')).toBeTruthy();
+  });
 });

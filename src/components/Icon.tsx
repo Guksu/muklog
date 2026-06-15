@@ -37,6 +37,8 @@ export const IconName = {
   Trash: 'trash',
   // 로그 이름 편집 진입점(log-name) — 킷 mk-log:40 헤더 제목 옆 ✏️(I name="pencil").
   Pencil: 'pencil',
+  // 지도 현재위치 FAB(map-locate-button) — 킷 mk-home:298 I name="locate".
+  Locate: 'locate',
 } as const;
 export type IconName = (typeof IconName)[keyof typeof IconName];
 
