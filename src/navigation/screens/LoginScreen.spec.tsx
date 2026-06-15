@@ -18,7 +18,7 @@ const baseProps = {
 describe('LoginScreen', () => {
   it('상단 비주얼(워드마크 + 카피)을 렌더한다', () => {
     renderWithTheme(<LoginScreen {...baseProps} showApple />);
-    expect(screen.getByText('muklog')).toBeTruthy();
+    expect(screen.getByText('먹로그')).toBeTruthy();
     expect(
       screen.getByText('데이트하며 다닌 맛집을\n사진·메모·위치로 둘이 함께 기록해요.'),
     ).toBeTruthy();

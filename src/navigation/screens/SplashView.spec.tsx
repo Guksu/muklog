@@ -12,7 +12,7 @@ describe('SplashView', () => {
   it('브랜드 마크와 워드마크를 렌더한다', () => {
     renderWithTheme(<SplashView />);
     expect(screen.getByTestId('app-mark')).toBeTruthy();
-    expect(screen.getByText('muklog')).toBeTruthy();
+    expect(screen.getByText('먹로그')).toBeTruthy();
   });
 
   it('킷 태그라인 "둘이 함께 쌓는 맛집 지도"를 표시한다', () => {

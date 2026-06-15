@@ -69,12 +69,9 @@ export const LoginScreen = ({
           }}
         />
         <View style={styles.copyBlock}>
-          <View style={styles.wordmarkRow}>
-            <Text variant="emptyTitle" color="fg" style={styles.wordmark}>
-              muklog
-            </Text>
-            <Text style={styles.wordmarkEmoji}>🍽️</Text>
-          </View>
+          <Text variant="emptyTitle" color="fg" style={styles.wordmark}>
+            먹로그
+          </Text>
           <Text variant="bodySm" color="fgWeak" style={styles.copy}>
             {LOGIN_COPY}
           </Text>
@@ -129,10 +126,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   copyBlock: { alignItems: 'center' },
-  // 킷 워드마크: muklog(800/34) + 🍽️(23), baseline 정렬 gap 7(mk-auth:95-98). lineHeight=34(킷 /1, emptyTitle 변형 27 보정 — 글리프 클리핑 방지).
-  wordmarkRow: { flexDirection: 'row', alignItems: 'baseline', gap: 7 },
-  wordmark: { fontSize: 34, lineHeight: 34, letterSpacing: -1 },
-  wordmarkEmoji: { fontSize: 23 },
+  // 킷 워드마크: 먹로그 단독(800/34)(mk-auth:94) — 킷에 이모지 없음(AppMark가 플레이풀 요소 담당).
+  // HomeHeader 워드마크('먹로그' variant=wordmark, Pretendard-Bold) 미러: emptyTitle 변형도 Pretendard-Bold(동일 weight)로 앱 전역 워드마크 일관성 확보.
+  // lineHeight=40(킷 /1=34이나 한글 글리프 클리핑 방지 — 34×1.15 근사). letterSpacing -1(킷 -0.03em×34≈-1.02, HomeHeader 밀착 미러).
+  wordmark: { fontSize: 34, lineHeight: 40, letterSpacing: -1 },
   // 킷 카피 600/15.5/1.6(SemiBold), margin-top 14, center(mk-auth:99) — bodySm 변형 Medium 보정.
   copy: { textAlign: 'center', marginTop: 14, fontSize: 15.5, lineHeight: 25, fontFamily: 'Pretendard-SemiBold' },
   // 킷: 버튼 영역 flex none, padding 0 24 40, gap 11(mk-auth:106).

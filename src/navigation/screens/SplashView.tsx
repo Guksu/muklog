@@ -1,6 +1,6 @@
 // src/navigation/screens/SplashView.tsx
 // 폰트/세션 로딩 중 화면 — 킷 mk-auth.jsx:53-74 SplashScreen 정합.
-//   그라데이션 배경(160deg,#EAF0FF→#FFF 60%) + AppMark 120 + 워드마크(muklog 🍽️) + 태그라인 + 스피너(하단).
+//   그라데이션 배경(160deg,#EAF0FF→#FFF 60%) + AppMark 120 + 워드마크(먹로그) + 태그라인 + 스피너(하단).
 //   AuthGate loading 상태에서 소비(props 없는 기존 계약 유지).
 //   web→RN 변환:
 //     · linear-gradient → expo-linear-gradient(authVisualGradient, 세로 근사 + locations[0,0.6]).
@@ -45,12 +45,9 @@ export const SplashView = () => {
             elevation: 8,
           }}
         />
-        <View style={styles.wordmarkRow}>
-          <Text variant="display" color="fg" style={styles.wordmark}>
-            muklog
-          </Text>
-          <Text style={styles.wordmarkEmoji}>🍽️</Text>
-        </View>
+        <Text variant="display" color="fg" style={styles.wordmark}>
+          먹로그
+        </Text>
         <Text variant="bodySm" color="fgWeak" style={styles.tagline}>
           {SPLASH_TAGLINE}
         </Text>
@@ -69,10 +66,10 @@ const styles = StyleSheet.create({
   // 킷: 전체 center, gap 22(mk-auth:55-57). 스피너는 하단 absolute라 center 블록과 분리.
   root: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   center: { alignItems: 'center', gap: 22 },
-  // 킷 워드마크 800/38 + 🍽️ 26, baseline gap 8(mk-auth:62-64). lineHeight=38(킷 /1, display 변형 48 보정).
-  wordmarkRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  wordmark: { fontSize: 38, lineHeight: 38, letterSpacing: -1 },
-  wordmarkEmoji: { fontSize: 26 },
+  // 킷 워드마크 먹로그 단독 800/38(mk-auth:62) — 킷에 이모지 없음(AppMark가 플레이풀 요소 담당).
+  // HomeHeader 워드마크('먹로그' variant=wordmark, Pretendard-Bold) 미러: display 변형도 Pretendard-Bold(동일 weight)로 앱 전역 워드마크 일관성 확보.
+  // lineHeight=44(킷 /1=38이나 한글 글리프 클리핑 방지 위해 폰트>라인하이트 회피 — 38×1.15 근사). letterSpacing -1(킷 -0.03em×38≈-1.14, HomeHeader 밀착 미러).
+  wordmark: { fontSize: 38, lineHeight: 44, letterSpacing: -1 },
   // 킷 태그라인 600/15(mk-auth:66) — SemiBold(bodySm 변형 Medium 보정), lineHeight 15×1.5≈23.
   tagline: { fontSize: 15, lineHeight: 23, fontFamily: 'Pretendard-SemiBold' },
   // 킷: bottom 54(mk-auth:69).
