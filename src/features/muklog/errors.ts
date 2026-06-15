@@ -23,6 +23,10 @@ export const MuklogErrorToken = {
   KakaoKeyMissing: 'KAKAO_KEY_MISSING', // Edge: 서버 REST 키 미설정(500)
   KakaoRequestFailed: 'KAKAO_REQUEST_FAILED', // Edge: Kakao API 비정상/타임아웃(502)
   PlaceSearchFailed: 'PLACE_SEARCH_FAILED', // 클라: 네트워크 등 기타 검색 실패
+  // 주변 음식점 슬라이스(map-tab-nearby) — nearby-search Edge Function 응답 토큰 + 클라 폴백(plan §3.2).
+  //   nearby 실패는 핀만 비우고 지도/saved 핀/카드는 유지(차단 아님) — UI 메시지 미노출(조용히 처리).
+  BoundsRequired: 'BOUNDS_REQUIRED', // Edge: sw/ne 누락/NaN/역전 bbox(400)
+  NearbySearchFailed: 'NEARBY_SEARCH_FAILED', // 클라: 네트워크 등 기타 주변 조회 실패
 } as const;
 export type MuklogErrorToken = (typeof MuklogErrorToken)[keyof typeof MuklogErrorToken];
 

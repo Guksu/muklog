@@ -37,4 +37,23 @@ describe('mapHtml', () => {
   it('SDK 로드 실패를 ERROR로 송신한다(onerror)', () => {
     expect(html).toContain('onerror');
   });
+
+  // ── slice2 증분 ────────────────────────────────────────────────
+  it('saved 분기 핀 색을 직박힌다(saved primary #3366FF / nearby 웜그레이 #B6ABA0)', () => {
+    expect(html).toContain('#3366FF');
+    expect(html).toContain('#B6ABA0');
+    // m.saved로 분기하는 코드 존재.
+    expect(html).toContain('m.saved');
+  });
+
+  it('MARKER_TAP에 saved 플래그를 동봉한다', () => {
+    expect(html).toContain('saved: m.saved');
+  });
+
+  it('idle 이벤트로 BOUNDS_CHANGED(sw/ne)를 post한다', () => {
+    expect(html).toContain("'idle'");
+    expect(html).toContain('BOUNDS_CHANGED');
+    expect(html).toContain('getSouthWest');
+    expect(html).toContain('getNorthEast');
+  });
 });

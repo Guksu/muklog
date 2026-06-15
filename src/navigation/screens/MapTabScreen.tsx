@@ -16,18 +16,22 @@ import {
   MapStatusOverlay,
   MapStatusTone,
   MapWebView,
+  NearbySpotCard,
   SelectedSpotCard,
   type MapWebViewHandle,
   type MapWebViewMessageEvent,
 } from '@/features/map/components';
 import { buildInitScript, buildSetMarkersScript } from '@/features/map/mapMessages';
+import { formatDistance } from '@/features/map/formatDistance';
 import { initialRegion } from '@/features/map/initialRegion';
 import { mapHtml } from '@/features/map/mapHtml';
+import { mergeMapMarkers } from '@/features/map/mergeMapMarkers';
 import { parseMapMessage } from '@/features/map/parseMapMessage';
 import { pinsToMapMarkers } from '@/features/map/pinsToMapMarkers';
 import { LocationPermissionStatus, MapInboundType, type MuklogPin } from '@/features/map/types';
 import { useLocationPermission } from '@/features/map/useLocationPermission';
 import { useMuklogPins } from '@/features/map/useMuklogPins';
+import { useNearbyPlaces } from '@/features/map/useNearbyPlaces';
 import { env } from '@/lib/env';
 import { useTheme } from '@/theme';
 
@@ -44,14 +48,19 @@ export const MapTabScreen = () => {
   const theme = useTheme();
   const { state, refresh } = useMuklogPins();
   const permission = useLocationPermission();
+  const nearby = useNearbyPlaces();
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 선택 상태는 {id, saved} 쌍 — saved(muklogId) vs nearby(kakaoPlaceId) id 충돌 방지(plan §4·§6).
+  const [selected, setSelected] = useState<{ id: string; saved: boolean } | null>(null);
+  const [mapReady, setMapReady] = useState(false);
   const [mapErrored, setMapErrored] = useState(false);
   const webviewRef = useRef<MapWebViewHandle>(null);
 
   // 현재 핀 목록(ready일 때만, 아니면 빈 배열 — 지도/INIT는 항상 유효하게 유지).
   const pins: MuklogPin[] = state.status === 'ready' ? state.pins : [];
-  const markers = pinsToMapMarkers({ pins });
+  // saved 핀(내 맛집) + nearby 핀(주변 음식점) 머지(좌표 근접 dedup) → 지도뷰 전체 마커(plan §3.4·§3.6).
+  const savedMarkers = pinsToMapMarkers({ pins });
+  const markers = mergeMapMarkers({ saved: savedMarkers, nearby: nearby.markers });
   const center = initialRegion({ coords: permission.coords, pins });
   // HTML은 1회 생성(키 주입). INIT/SET_MARKERS는 injectJavaScript로 주입(SDK 재로드 없음).
   const html = mapHtml({ jsKey: env.KAKAO_JS_KEY });
@@ -79,17 +88,35 @@ export const MapTabScreen = () => {
 
     if (message.type === MapInboundType.Ready) {
       setMapErrored(false);
+      setMapReady(true);
       sendInit();
       return;
     }
     if (message.type === MapInboundType.MarkerTap) {
-      setSelectedId(message.id);
+      // saved 플래그로 카드 분기(id 단독 lookup 금지 — 좌표 충돌 방어).
+      setSelected({ id: message.id, saved: message.saved });
+      return;
+    }
+    if (message.type === MapInboundType.BoundsChanged) {
+      // idle viewport bbox → nearby 조회(디바운스/캐시/임계는 useNearbyPlaces가 전담).
+      nearby.setBounds({ sw: message.sw, ne: message.ne });
       return;
     }
     if (message.type === MapInboundType.Error) {
       setMapErrored(true);
     }
   };
+
+  // nearby 마커 변경(또는 saved 핀 변경) 시 SET_MARKERS 재주입 — READY 이후에만(SDK 준비 전 무의미).
+  //   slice1 경로(SET_MARKERS) 재사용 — 신규 outbound 메시지 불필요(plan §3.6). markers 키로 발화.
+  const markersKey = markers.map((m) => `${m.id}:${m.saved ? 1 : 0}`).join('|');
+  useEffect(
+    function reinjectMarkersOnChange() {
+      if (!mapReady) return;
+      webviewRef.current?.injectJavaScript(buildSetMarkersScript({ markers }));
+    },
+    [markersKey, mapReady],
+  );
 
   // 재시도: 핀 에러는 refresh, 지도 SDK 에러는 INIT 재주입(SDK가 살아있으면 즉시 복구) + 핀 재조회.
   const handleRetry = () => {
@@ -98,7 +125,13 @@ export const MapTabScreen = () => {
     sendInit();
   };
 
-  const selectedPin = selectedId ? pins.find((p) => p.muklogId === selectedId) ?? null : null;
+  // saved 핀 선택 → SelectedSpotCard. nearby 핀 선택 → NearbySpotCard(item lookup + 거리 포맷).
+  const selectedPin =
+    selected && selected.saved ? pins.find((p) => p.muklogId === selected.id) ?? null : null;
+  const selectedNearby =
+    selected && !selected.saved
+      ? nearby.items.find((it) => it.kakaoPlaceId === selected.id) ?? null
+      : null;
 
   // 상태 → 오버레이(tone/message) 판단(ui-spec §3 매핑). 우선순위: 지도 SDK 에러 → 핀 에러 → 로딩 → 빈/권한안내.
   const overlay = ((): {
@@ -154,13 +187,22 @@ export const MapTabScreen = () => {
         ) : null}
       </MapWebView>
 
-      {/* 선택 스팟 카드 — 핀 탭 시 하단 도킹. */}
+      {/* 선택 스팟 카드 — saved 핀 탭 시 하단 도킹(내 맛집). */}
       {selectedPin ? (
         <SelectedSpotCard
           placeName={selectedPin.placeName}
           rating={selectedPin.rating}
           category={selectedPin.category}
           area={selectedPin.area}
+        />
+      ) : null}
+
+      {/* 주변 스팟 카드 — nearby 핀 탭 시 하단 도킹(이름·카테고리·거리, 별점/area/heart 없음). */}
+      {selectedNearby ? (
+        <NearbySpotCard
+          placeName={selectedNearby.placeName}
+          categoryName={selectedNearby.categoryName}
+          distanceText={formatDistance({ distance: selectedNearby.distance })}
         />
       ) : null}
     </View>

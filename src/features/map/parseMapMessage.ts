@@ -2,7 +2,16 @@
 // WebView onMessage 원문(nativeEvent.data) → MapInboundMessage 파싱 (plan §3.5·§7 경계면).
 //   생산자: 지도뷰 WebView postMessage(READY/MARKER_TAP/ERROR). 소비자: 지도뷰/ MapTabScreen 디스패치.
 //   비JSON·미지 타입·필드 누락은 조용히 null로 흡수한다(throw 금지 — WebView 잡음 메시지 방어).
-import { MapInboundType, type MapInboundMessage } from './types';
+import { MapInboundType, type Coords, type MapInboundMessage } from './types';
+
+/** 임의 값이 { lat:number, lng:number } 형태인지 검사한다(잡음 메시지 방어). */
+const asCoords = ({ value }: { value: unknown }): Coords | null => {
+  if (typeof value !== 'object' || value === null) return null;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.lat !== 'number' || !Number.isFinite(candidate.lat)) return null;
+  if (typeof candidate.lng !== 'number' || !Number.isFinite(candidate.lng)) return null;
+  return { lat: candidate.lat, lng: candidate.lng };
+};
 
 /**
  * WebView가 보낸 원문 문자열을 MapInboundMessage로 파싱한다.
@@ -26,8 +35,10 @@ export const parseMapMessage = ({ raw }: { raw: string }): MapInboundMessage | n
   }
 
   if (message.type === MapInboundType.MarkerTap) {
+    // slice2: saved 필수 boolean(HTML이 항상 동봉). 누락/비boolean은 null로 흡수.
     if (typeof message.id !== 'string') return null;
-    return { type: MapInboundType.MarkerTap, id: message.id };
+    if (typeof message.saved !== 'boolean') return null;
+    return { type: MapInboundType.MarkerTap, id: message.id, saved: message.saved };
   }
 
   if (message.type === MapInboundType.Error) {
@@ -35,6 +46,14 @@ export const parseMapMessage = ({ raw }: { raw: string }): MapInboundMessage | n
       type: MapInboundType.Error,
       reason: typeof message.reason === 'string' ? message.reason : '',
     };
+  }
+
+  if (message.type === MapInboundType.BoundsChanged) {
+    // slice2: sw/ne가 둘 다 {lat,lng} 수치일 때만 통과(setCenter/relayout 잡음 idle 방어).
+    const sw = asCoords({ value: message.sw });
+    const ne = asCoords({ value: message.ne });
+    if (!sw || !ne) return null;
+    return { type: MapInboundType.BoundsChanged, sw, ne };
   }
 
   return null;

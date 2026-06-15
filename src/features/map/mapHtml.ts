@@ -23,12 +23,14 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
     /* WKWebView(loadHTMLString)에서 body height:100%가 0으로 붕괴 → #map은 뷰포트를 절대배치로 직접 채운다(빈 타일 방지). */
     #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+    /* saved(내 맛집)=primary border. slice2: nearby(주변 음식점)는 .mk-pin--nearby로 웜그레이 border. */
     .mk-pin {
       display: flex; align-items: center; justify-content: center;
       width: 34px; height: 34px; border-radius: 17px;
       background: #ffffff; border: 2px solid #3366FF;
       font-size: 18px; box-sizing: border-box;
     }
+    .mk-pin--nearby { border-color: #B6ABA0; }
   </style>
 </head>
 <body>
@@ -43,6 +45,19 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     var mkMap = null;
     var mkOverlays = [];
 
+    // 현재 viewport(bbox)를 RN에 통지(slice2). idle 다발/과호출 억제는 RN(useNearbyPlaces)이 전담.
+    function emitBounds() {
+      if (!mkMap) return;
+      var bounds = mkMap.getBounds();
+      var sw = bounds.getSouthWest();
+      var ne = bounds.getNorthEast();
+      post({
+        type: 'BOUNDS_CHANGED',
+        sw: { lat: sw.getLat(), lng: sw.getLng() },
+        ne: { lat: ne.getLat(), lng: ne.getLng() },
+      });
+    }
+
     function clearMarkers() {
       for (var i = 0; i < mkOverlays.length; i++) { mkOverlays[i].setMap(null); }
       mkOverlays = [];
@@ -54,10 +69,12 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
       for (var i = 0; i < markers.length; i++) {
         (function (m) {
           var el = document.createElement('div');
-          el.className = 'mk-pin';
+          // saved 분기: 주변 음식점(saved:false)은 웜그레이 border(.mk-pin--nearby).
+          el.className = m.saved ? 'mk-pin' : 'mk-pin mk-pin--nearby';
           el.textContent = m.emoji;
           el.addEventListener('click', function () {
-            post({ type: 'MARKER_TAP', id: m.id });
+            // slice2: saved 동봉(MapTabScreen이 SelectedSpotCard vs NearbySpotCard 분기).
+            post({ type: 'MARKER_TAP', id: m.id, saved: m.saved });
           });
           var overlay = new kakao.maps.CustomOverlay({
             position: new kakao.maps.LatLng(m.lat, m.lng),
@@ -88,7 +105,11 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
           meOverlay.setMap(mkMap);
         }
         renderMarkers(payload.markers);
+        // slice2: 드래그·줌 종료(idle)마다 현재 bbox 통지 → RN이 nearby 조회(디바운스/캐시/임계는 RN).
+        //   ⚠️ setCenter/relayout이 유발하는 idle도 발화하지만 RN 가드레일이 과호출을 흡수(단일 지점).
+        kakao.maps.event.addListener(mkMap, 'idle', emitBounds);
         // 컨테이너 사이즈 확정 전 생성 시 빈 타일 방지 — 다음 틱에 relayout + 센터 재설정.
+        //   이때 발생하는 idle이 첫 viewport nearby 로딩을 트리거(INIT 직후 1회).
         setTimeout(function () {
           if (mkMap) {
             mkMap.relayout();

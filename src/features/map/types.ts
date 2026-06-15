@@ -38,14 +38,31 @@ export type Coords = { lat: number; lng: number };
 /** 지도 라이브러리 무관 영역 표현(zoom은 정수 스케일). */
 export type Region = { lat: number; lng: number; zoom: number };
 
-/** 지도뷰(WebView/JS SDK)가 먹는 마커 페이로드. slice1은 전부 saved:true. */
+/** 지도뷰(WebView/JS SDK)가 먹는 마커 페이로드.
+ *  slice2: saved를 boolean으로 폭 확장(true=내 맛집 primary / false=주변 음식점 mapNearbyPin).
+ *  pinsToMapMarkers는 리터럴 true를 그대로 생산(회귀 0), nearbyToMapMarkers가 false를 생산. */
 export type MapMarker = {
-  id: string; // = muklogId
+  id: string; // saved=muklogId / nearby=kakaoPlaceId
   lat: number;
   lng: number;
   emoji: string;
-  saved: true;
+  saved: boolean;
 };
+
+/** nearby-search Edge Function 응답 1건(camelCase, plan §3.2).
+ *  place-search PlaceSearchItem과 별도(주변은 address/road/phone 불필요, distance 추가). */
+export type NearbyPlaceItem = {
+  kakaoPlaceId: string; // Kakao documents[].id
+  placeName: string; // place_name
+  categoryName: string; // category_name(브레드크럼)
+  categoryGroupCode: string; // 항상 'FD6'(요청 제약)
+  lat: number; // y → number
+  lng: number; // x → number
+  distance: number | null; // documents[].distance(문자열 m) → number. center 없으면 null
+};
+
+/** 주변 음식점 조회 UI 상태(plan §3.5) — useNearbyPlaces.status 단일 출처. */
+export type NearbyPlacesStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 /** 위치 권한 상태(enum-style 단일 출처). */
 export const LocationPermissionStatus = {
@@ -57,11 +74,12 @@ export const LocationPermissionStatus = {
 export type LocationPermissionStatus =
   (typeof LocationPermissionStatus)[keyof typeof LocationPermissionStatus];
 
-/** WebView → RN 메시지 타입(enum-style 단일 출처, plan §3.5). */
+/** WebView → RN 메시지 타입(enum-style 단일 출처, plan §3.5·§3.6). */
 export const MapInboundType = {
   Ready: 'READY',
   MarkerTap: 'MARKER_TAP',
   Error: 'ERROR',
+  BoundsChanged: 'BOUNDS_CHANGED', // slice2: idle 이벤트 viewport bbox 통지
 } as const;
 export type MapInboundType = (typeof MapInboundType)[keyof typeof MapInboundType];
 
@@ -72,8 +90,10 @@ export const MapOutboundType = {
 } as const;
 export type MapOutboundType = (typeof MapOutboundType)[keyof typeof MapOutboundType];
 
-/** WebView → RN 파싱 결과(판별 유니온). 비JSON/미지 타입은 parseMapMessage가 null로 흡수. */
+/** WebView → RN 파싱 결과(판별 유니온). 비JSON/미지 타입은 parseMapMessage가 null로 흡수.
+ *  slice2: MARKER_TAP에 saved 동봉(saved=muklogId vs nearby=kakaoPlaceId 분기), BOUNDS_CHANGED 신설. */
 export type MapInboundMessage =
   | { type: typeof MapInboundType.Ready }
-  | { type: typeof MapInboundType.MarkerTap; id: string }
-  | { type: typeof MapInboundType.Error; reason: string };
+  | { type: typeof MapInboundType.MarkerTap; id: string; saved: boolean }
+  | { type: typeof MapInboundType.Error; reason: string }
+  | { type: typeof MapInboundType.BoundsChanged; sw: Coords; ne: Coords };
