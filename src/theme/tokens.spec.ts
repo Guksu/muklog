@@ -88,6 +88,17 @@ describe('tokens — starFill (Stars 채움색, A6)', () => {
   });
 });
 
+describe('tokens — mapNearbyPin (지도 주변 음식점 핀/범례 dot, map-tab)', () => {
+  it('주변 음식점 dot 색이 킷 웜그레이 #B6ABA0다(fgMuted 쿨뉴트럴과 구분)', () => {
+    expect(themes.light.color.mapNearbyPin).toBe('#B6ABA0');
+    expect(themes.light.color.mapNearbyPin).not.toBe(themes.light.color.fgMuted);
+  });
+
+  it('라이트/다크 공통(지도 위 마커라 톤 고정)', () => {
+    expect(themes.dark.color.mapNearbyPin).toBe('#B6ABA0');
+  });
+});
+
 describe('tokens — splashBg (브랜드 스플래시 배경, brand-assets)', () => {
   it('스플래시 배경 토큰이 킷 splash 상단 라이트블루 #EBF1FF다', () => {
     expect(themes.light.color.splashBg).toBe('#EBF1FF');

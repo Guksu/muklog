@@ -16,11 +16,11 @@
 
 ## 하네스: muklog 개발
 
-**목표:** planner→ui-publisher→developer→qa 에이전트 팀으로 한 스프린트에 한 기능을 기획·퍼블리싱·구현·검증한다. **역할 경계:** planner=무엇을(기획·계약) / **ui-publisher=어떻게 보이는가(킷 `templates/muklog`→RN 토큰·프리미티브·화면 골격)** / developer=어떻게 동작하는가(데이터·훅·배선) / qa=통합 정합성+비주얼 충실도. **디자인 단일 출처는 킷 `templates/muklog`**(`.claude/skills/ui-design/templates/muklog/`) — ui-publisher가 RN으로 번역하고, developer는 비주얼을 임의 변경하지 않는다.
+**목표:** planner→ui-publisher→developer→qa(qa-visual ∥ qa-logic) 에이전트 팀으로 한 스프린트에 한 기능을 기획·퍼블리싱·구현·검증한다. **역할 경계:** planner=무엇을(기획·계약) / **ui-publisher=어떻게 보이는가(킷 `templates/muklog`→RN 토큰·프리미티브·화면 골격)** / developer=어떻게 동작하는가(데이터·훅·배선) / **qa-logic=로직·통합 정합성(퍼블리싱 제외)** / **qa-visual=킷 시안 대비 비주얼 충실도**. 두 QA는 독립이라 **병렬**로 검증하고 리포트도 분리(`qa-report-logic.md`·`qa-report-visual.md`). **디자인 단일 출처는 킷 `templates/muklog`**(`.claude/skills/ui-design/templates/muklog/`) — ui-publisher가 RN으로 번역하고, developer는 비주얼을 임의 변경하지 않는다.
 
 **트리거:** 기능 개발/스프린트 관련 요청(예: "초대코드 방 기능 스프린트 시작", "먹로그 리스트 구현", "지도 탭 개발", "다음 스프린트", "○○만 다시 구현") 시 `sprint-orchestrator` 스킬을 사용하라. 단순 질문은 직접 응답 가능.
 
-**산출물:** 각 스프린트는 `docs/sprint/sprint-{YYYYMMDD}-{name}/`에 plan.md / dev-notes.md / qa-report.md를 남긴다.
+**산출물:** 각 스프린트는 `docs/sprint/sprint-{YYYYMMDD}-{name}/`에 plan.md / ui-spec.md / dev-notes.md / qa-report-logic.md / qa-report-visual.md를 남긴다.
 
 **변경 이력:**
 | 날짜 | 변경 내용 | 대상 | 사유 |
@@ -35,3 +35,4 @@
 | 2026-06-14 | **Google 로그인 OAuth 웹 전환** — 라이브 검증 중 네이티브 `@react-native-google-signin`(GIDSignIn)이 idToken에 자동으로 심는 nonce를 노출/제어 못 해 Supabase nonce 검증 실패 확인. 라이브러리 제거하고 `signInWithOAuth`(PKCE)+`expo-web-browser`+`exchangeCodeForSession` 웹 플로우로 교체. Apple은 네이티브 유지. 라이브 로그인 검증 완료 | architecture.md(§1·§2·§4·§5), src/features/auth/oauthSignIn.ts·AuthProvider·socialSignIn, src/lib/supabase.ts, app.json, package.json | 네이티브 google-signin↔Supabase nonce 비호환(라이브러리 한계) |
 | 2026-06-14 | **UI 비주얼 충실도 전수 감사·수정**(에이전트 팀: ui-publisher 주도 + developer 구조 + qa 검증) — 킷 templates/muklog 대비 전 화면 3축(레이아웃·safe-area / 비주얼·토큰 / 텍스트·카피) 정합. 구조 4건 킷 정합(사용자 결정): MuklogEditor 풀스크린 라우트화(시트 폐기)+장소검색 풀스크린 스왑(PlaceSearchView)·RoomCreatedScreen 축하화면 복원·공용 SubBar+Join/Profile 헤더·MapTab 셸. 데이터·계약 불변(회귀 0, 640 green) | src 전반(SubBar·MuklogEditor·PlaceSearchView·RoomCreatedScreen 신설 등), docs/design/architecture.md(§4·§5), docs/sprint/sprint-20260614-ui-fidelity-audit | 기획 킷과 구현 UI 누적 불일치(엣지투엣지·카피·구조) 정합 |
 | 2026-06-14 | **`npm run ios:sim` 빌드 스크립트 신설** — Xcode 26.5 ↔ SDK 52 `@expo/cli`(0.22.x) devicectl 비호환으로 `expo run:ios`가 시뮬레이터를 물리기기로 오인(코드서명 요구). `xcodebuild + simctl`로 직접 시뮬레이터 빌드·설치·실행해 우회. Expo SDK 업그레이드로 CLI가 Xcode 26 지원하면 제거 | scripts/run-ios-sim.sh, package.json | 신규 Xcode ↔ 구 expo-cli 기기 감지 비호환 |
+| 2026-06-14 | **QA 역할 2분할** — 단일 `qa-inspector`(통합+비주얼)를 **`qa-logic`(로직·통합 정합성, 퍼블리싱 제외)** + **`qa-visual`(킷 시안 대비 비주얼 충실도)** 으로 분리. `visual-qa` 스킬 신설, `integration-qa`는 로직 전용으로 명문화. 두 QA는 의존 대상이 달라(qa-visual=퍼블리싱 산출물, qa-logic=구현 산출물) **병렬** 실행, 리포트 분리(`qa-report-logic.md`·`qa-report-visual.md`). 오케스트레이터·planner·ui-publisher·developer·rn-supabase-dev 참조 동기화. 구 `qa-inspector.md`·단일 `qa-report.md` 폐기(과거 스프린트 산출물의 qa-inspector 언급은 감사 추적상 보존) | .claude/agents/qa-logic.md·qa-visual.md(신설, qa-inspector.md 삭제), .claude/skills/visual-qa/(신설)·integration-qa·sprint-orchestrator, agents 전반, CLAUDE.md | 사용자 지시 — 비주얼/로직 검증 책임 분리로 각 QA 집중도·병렬성 향상 |

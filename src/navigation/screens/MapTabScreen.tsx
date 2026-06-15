@@ -1,58 +1,174 @@
 // src/navigation/screens/MapTabScreen.tsx
-// 지도 탭 셸 — 킷 mk-home.jsx:247-327 MapScreen 중 헤더/범례 셸만 선반영 (FLAG-2).
-//   헤더("지도" 워드마크)는 HomeTabs의 HomeHeader가 제공. 이 화면은 지도 영역 + 범례(우리 맛집/주변 음식점).
-//   실제 지도 렌더링·핀·선택 스팟 카드는 map-tab 스프린트(Kakao Map SDK)에서 — 여기선 정적 셸.
-//   범례 dot 색: 우리 맛집=primary(킷 --mk-accent), 주변 음식점=fgMuted(킷 #B6ABA0 웜그레이 근사 — 전용 토큰 없음, 실지도 스프린트에서 정밀화).
-import React from 'react';
+// 지도 탭 — 권한·핀·지도 상태 오케스트레이션 (map-tab 슬라이스 1, plan §4·§5·ui-spec §3 조립 가이드).
+//
+// 배선(소비): useMuklogPins(핀) + useLocationPermission(현재위치) + ui-publisher 컴포넌트
+//   (MapWebView·MapLegend·MapStatusOverlay·SelectedSpotCard). 순수 유틸 mapHtml·pinsToMapMarkers·
+//   initialRegion·parseMapMessage·buildInitScript·buildSetMarkersScript로 WebView 메시지 계약(§3.5)을 배선한다.
+//
+// 정책: 진입 1회 핀 조회 + 권한 1회 요청 + 명시적 refresh만(폴링/Realtime 없음, 비용 가드레일 §8).
+//   현재위치는 RN expo-location으로 받아 INIT.me로 주입(WebView geolocation 미사용 — plan §9.2).
+//   ⚠️ 비주얼은 ui-publisher 컴포넌트로만(임의 변경 금지). 상태→tone/message 판단만 여기서 한다.
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Icon, IconName, Text } from '@/components';
+import {
+  MapLegend,
+  MapStatusOverlay,
+  MapStatusTone,
+  MapWebView,
+  SelectedSpotCard,
+  type MapWebViewHandle,
+  type MapWebViewMessageEvent,
+} from '@/features/map/components';
+import { buildInitScript, buildSetMarkersScript } from '@/features/map/mapMessages';
+import { initialRegion } from '@/features/map/initialRegion';
+import { mapHtml } from '@/features/map/mapHtml';
+import { parseMapMessage } from '@/features/map/parseMapMessage';
+import { pinsToMapMarkers } from '@/features/map/pinsToMapMarkers';
+import { LocationPermissionStatus, MapInboundType, type MuklogPin } from '@/features/map/types';
+import { useLocationPermission } from '@/features/map/useLocationPermission';
+import { useMuklogPins } from '@/features/map/useMuklogPins';
+import { env } from '@/lib/env';
 import { useTheme } from '@/theme';
-import type { ColorToken } from '@/theme';
 
-const LegendChip = ({ dotColor, label }: { dotColor: ColorToken; label: string }) => {
-  const theme = useTheme();
-  return (
-    <View
-      style={[
-        styles.legendChip,
-        { backgroundColor: theme.color.surface, borderRadius: theme.radius.full, gap: theme.spacing[6] },
-      ]}
-    >
-      <View style={[styles.dot, { backgroundColor: theme.color[dotColor] }]} />
-      <Text variant="caption" color="fgWeak">
-        {label}
-      </Text>
-    </View>
-  );
-};
+// 상태 안내 카피(ui-spec §4 권고값 — 해요체, 차단 아님). 카피 단일 출처.
+const MAP_COPY = {
+  loading: '지도를 불러오는 중이에요',
+  permissionDenied: '위치 권한을 허용하면 현재 위치를 볼 수 있어요',
+  pinsError: '먹로그를 불러오지 못했어요',
+  sdkError: '지도를 불러오지 못했어요',
+  retry: '다시 시도',
+} as const;
 
 export const MapTabScreen = () => {
   const theme = useTheme();
-  return (
-    <View style={[styles.map, { backgroundColor: theme.color.surfaceAlt }]}>
-      {/* 범례 — 킷 mk-home:281-284(top 14 / left 16, gap 8). */}
-      <View style={[styles.legend, { top: theme.spacing[14], left: theme.spacing[16], gap: theme.spacing[8] }]}>
-        <LegendChip dotColor="primary" label="우리 맛집" />
-        <LegendChip dotColor="fgMuted" label="주변 음식점" />
-      </View>
+  const { state, refresh } = useMuklogPins();
+  const permission = useLocationPermission();
 
-      {/* 지도 영역 플레이스홀더 — 실제 Kakao Map은 map-tab 스프린트. */}
-      <View style={[styles.hint, { gap: theme.spacing[8] }]}>
-        <Icon name={IconName.Location} size={32} color="fgAssistive" />
-        <Text variant="bodySm" color="fgMuted" style={styles.center}>
-          지도는 곧 제공돼요
-        </Text>
-      </View>
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mapErrored, setMapErrored] = useState(false);
+  const webviewRef = useRef<MapWebViewHandle>(null);
+
+  // 현재 핀 목록(ready일 때만, 아니면 빈 배열 — 지도/INIT는 항상 유효하게 유지).
+  const pins: MuklogPin[] = state.status === 'ready' ? state.pins : [];
+  const markers = pinsToMapMarkers({ pins });
+  const center = initialRegion({ coords: permission.coords, pins });
+  // HTML은 1회 생성(키 주입). INIT/SET_MARKERS는 injectJavaScript로 주입(SDK 재로드 없음).
+  const html = mapHtml({ jsKey: env.KAKAO_JS_KEY });
+
+  // 진입 시 위치 권한 1회 요청(undetermined일 때). request 내부에 중복 가드가 있어 재호출 안전.
+  useEffect(
+    function requestLocationOnEnter() {
+      if (permission.status === LocationPermissionStatus.Undetermined) {
+        void permission.request();
+      }
+    },
+    [permission.status],
+  );
+
+  const sendInit = () => {
+    webviewRef.current?.injectJavaScript(
+      buildInitScript({ center, markers, me: permission.coords }),
+    );
+  };
+
+  // WebView → RN 메시지 디스패치(파싱은 parseMapMessage). 비JSON/미지는 조용히 무시.
+  const handleMessage = (event: MapWebViewMessageEvent) => {
+    const message = parseMapMessage({ raw: event.nativeEvent.data });
+    if (!message) return;
+
+    if (message.type === MapInboundType.Ready) {
+      setMapErrored(false);
+      sendInit();
+      return;
+    }
+    if (message.type === MapInboundType.MarkerTap) {
+      setSelectedId(message.id);
+      return;
+    }
+    if (message.type === MapInboundType.Error) {
+      setMapErrored(true);
+    }
+  };
+
+  // 재시도: 핀 에러는 refresh, 지도 SDK 에러는 INIT 재주입(SDK가 살아있으면 즉시 복구) + 핀 재조회.
+  const handleRetry = () => {
+    setMapErrored(false);
+    void refresh();
+    sendInit();
+  };
+
+  const selectedPin = selectedId ? pins.find((p) => p.muklogId === selectedId) ?? null : null;
+
+  // 상태 → 오버레이(tone/message) 판단(ui-spec §3 매핑). 우선순위: 지도 SDK 에러 → 핀 에러 → 로딩 → 빈/권한안내.
+  const overlay = ((): {
+    tone: MapStatusTone;
+    message: string;
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null => {
+    if (mapErrored) {
+      return {
+        tone: MapStatusTone.Error,
+        message: MAP_COPY.sdkError,
+        actionLabel: MAP_COPY.retry,
+        onAction: handleRetry,
+      };
+    }
+    if (state.status === 'error') {
+      return {
+        tone: MapStatusTone.Error,
+        message: MAP_COPY.pinsError,
+        actionLabel: MAP_COPY.retry,
+        onAction: handleRetry,
+      };
+    }
+    if (state.status === 'loading') {
+      return { tone: MapStatusTone.Loading, message: MAP_COPY.loading };
+    }
+    // ready: 권한 거부 안내만(빈 상태 안내는 제거 — 사용자 요청. 핀 0개여도 지도만 깔끔히 표시).
+    if (permission.status === LocationPermissionStatus.Denied) {
+      return { tone: MapStatusTone.Info, message: MAP_COPY.permissionDenied };
+    }
+    return null;
+  })();
+
+  return (
+    <View style={styles.root}>
+      <MapWebView html={html} onMessage={handleMessage} webviewRef={webviewRef}>
+        {/* 범례 — 좌상단 오버레이(ui-spec §2.2: top/left 배치는 부모 책임). */}
+        <View style={[styles.legend, { top: theme.spacing[14], left: theme.spacing[16] }]}>
+          <MapLegend />
+        </View>
+
+        {/* 상태 오버레이 — 차단 아님(지도 위 배너). */}
+        {overlay ? (
+          <View pointerEvents="box-none" style={styles.overlay}>
+            <MapStatusOverlay
+              tone={overlay.tone}
+              message={overlay.message}
+              actionLabel={overlay.actionLabel}
+              onAction={overlay.onAction}
+            />
+          </View>
+        ) : null}
+      </MapWebView>
+
+      {/* 선택 스팟 카드 — 핀 탭 시 하단 도킹. */}
+      {selectedPin ? (
+        <SelectedSpotCard
+          placeName={selectedPin.placeName}
+          rating={selectedPin.rating}
+          category={selectedPin.category}
+          area={selectedPin.area}
+        />
+      ) : null}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  map: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  legend: { position: 'absolute', flexDirection: 'row' },
-  legendChip: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 10 },
-  dot: { width: 9, height: 9, borderRadius: 4.5 },
-  hint: { alignItems: 'center' },
-  center: { textAlign: 'center' },
+  root: { flex: 1 },
+  legend: { position: 'absolute' },
+  overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
 });

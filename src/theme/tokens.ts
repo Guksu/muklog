@@ -49,6 +49,10 @@ const palette = {
   //   킷 index.html에 --status-negative 정의가 없어 인라인 폴백 #E5484D가 실값(킷=SSOT) → 그대로 채택.
   //   기존 error(#FF4242)/errorStrong(#E52222)와 의미 분리(error=검증/조회 실패 텍스트, negative=파괴 CTA).
   statusNegative:'#E5484D',
+  // 지도 "주변 음식점" 핀/범례 dot — 킷 mk-home.jsx:282·314 웜그레이 #B6ABA0(SSOT, --mk-* 변수 아닌 인라인 실값).
+  //   기존 셸이 fgMuted(#9B9B9B 쿨뉴트럴)로 근사했으나 킷은 웜그레이라 톤 불일치 → 전용 토큰으로 정합(map-tab 슬라이스 1).
+  //   슬라이스 1엔 주변 음식점 핀이 없어 범례 dot에만 쓰이나, 슬라이스 2(map-tab-nearby)의 주변 핀 색을 미리 고정한다.
+  mapNearbyPin:'#B6ABA0',
 } as const;
 
 // 그라데이션 stops(시맨틱 color 맵은 단일 string 토큰만 담으므로 배열은 별도 export).
@@ -88,6 +92,8 @@ const lightColor = {
   scrimStrong: palette.scrimStrong,
   // 파괴 액션(삭제) — 킷 status-negative(#E5484D). negativeFg=버튼 글자 흰색.
   negative: palette.statusNegative, negativeFg: palette.white,
+  // 지도 "주변 음식점" 핀/범례 dot 웜그레이(킷 #B6ABA0). 라이트/다크 공통(지도 위 마커라 톤 고정).
+  mapNearbyPin: palette.mapNearbyPin,
 } as const;
 
 // 시맨틱 컬러 (다크) — 시맨틱만 오버라이드. 신규 키도 동일 키로 미러링(tsc 키 일관성, 엣지1).

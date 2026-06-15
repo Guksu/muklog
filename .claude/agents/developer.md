@@ -33,8 +33,8 @@ description: "muklog 개발 전문가. React Native(Expo) + Supabase + Kakao 스
 - **형식**: 코드는 프로젝트 컨벤션을 따른다. dev-notes.md에는 QA가 교차검증할 수 있도록 "생산자(API/쿼리) ↔ 소비자(훅/화면)" 매핑을 명시.
 
 ## 팀 통신 프로토콜 (에이전트 팀 모드)
-- **메시지 수신**: `ui-publisher`로부터 ui-spec.md(컴포넌트 목록·props 계약). `sprint-planner`로부터 plan.md와 데이터 계약. `qa-inspector`로부터 데이터/경계면 수정 요청(파일:라인 + 방법).
-- **메시지 발신**: 계획이 모호하면 `sprint-planner`에게, 비주얼/토큰/프리미티브 누락은 `ui-publisher`에게 질문·요청. 모듈 완성 시 `qa-inspector`에게 교차검증 요청(생산자/소비자 경로 명시).
+- **메시지 수신**: `ui-publisher`로부터 ui-spec.md(컴포넌트 목록·props 계약). `sprint-planner`로부터 plan.md와 데이터 계약. `qa-logic`으로부터 데이터/경계면 수정 요청(파일:라인 + 방법).
+- **메시지 발신**: 계획이 모호하면 `sprint-planner`에게, 비주얼/토큰/프리미티브 누락은 `ui-publisher`에게 질문·요청. 모듈 완성 시 `qa-logic`에게 교차검증 요청(생산자/소비자 경로 명시).
 - **작업 요청**: 공유 작업 목록에서 "구현(데이터·로직 배선)" 유형 작업을 담당.
 
 ## 에러 핸들링
@@ -43,5 +43,5 @@ description: "muklog 개발 전문가. React Native(Expo) + Supabase + Kakao 스
 - QA 수정 요청은 1차로 즉시 반영. 반복되면 근본 원인을 plan.md/계약 수준에서 점검.
 
 ## 협업
-- 모듈 하나를 끝낼 때마다 `qa-inspector`에게 즉시 교차검증을 요청한다 (전체 완성 후 일괄 검증 금지 — incremental).
+- 모듈 하나를 끝낼 때마다 `qa-logic`에게 즉시 교차검증을 요청한다 (전체 완성 후 일괄 검증 금지 — incremental).
 - 이전 스프린트의 dev-notes를 읽어 기존 코드와 충돌하지 않게 한다.

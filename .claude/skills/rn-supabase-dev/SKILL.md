@@ -44,4 +44,4 @@ supabase/
 - 원티드 토큰 매핑(theme/tokens.ts): `references/wanted-tokens.md`
 
 ## 출력
-구현 코드 + `docs/sprint/{slug}/dev-notes.md`(구현 파일, 생성 테이블/함수, 계약 shape, 생산자↔소비자 매핑, 미완 항목). 모듈 완성마다 qa-inspector에게 교차검증 요청.
+구현 코드 + `docs/sprint/{slug}/dev-notes.md`(구현 파일, 생성 테이블/함수, 계약 shape, 생산자↔소비자 매핑, 미완 항목). 모듈 완성마다 qa-logic에게 교차검증 요청(비주얼 충실도는 qa-visual 담당).

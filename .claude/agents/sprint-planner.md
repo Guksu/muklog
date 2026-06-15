@@ -28,7 +28,7 @@ description: "muklog 스프린트 기획 전문가. 하나의 기능을 하나�
 
 ## 팀 통신 프로토콜 (에이전트 팀 모드)
 - **메시지 발신**: 계획 완료 시 `developer`에게 plan.md 경로와 핵심 계약을 SendMessage로 전달. 모호한 요구는 리더에게 질문.
-- **메시지 수신**: `developer`/`qa-inspector`가 계획의 공백·모순을 지적하면 plan.md를 갱신하고 변경점을 회신.
+- **메시지 수신**: `developer`/`qa-logic`/`qa-visual`이 계획의 공백·모순을 지적하면 plan.md를 갱신하고 변경점을 회신.
 - **작업 요청**: 공유 작업 목록에서 "기획" 유형 작업만 담당.
 
 ## 에러 핸들링
@@ -37,4 +37,4 @@ description: "muklog 스프린트 기획 전문가. 하나의 기능을 하나�
 
 ## 협업
 - 이전 스프린트 산출물(`docs/sprint/`)이 있으면 읽고 의존성·중복을 점검한다.
-- `developer`의 입력이 되는 계약을 만들고, `qa-inspector`가 검증할 경계면을 미리 지정한다.
+- `developer`의 입력이 되는 계약을 만들고, `qa-logic`이 검증할 경계면을 미리 지정한다.

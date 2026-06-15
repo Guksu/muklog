@@ -15,6 +15,11 @@ function required(key: string, value: string | undefined): string {
   return value;
 }
 
+// 선택 환경변수 — 누락 시 throw하지 않고 빈 문자열을 반환한다(소비처가 부재를 분기 처리).
+function optional(value: string | undefined): string {
+  return value == null ? '' : value;
+}
+
 export const env = {
   SUPABASE_URL: required('EXPO_PUBLIC_SUPABASE_URL', process.env.EXPO_PUBLIC_SUPABASE_URL),
   SUPABASE_ANON_KEY: required('EXPO_PUBLIC_SUPABASE_ANON_KEY', process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY),
@@ -29,4 +34,8 @@ export const env = {
     'EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID',
     process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
   ),
+  // Kakao JavaScript 키(map-tab 지도 렌더용). 도메인 화이트리스트로 보호되는 공개키 성격이나
+  //   번들 직박힘을 피해 env로 주입한다(키 값은 코드/문서 미기록 — 이름만). 미설정 시 빈 문자열 →
+  //   지도뷰가 "지도를 불러오지 못했어요"로 분기(앱 부팅은 막지 않음, 다른 탭 정상).
+  KAKAO_JS_KEY: optional(process.env.EXPO_PUBLIC_KAKAO_JS_KEY),
 } as const;

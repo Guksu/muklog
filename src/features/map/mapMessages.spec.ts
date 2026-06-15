@@ -1,0 +1,36 @@
+// src/features/map/mapMessages.spec.ts
+// RN→WebView 직렬화 헬퍼 단위 테스트 (plan §3.5).
+//   buildInitScript / buildSetMarkersScript 가 injectJavaScript에 넣을 JS 문자열을 만든다.
+//   페이로드(center/markers/me)가 JSON으로 안전 직렬화되고, window 핸들러 호출 형태인지 검증.
+import { buildInitScript, buildSetMarkersScript } from './mapMessages';
+import { type MapMarker, type Region } from './types';
+
+const center: Region = { lat: 37.5, lng: 127.0, zoom: 5 };
+const marker: MapMarker = { id: 'm1', lat: 37.5, lng: 127.0, emoji: '🍝', saved: true };
+
+describe('buildInitScript', () => {
+  it('INIT 페이로드(center/markers/me)를 JSON으로 담은 핸들러 호출 스크립트를 만든다', () => {
+    const script = buildInitScript({ center, markers: [marker], me: { lat: 1, lng: 2 } });
+    expect(script).toContain('__muklogInit');
+    expect(script).toContain('"type":"INIT"');
+    expect(script).toContain('"lat":37.5');
+    expect(script).toContain('🍝');
+    // injectJavaScript 관례: true; 로 끝나 평가 경고를 피한다.
+    expect(script.trim().endsWith('true;')).toBe(true);
+  });
+
+  it('me가 null이어도 안전 직렬화한다', () => {
+    const script = buildInitScript({ center, markers: [], me: null });
+    expect(script).toContain('"me":null');
+  });
+});
+
+describe('buildSetMarkersScript', () => {
+  it('SET_MARKERS 페이로드를 담은 핸들러 호출 스크립트를 만든다', () => {
+    const script = buildSetMarkersScript({ markers: [marker] });
+    expect(script).toContain('__muklogSetMarkers');
+    expect(script).toContain('"type":"SET_MARKERS"');
+    expect(script).toContain('"id":"m1"');
+    expect(script.trim().endsWith('true;')).toBe(true);
+  });
+});
