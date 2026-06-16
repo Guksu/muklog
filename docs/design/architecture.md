@@ -110,6 +110,16 @@ wishlist_items                   -- 로그(방)별 "가보고 싶은 곳" 위시
   added_by       uuid → profiles  (NOT NULL)  -- 담은 사람. 표시단에서 본인/짝꿍(익명) 매핑
   created_at     timestamptz
   -- index (room_id, created_at desc) — 최신 추가 우선 목록
+
+device_tokens                    -- 푸시 발송용 디바이스 토큰 (push-notifications S1 — 토큰 등록)
+  id              uuid PK  default gen_random_uuid()
+  user_id         uuid → profiles ON DELETE CASCADE  (NOT NULL)  -- 소유자(=auth.uid())
+  expo_push_token text  (NOT NULL) UNIQUE       -- Expo push token(ExponentPushToken[...]). 기기 식별 단위
+  platform        text  (NOT NULL) CHECK in ('ios','android')  -- iOS+Android 동시(S1 코드는 양 플랫폼 공통)
+  device_name     text                          -- expo-device Device.deviceName(표시용, nullable)
+  created_at      timestamptz  default now()
+  updated_at      timestamptz  default now()    -- upsert(onConflict expo_push_token) 시 갱신
+  -- index (user_id) — S2 발송 시 수신자 토큰 조회
 ```
 
 > **미디어 구성**: 먹로그당 사진 0~5장(`muklog_photos`) + 2초 영상 0~1개(`muklogs.video_path`). 사진과 영상은 독립 슬롯이며 영상은 항상 옵션이다. 영상 버킷은 `muklog-media`(또는 `muklog-photos`와 분리 운영)로 두고 RLS는 사진과 동일하게 상위 방 멤버십으로 검증한다.
@@ -128,6 +138,7 @@ wishlist_items                   -- 로그(방)별 "가보고 싶은 곳" 위시
   - `muklogs`: select=`room_id IN (select room_id from room_members where user_id = auth.uid())`. insert=`created_by=auth.uid() and 내 방`. **update(`muklogs_update_own`)·delete(`muklogs_delete_own`)=`created_by=auth.uid() and 내 방`**(수정=muklog-edit, 삭제 정책=muklog-photos 롤백용 선반영·muklog-edit에서 삭제 UI 사용).
   - `muklog_photos`: select/insert/delete=상위 `muklog`의 room 멤버십(insert/delete는 created_by 본인). **update(`muklog_photos_update_member`)=동일 조건**(muklog-edit 사진 재정렬 order_index reindex용).
   - `wishlist_items`(wishlist 스프린트): select=`room_id IN (내 방)`. insert=`added_by=auth.uid() and 내 방`. **delete=`room_id IN (내 방)`(룸 멤버 누구나 — 공유 위시 리스트 semantics, 작성자 제한 없음)**. update 정책 없음(편집 OUT). 조회/추가/삭제는 **일반 쿼리**(DEFINER RPC·Realtime 미사용 — 비용 가드레일).
+  - `device_tokens`(push-notifications S1): select/insert/update/delete 모두 `user_id = auth.uid()`(**본인 토큰만** R/W). upsert는 `onConflict='expo_push_token'`(기기 계정 전환 시 소유자 이전). ⚠️ **S2 발송 시** 상대 토큰 조회는 본인-RLS로 불가 → **`SECURITY DEFINER` RPC(예: `list_room_push_targets(p_room_id)`)로 같은 방 멤버 토큰 조회**(S2에서 신설, S1은 컬럼·인덱스만 선반영). 등록은 **앱 authenticated 시 1회**(폴링·Realtime 미사용 — 비용 가드레일).
 - **Storage 정책**: `muklog-photos` 버킷은 경로 첫 세그먼트(`room_id`)가 멤버인 방일 때만 접근.
 
 ---
@@ -214,6 +225,10 @@ Profile (헤더 진입)
 | `map-locate-button` | **지도 현재위치 버튼**: 우하단 FAB(킷 mk-home:289-298, `locate` 아이콘·`mapLocate #3B82F6`·`shadow.fab`) → 탭 시 `getCurrentPositionAsync` **재취득** → `RECENTER` 메시지로 `__muklogRecenter`(panTo + me 마커 fresh 좌표 갱신). `useLocationPermission.refreshCoords`(탭당 1회·in-flight 가드), `handleLocate`(미결정→권한요청 / 거부→no-op / granted→재센터). 순수 클라(마이그레이션·Edge Function·신규 Kakao 호출 0). QA 2분할 통과(832 green). me 마커 펄스(mkLocate)는 옵션 후속. 라이브: 재빌드 불필요(JS), 디바이스 스모크. `docs/sprint/sprint-20260615-map-locate-button/`. | #5 | ✅ 완료(디바이스 스모크 이월) |
 | ~~`room-promote`~~ | (흡수됨) 솔로→커플 전환이 멀티 로그 모델에서 "초대코드로 조인 시 자동 커플화"로 단순화 → `log-invite`로 흡수 | #1 | ~~폐기~~ |
 | `room-lifecycle` | 예약 삭제 라이프사이클: **나가기 24h 유예/취소(#5)** + 예약 경과 cron + Storage 정리. `leave_room(p_room_id)` 재설계(커플=24h 예약/솔로=즉시 삭제) + `cancel_room_deletion(p_room_id)`(요청자만) + `delete_expired_rooms()` **pg_cron**(in-DB·외부호출 0) 매시 잡 + `storage.objects muklog-photos/{room_id}/%` 메타 정리 + `list_my_rooms`/`get_room` 예약필드 투영 + LogScreen ⋯나가기·예약삭제 배너·취소(킷 비종속). **#2 커플방 자동삭제는 폐기**(멀티로그에서 모든 로그 mode='couple'→솔로 유실 버그, 사용자 결정·솔로 영구 유효). `docs/sprint/sprint-20260616-room-lifecycle/`. | #5 신규 | 진행 |
+| ~~`push-notifications`~~ → **슬라이스 분해** | 푸시 알림(상대가 먹로그 추가 시 발송)이 1스프린트엔 과대(XL) → **S1 토큰등록 / S3 prefs DB이전 / S2 발송트리거 / S4 수신UX(후속)** 분해. **발송 채널 = Expo Push Service(무료·AWS 0).** 권장 순서 S1→S3→S2(S2 gating이 서버 가독 prefs 전제). `docs/sprint/sprint-20260617-push-notifications/plan.md` §A. | (확정 결정) | ~~분해~~ |
+| `push-notifications` S1 (토큰등록) | **디바이스 토큰 등록** = 발송의 전제. `expo-notifications`+`expo-device` 추가(**Dev Client 재빌드**) + authenticated 시 1회 권한요청→Expo push token 취득→`device_tokens` upsert(onConflict expo_push_token). **iOS+Android 동시**(platform 컬럼 ios·android, **S1 코드는 양 플랫폼 공통**). **Android는 FCM/google-services.json + app.json expo-notifications 플러그인 전제**(실 토큰 취득 조건) → 라이브 스모크 배치에서 확인. 신규 테이블 `device_tokens`+RLS 4종(본인 토큰만)+마이그레이션 `20260617120000_device_tokens.sql`, 순수유틸 `pushToken.ts`, 훅 `useRegisterPushToken`(외부 SDK 모킹·멱등 가드), **로그아웃 시 토큰 폐기(T6 포함·사용자 확정)**. 발송용 DEFINER RPC·딥링크·뱃지 OUT(S2/S4). 폴링·Realtime 0(비용 가드레일). 실기기 토큰 스모크는 이월. `docs/sprint/sprint-20260617-push-notifications/`. | architecture §7 푸시알림 | 진행 |
+| `push-notifications` S3 (prefs DB이전) | 알림 설정 prefs를 **로컬 AsyncStorage→서버 가독 `notification_prefs` DB**로 이전(`useNotifPrefs` 인터페이스 보존·내부만 교체, 기존 로컬값 1회 마이그레이션). S2 발송 gating(master/perLog)이 서버 prefs를 읽어야 하므로 **S2 직전 필요**. S1과 독립(병렬 가능). | 발송 gating 전제 | 예정 |
+| `push-notifications` S2 (발송트리거) | 먹로그 insert(상대 작성) → 수신자 토큰(`list_room_push_targets` DEFINER RPC)·prefs(master/perLog) gating → **Expo Push API** 발송. **트리거 방식(DB트리거+pg_net vs DB트리거→Edge Function)은 착수 시 확정.** 무효토큰(DeviceNotRegistered) 정리 동반. **S1+S3 의존.** | #신규 | 예정 |
 
 각 스프린트는 `planner → developer → qa` 순으로 진행하며, 오케스트레이터(`sprint-orchestrator` 스킬)가 조율한다.
 
@@ -232,7 +247,7 @@ Profile (헤더 진입)
 ## 7. 미해결 / 추후 결정
 
 - ~~원티드 토큰 실제 값 확보~~ → **해결.** 별도 builbook 프로젝트의 `wanted-design-system` 토큰을 RN용 `theme/tokens.ts`로 변환. 상세는 `.claude/skills/rn-supabase-dev/references/wanted-tokens.md` (컬러·스페이싱=원티드 실값, 타이포·radius·shadow=프로젝트 정의). 폰트는 Pretendard를 `expo-font`로 로드.
-- 푸시 알림(상대가 먹로그 추가 시) — MVP 이후.
+- ~~푸시 알림(상대가 먹로그 추가 시) — MVP 이후.~~ → **착수(2026-06-17, 슬라이스 분해).** XL이라 S1(토큰등록)/S3(prefs DB이전)/S2(발송트리거)/S4(수신UX 후속)로 분해. **발송 채널 = Expo Push Service(무료·AWS 0).** **S1 토큰등록 진행 중**(iOS+Android 동시·S1 코드 양 플랫폼 공통, Android는 FCM/google-services 전제, `device_tokens` 테이블·RLS·`useRegisterPushToken`·Dev Client 재빌드·로그아웃 시 토큰 폐기). **S2 발송**(수신자 토큰 DEFINER RPC + master/perLog gating + Expo Push 호출; 트리거 방식=DB트리거+pg_net vs Edge Function은 S2 착수 시 확정)·**S3 prefs 로컬→DB 이전**(발송 gating이 서버 가독 prefs 전제 → S2 직전)은 후속. 권장 순서 S1→S3→S2. 상세 `docs/sprint/sprint-20260617-push-notifications/plan.md`.
 - ~~방 나가기 / 재초대 흐름~~ → **결정됨.** 나가기는 24h 유예 + 나간 사람만 취소(#5). 솔로↔커플 모드 도입(#1). **즉시판은 `room-leave` 스프린트로 우선 출시**(유예 없이 즉시 해지 + 0명 시 방 삭제, 남은 멤버 보존). **유예/취소/cron은 `room-lifecycle` 스프린트(2026-06-16)에서 구현**(아래 항목).
 - ~~**예약 삭제 인프라 미정 사항**: pg_cron vs 스케줄 Edge Function, cron 주기, Storage 정리 방식~~ → **결정됨(`room-lifecycle` 2026-06-16)**: **pg_cron**(in-DB·외부 호출 0·무료 티어, Dashboard 확장 활성 필요) + **매시**(`0 * * * *`, 24h 윈도우 지연 ≤1h) + 삭제 함수가 `storage.objects` 메타행(`muklog-photos/{room_id}/%`)을 방 행 삭제와 같은 트랜잭션에서 정리(외부 호출 0; 실파일 GC는 라이브 스모크 확인, 고아 시 `pg_net` 후속). **#2 커플방 자동삭제는 폐기**(위 §라이프사이클 — 멀티로그에서 솔로 유실 버그).
 - ~~솔로방의 커플 전환(초대코드 사후 발급)~~ → **멀티 로그 모델로 흡수.** 모든 로그는 솔로로 시작, 로그 내 초대코드로 조인 시 자동 커플화(`log-invite`).

@@ -22,6 +22,8 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 
 import { supabase } from '@/lib/supabase';
 
+import { unregisterDeviceToken, useRegisterPushToken } from '@/features/notif/useRegisterPushToken';
+
 import { AuthErrorToken, messageForAuthError } from './errors';
 import { signInWithGoogleOAuth } from './oauthSignIn';
 import { signInWithAppleNative, type NativeSignInResult } from './socialSignIn';
@@ -64,6 +66,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // 동일 userId에 대해 profiles upsert를 1회만 수행하기 위한 가드(토큰 갱신 시 중복 upsert 방지).
   // signOut 시 리셋 → 재로그인 시 upsert 재실행(plan E11).
   const profileEnsuredRef = useRef<string | null>(null);
+
+  // 푸시 디바이스 토큰 등록(push-notifications S1, T4). authenticated 진입(userId 확보) 시 1회 구동.
+  //   authenticated 외 상태에선 userId='' → 훅이 no-op(폴링 없음, 중복은 훅 내부 ref 가드).
+  const activeUserId = state.status === 'authenticated' ? state.userId : '';
+  useRegisterPushToken({ userId: activeUserId });
 
   const retry = () => {
     setState({ status: 'loading' });
@@ -144,6 +151,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signOut = async () => {
+    // 로그아웃 전 현재 기기 토큰 폐기(T6, 오배달 방지). auth.uid() 유효 구간에서 delete(RLS 본인 토큰).
+    //   best-effort: 토큰 미보유/실패는 무해 흡수 → 로그아웃 흐름 차단 0.
+    await unregisterDeviceToken({ userId: activeUserId });
     await supabase.auth.signOut();
     profileEnsuredRef.current = null;
     if (mountedRef.current) {

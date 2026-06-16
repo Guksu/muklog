@@ -26,6 +26,14 @@ jest.mock('@/lib/supabase', () => ({
   },
 }));
 
+// --- 푸시 토큰 등록/폐기 모킹 (S1 T4 배선만 검증, SDK 동작은 useRegisterPushToken.spec이 별도 검증) ---
+const mockUseRegisterPushToken = jest.fn();
+const mockUnregisterDeviceToken = jest.fn();
+jest.mock('@/features/notif/useRegisterPushToken', () => ({
+  useRegisterPushToken: (...a: unknown[]) => mockUseRegisterPushToken(...a),
+  unregisterDeviceToken: (...a: unknown[]) => mockUnregisterDeviceToken(...a),
+}));
+
 // --- 소셜 헬퍼 모킹 (Google=OAuth 웹 플로우 / Apple=네이티브) ---
 const mockGoogleOAuth = jest.fn();
 const mockAppleNative = jest.fn();
@@ -74,6 +82,7 @@ beforeEach(() => {
   authChangeCb = null;
   mockUpsert.mockResolvedValue({ error: null });
   mockSignOut.mockResolvedValue({ error: null });
+  mockUnregisterDeviceToken.mockResolvedValue(undefined);
   mockOnAuthStateChange.mockImplementation((cb: (e: string, s: unknown) => void) => {
     authChangeCb = cb;
     return { data: { subscription: { unsubscribe } } };
@@ -204,6 +213,17 @@ describe('AuthProvider — signOut & onAuthStateChange', () => {
     await waitFor(() => expect(mockUpsert).toHaveBeenCalledTimes(2));
   });
 
+  it('signOut → unregisterDeviceToken을 현재 userId로 호출(T6, 로그아웃 토큰 폐기)', async () => {
+    mockGetSession.mockResolvedValue(session({ id: 'u1' }));
+    renderProvider();
+    await waitFor(() => expect(screen.getByText('authenticated:u1')).toBeTruthy());
+
+    await act(async () => {
+      await captured?.signOut();
+    });
+    expect(mockUnregisterDeviceToken).toHaveBeenCalledWith({ userId: 'u1' });
+  });
+
   it('onAuthStateChange 세션 null(SIGNED_OUT) → error 강제 전이하지 않는다', async () => {
     mockGetSession.mockResolvedValue(session({ id: 'u1' }));
     renderProvider();
@@ -213,5 +233,24 @@ describe('AuthProvider — signOut & onAuthStateChange', () => {
     });
     // error로 가지 않음(authenticated 유지 또는 unauthenticated — error 금지).
     await waitFor(() => expect(captured?.state.status).not.toBe('error'));
+  });
+});
+
+describe('AuthProvider — 푸시 토큰 등록 배선(S1 T4)', () => {
+  it('AC10: authenticated 전이 시 useRegisterPushToken({ userId })로 구동된다', async () => {
+    mockGetSession.mockResolvedValue(session({ id: 'u1' }));
+    renderProvider();
+    await waitFor(() => expect(screen.getByText('authenticated:u1')).toBeTruthy());
+    expect(mockUseRegisterPushToken).toHaveBeenCalledWith({ userId: 'u1' });
+  });
+
+  it('AC10: unauthenticated/loading 상태에선 userId="" 로만 호출(authenticated userId로 미구동)', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    renderProvider();
+    await waitFor(() => expect(screen.getByText('unauthenticated')).toBeTruthy());
+    expect(mockUseRegisterPushToken).toHaveBeenCalledWith({ userId: '' });
+    expect(mockUseRegisterPushToken).not.toHaveBeenCalledWith(
+      expect.objectContaining({ userId: expect.stringMatching(/.+/) }),
+    );
   });
 });

@@ -49,6 +49,12 @@
           "locationWhenInUsePermission": "근처 맛집을 지도에 보여주려면 위치 권한이 필요해요."
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "color": "#3366FF"
+        }
+      ],
       "./plugins/withFmtConstevalFix",
       "expo-apple-authentication"
     ],
