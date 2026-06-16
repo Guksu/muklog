@@ -152,6 +152,9 @@ export const shadow = {
   // toast = 하단 플로팅 토스트 pill(떠 있는 오버레이) — 킷 .mk-toast box-shadow 0 10px 30px rgba(0,0,0,.28).
   //   RN shadowRadius는 CSS blur(30)와 1:1은 아니나 근사. 강한 떠있음(shadow.card·lg보다 진하고 큼).
   toast: { shadowColor:'#000', shadowOpacity:0.28, shadowRadius:30, shadowOffset:{width:0,height:10}, elevation:8 },
+  // dialog = 중앙 알림형 다이얼로그 카드(RenameDialog) — 킷 mk-extra:37 box-shadow 0 20px 50px rgba(0,0,0,.28).
+  //   RN shadowRadius는 CSS blur(50)와 1:1은 아니나 근사. 검정 그림자(컬러 아님, 킷 동일). shadow.toast보다 깊은 떠있음(offset 20).
+  dialog: { shadowColor:'#000', shadowOpacity:0.28, shadowRadius:50, shadowOffset:{width:0,height:20}, elevation:24 },
 } as const;
 
 // 타이포 [프로젝트 정의 — Pretendard 기반]. RN: rem→px(×16), lineHeight는 절대값.
@@ -191,6 +194,10 @@ export const typography = {
   ratingNum:   makeTypography({ size: 15, ratio: 1, family: 'Pretendard-Bold' }),      // 700/15 상세 별점 숫자(킷 mk-log:165)
   inviteCode:  makeTypography({ size: 26, ratio: 1, family: 'Pretendard-Bold' }),      // 800/26 초대코드(킷 mk-home:225) — letterSpacing은 사용처에서 .18em
   profileName: makeTypography({ size: 22, ratio: 1.2, family: 'Pretendard-Bold' }),    // 800/22 프로필 닉네임(킷 mk-log:440)
+  // ── 이름변경 다이얼로그(rename-dialog)로 추가한 킷 정합 역할 토큰 (킷 mk-extra RenameDialog) ──
+  dialogTitle:   makeTypography({ size: 17.5, ratio: 1.3, family: 'Pretendard-Bold' }),   // 800/17.5 RenameDialog 제목(킷 mk-extra:40)
+  dialogSubtitle:makeTypography({ size: 12.5, ratio: 1.5, family: 'Pretendard-Medium' }), // 500/12.5 RenameDialog 보조문(킷 mk-extra:41, text-alternative)
+  dialogInput:   makeTypography({ size: 16, ratio: 1.2, family: 'Pretendard-SemiBold' }), // 600/16 RenameDialog 입력·취소(킷 mk-extra:46,57). 저장(800/16)은 button 토큰 재사용.
 } as const;
 
 export const themes = {

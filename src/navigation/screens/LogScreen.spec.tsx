@@ -37,11 +37,11 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 // 배럴 모킹: useRoom·useRenameRoom 모킹 + displayLogName/code는 실 구현(표시명 로직 직접 검증).
-//   LogNameSheet/LogTitleButton는 경량 테스트 더블로 대체 — 실 구현은 @/components를 거쳐 배럴을 재유입(순환)시켜
-//   TDZ를 유발한다. 배선 로직(open/save/error/disabled)만 검증하면 충분(킷 비주얼 충실도는 qa-visual·각 컴포넌트 spec).
+//   LogTitleButton는 경량 테스트 더블로 대체 — 실 구현은 @/components를 거쳐 배럴을 재유입(순환)시켜
+//   TDZ를 유발한다. RenameDialog는 @/components(별도 모킹)에서 controlled 더블로 대체. 배선 로직(open/save/error/disabled/extra 게이팅)만 검증.
 jest.mock('@/features/room', () => {
   const ReactLib = require('react');
-  const { Pressable, Text, TextInput, View } = require('react-native');
+  const { Pressable, Text, View } = require('react-native');
   const h = ReactLib.createElement;
   const code = jest.requireActual('@/features/room/code');
   const logName = jest.requireActual('@/features/room/logName');
@@ -56,58 +56,75 @@ jest.mock('@/features/room', () => {
     avatarSlot?: unknown;
   }) =>
     h(Pressable, { accessibilityLabel: '로그 이름 편집', onPress: onEdit }, avatarSlot, h(Text, null, title));
-  // 더블: open일 때만 입력(label "로그 이름")·힌트·에러·저장(label "저장") 렌더. draft 로컬 state.
-  const LogNameSheet = ({
-    open,
-    initialValue,
-    placeholder,
-    onSave,
-    saving = false,
-    error = null,
-  }: {
-    open: boolean;
-    initialValue: string;
-    placeholder: string;
-    onSave: (next: string) => void;
-    saving?: boolean;
-    error?: string | null;
-  }) => {
-    const [draft, setDraft] = ReactLib.useState(initialValue);
-    ReactLib.useEffect(() => {
-      if (open) setDraft(initialValue);
-    }, [open, initialValue]);
-    if (!open) return null;
-    return h(
-      View,
-      null,
-      h(TextInput, {
-        accessibilityLabel: '로그 이름',
-        value: draft,
-        onChangeText: setDraft,
-        placeholder,
-      }),
-      h(Text, null, '우리만의 이름을 지어보세요. 비워두면 기본 이름으로 돌아가요.'),
-      error ? h(Text, null, error) : null,
-      h(
-        Pressable,
-        {
-          accessibilityLabel: '저장',
-          accessibilityState: { disabled: saving },
-          disabled: saving,
-          onPress: () => onSave(draft),
-        },
-        h(Text, null, '저장'),
-      ),
-    );
-  };
   return {
     ...code,
     ...logName,
     useRoom: jest.fn(),
     useRenameRoom: jest.fn(),
     LogTitleButton,
-    LogNameSheet,
   };
+});
+
+// RenameDialog는 공용 프리미티브(@/components) — 자체 spec에서 비주얼/동작 검증. 여기선 controlled 배선만 보는 더블로 대체.
+//   open일 때만 입력(label=title)·subtitle·에러·extra(label "rename-extra")·취소/저장(label) 렌더. value/onChange는 부모 소유(controlled).
+jest.mock('@/components', () => {
+  const actual = jest.requireActual('@/components');
+  const ReactLib = require('react');
+  const { Pressable, Text, TextInput, View } = require('react-native');
+  const h = ReactLib.createElement;
+  const RenameDialog = ({
+    open,
+    title,
+    subtitle,
+    value,
+    onChange,
+    onCancel,
+    onSave,
+    placeholder,
+    extra,
+    saving = false,
+    error = null,
+    saveDisabled = false,
+  }: {
+    open: boolean;
+    title: string;
+    subtitle?: string;
+    value: string;
+    onChange: (next: string) => void;
+    onCancel: () => void;
+    onSave: () => void;
+    placeholder?: string;
+    extra?: unknown;
+    saving?: boolean;
+    error?: string | null;
+    saveDisabled?: boolean;
+  }) => {
+    if (!open) return null;
+    const disabled = saving || saveDisabled;
+    return h(
+      View,
+      { accessibilityLabel: 'rename-dialog' },
+      h(Text, null, title),
+      subtitle ? h(Text, null, subtitle) : null,
+      h(TextInput, { accessibilityLabel: title, value, onChangeText: onChange, placeholder }),
+      error ? h(Text, null, error) : null,
+      extra ? h(View, { accessibilityLabel: 'rename-extra' }, extra) : null,
+      h(Pressable, { accessibilityLabel: '취소', onPress: onCancel }, h(Text, null, '취소')),
+      h(
+        Pressable,
+        {
+          accessibilityLabel: '저장',
+          accessibilityState: { disabled },
+          disabled,
+          onPress: () => {
+            if (!disabled) onSave();
+          },
+        },
+        h(Text, null, '저장'),
+      ),
+    );
+  };
+  return { ...actual, RenameDialog };
 });
 
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn().mockResolvedValue(true) }));
@@ -380,15 +397,15 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
     expect(screen.getByText('민지 ♥ 짝꿍')).toBeTruthy();
   });
 
-  it('헤더 제목 버튼(✏️)을 탭하면 이름 편집 시트가 열린다', () => {
+  it('헤더 제목 버튼(✏️)을 탭하면 이름 편집 다이얼로그가 열린다', () => {
     setRoomState(readyRoom({ name: '우리 맛집' }));
     renderWithTheme(<LogScreen />);
-    // 시트 닫힘 상태: 힌트/입력(accessibilityLabel "로그 이름")이 없음.
+    // 닫힘 상태: 입력(accessibilityLabel "로그 이름")이 없음.
     expect(screen.queryByLabelText('로그 이름')).toBeNull();
     fireEvent.press(screen.getByLabelText('로그 이름 편집'));
-    // 시트 열림: 입력 + 힌트 노출.
+    // 열림: 입력 + subtitle(💡 제거, plan D-7) 노출.
     expect(screen.getByLabelText('로그 이름')).toBeTruthy();
-    expect(screen.getByText('우리만의 이름을 지어보세요. 비워두면 기본 이름으로 돌아가요.')).toBeTruthy();
+    expect(screen.getByText('비워두면 기본 이름으로 돌아가요')).toBeTruthy();
   });
 
   it('이름 입력 후 저장하면 renameRoom(정규화 전 원문) 호출 → 성공 시 refresh + 시트 닫힘', async () => {
@@ -456,6 +473,32 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
     fireEvent.press(screen.getByLabelText('로그 이름 편집'));
     const save = screen.getByLabelText('저장');
     expect(save.props.accessibilityState?.disabled ?? save.props.disabled).toBeTruthy();
+  });
+
+  it('솔로(memberCount<2)면 다이얼로그에 초대코드(extra)를 노출한다 (AC2.5)', () => {
+    setRoomState(readyRoom({ name: null, memberCount: 1 }));
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    expect(screen.getByLabelText('rename-extra')).toBeTruthy();
+  });
+
+  it('커플(memberCount>=2)이면 다이얼로그에 초대코드(extra)를 노출하지 않는다 (AC2.5)', () => {
+    setRoomState(readyRoom({ name: null, memberCount: 2 }));
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    expect(screen.queryByLabelText('rename-extra')).toBeNull();
+  });
+
+  it('취소하면 다이얼로그가 닫히고, 재오픈 시 현재 로그명으로 초기화한다 (AC2.6)', () => {
+    setRoomState(readyRoom({ name: '우리 맛집' }));
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    fireEvent.changeText(screen.getByLabelText('로그 이름'), '바뀐값');
+    fireEvent.press(screen.getByLabelText('취소'));
+    expect(screen.queryByLabelText('로그 이름')).toBeNull();
+    // 재오픈: 폐기된 '바뀐값'이 아니라 현재 로그명으로 draft 재초기화.
+    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    expect(screen.getByLabelText('로그 이름').props.value).toBe('우리 맛집');
   });
 });
 

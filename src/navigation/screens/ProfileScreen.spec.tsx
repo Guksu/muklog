@@ -198,6 +198,33 @@ describe('ProfileScreen — 닉네임 편집 시트', () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  it('닉네임 입력은 maxLength 20으로 제한한다 (AC3.4)', () => {
+    renderWithTheme(<ProfileScreen />);
+    openNicknameSheet();
+    expect(screen.getByDisplayValue('민수').props.maxLength).toBe(20);
+  });
+
+  it('초대코드(extra)는 노출하지 않는다 (AC3.7)', () => {
+    renderWithTheme(<ProfileScreen />);
+    openNicknameSheet();
+    expect(screen.queryByText('초대코드')).toBeNull();
+  });
+
+  it('저장 실패 시 다이얼로그가 유지되고 에러를 노출한다 (AC3.6)', async () => {
+    saveNickname.mockRejectedValueOnce(new Error('fail'));
+    setupUpdate({ error: '닉네임 저장에 실패했어요. 다시 시도해 주세요.' });
+    renderWithTheme(<ProfileScreen />);
+    openNicknameSheet();
+    fireEvent.changeText(screen.getByDisplayValue('민수'), '새닉');
+    fireEvent.press(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => {
+      expect(saveNickname).toHaveBeenCalled();
+    });
+    // 실패: 다이얼로그 유지(입력 보존) + useUpdateProfile.error 노출.
+    expect(screen.getByDisplayValue('새닉')).toBeTruthy();
+    expect(screen.getByText('닉네임 저장에 실패했어요. 다시 시도해 주세요.')).toBeTruthy();
+  });
+
   it('빈 상태(nickname null)면 닉네임 미설정 + userId 디폴트 아바타를 보인다', () => {
     setupProfile({ status: 'ready', profile: { nickname: null, avatarUrl: null } });
     renderWithTheme(<ProfileScreen />);

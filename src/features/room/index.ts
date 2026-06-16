@@ -21,6 +21,5 @@ export {
   normalizeInviteCodeInput,
   isInviteCodeComplete,
 } from './code';
-// 로그 이름(log-name) 프리젠테이션 컴포넌트 — developer가 데이터/배선을 붙인다.
-export { LogNameSheet, type LogNameSheetProps } from './components/LogNameSheet';
+// 로그 이름(log-name) 진입 버튼 — 편집 표현부는 공용 RenameDialog(@/components)로 통일(기존 편집 시트 폐기, rename-dialog D-4).
 export { LogTitleButton, type LogTitleButtonProps } from './components/LogTitleButton';

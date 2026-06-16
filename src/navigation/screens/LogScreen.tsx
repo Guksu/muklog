@@ -31,6 +31,7 @@ import {
   IconButton,
   IconName,
   InviteCodeCard,
+  RenameDialog,
   Screen,
   SegmentControl,
   Text,
@@ -41,7 +42,6 @@ import { useAuth } from '@/features/auth';
 import { useProfile } from '@/features/profile';
 import {
   displayLogName,
-  LogNameSheet,
   LogTitleButton,
   useRenameRoom,
   useRoom,
@@ -218,8 +218,10 @@ export const LogScreen = () => {
       : '나';
   const meAvatarUrl = profileState.status === 'ready' ? profileState.profile.avatarUrl : null;
 
-  // 이름 편집 시트 open 상태(로컬 UI). 저장 성공 시 닫고 useRoom.refresh로 헤더 갱신(비-낙관적, plan §3.4).
+  // 이름 편집 다이얼로그 open 상태(로컬 UI). 저장 성공 시 닫고 useRoom.refresh로 헤더 갱신(비-낙관적, plan §3.4).
+  //   RenameDialog는 controlled → 입력 draft를 부모(LogScreen)가 소유한다(open 시 현재 로그명으로 초기화).
   const [editOpen, setEditOpen] = React.useState(false);
+  const [nameDraft, setNameDraft] = React.useState('');
 
   // ── 위시리스트(wishlist 스프린트) — 세그 카운트·본문·추가/삭제/다녀왔어요 데이터 소유 ──────────────
   //   먹로그/위시 목록을 LogScreen이 단일 소유(세그 카운트 확보·이중 로드 0). MuklogList/WishlistView는 presentational.
@@ -414,15 +416,21 @@ export const LogScreen = () => {
     selfNickname: meNickname,
   });
 
-  // 저장: 입력 원문(draft)을 renameRoom에 전달(정규화는 훅 내부) → 성공 시 시트 닫고 refresh로 헤더 갱신.
-  //   실패(throw)는 useRenameRoom이 error를 세팅하고 시트는 열린 채(입력 보존·재시도). refresh는 1회만(비용 §8).
+  // 다이얼로그 열기 — draft를 현재 로그명(없으면 빈 문자열)으로 초기화한 뒤 open(재오픈 시에도 현재값으로 재동기화, AC2.6).
+  const handleOpenNameEdit = () => {
+    setNameDraft(room.name ?? '');
+    setEditOpen(true);
+  };
+
+  // 저장: 입력 원문(draft)을 renameRoom에 전달(정규화는 훅 내부) → 성공 시 다이얼로그 닫고 refresh로 헤더 갱신.
+  //   실패(throw)는 useRenameRoom이 error를 세팅하고 다이얼로그는 열린 채(입력 보존·재시도). refresh는 1회만(비용 §8).
   const handleSaveName = async (next: string) => {
     try {
       await renameRoom({ roomId, name: next });
       setEditOpen(false);
       await refresh();
     } catch {
-      // error 메시지는 useRenameRoom.error → LogNameSheet error prop으로 표시. 시트 유지.
+      // error 메시지는 useRenameRoom.error → RenameDialog error prop으로 표시. 다이얼로그 유지.
     }
   };
 
@@ -464,7 +472,7 @@ export const LogScreen = () => {
           onPress={() => navigation.goBack()}
         />
         {/* 킷 mk-log:32-41 — 아바타 겹침 + 로그명 + ✏️를 하나의 탭 가능 버튼으로(탭 → 이름 편집 시트 open). */}
-        <LogTitleButton title={title} avatarSlot={avatarSlot} onEdit={() => setEditOpen(true)} />
+        <LogTitleButton title={title} avatarSlot={avatarSlot} onEdit={handleOpenNameEdit} />
       </View>
 
       {/* 세그먼트(기록 N / 위시리스트 M) — 킷 mk-log:56-72. 컨테이너 패딩 "6px 20px 2px"(상6/좌우20/하2). */}
@@ -512,15 +520,20 @@ export const LogScreen = () => {
         )}
       </View>
 
-      {/* 로그 이름 편집 시트(킷 mk-log:91-102) — pencil 탭으로 open. 저장 → renameRoom → 성공 시 close + refresh. */}
-      <LogNameSheet
+      {/* 로그 이름 편집 다이얼로그(킷 mk-extra:24-64 RenameDialog) — pencil 탭으로 open. 저장 → renameRoom → 성공 시 close + refresh.
+          controlled: draft(nameDraft)는 LogScreen 소유. subtitle은 킷 D-7(💡 제거). extra=초대코드는 솔로(memberCount<2)만 노출(D-2/AC2.5). */}
+      <RenameDialog
         open={editOpen}
-        initialValue={room.name ?? ''}
+        title="로그 이름"
+        subtitle="비워두면 기본 이름으로 돌아가요"
+        value={nameDraft}
+        onChange={setNameDraft}
+        onCancel={() => setEditOpen(false)}
+        onSave={() => void handleSaveName(nameDraft)}
         placeholder={fallbackName}
         saving={renaming}
         error={renameError}
-        onClose={() => setEditOpen(false)}
-        onSave={(next) => void handleSaveName(next)}
+        extra={isCouple ? undefined : <InviteCodeCard code={room.inviteCode} compact />}
       />
 
       {/* 위시 추가 성공 토스트(하단 플로팅) — 킷 mk-log:33 "위시리스트에 담았어요 📍". 자동 사라짐은 Toast 소유. */}

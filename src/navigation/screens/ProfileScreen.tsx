@@ -6,10 +6,10 @@
 //
 // 생산자: useProfile(조회)/useUpdateProfile(저장·업로드)/useMyLogs(통계). 소비자: 상태별 UX. 스타일=토큰만(raw hex 0).
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
-import { Avatar, Button, Icon, IconName, Screen, Sheet, SubBar, Text } from '@/components';
+import { Avatar, Button, Icon, IconName, RenameDialog, Screen, SubBar, Text } from '@/components';
 import { useAuth } from '@/features/auth';
 import {
   computeProfileStats,
@@ -60,8 +60,9 @@ const ProfileContent = ({ userId }: { userId: string }) => {
   });
   const { state: myLogsState } = useMyLogs({ userId });
 
+  // RenameDialog는 controlled → 닉네임 입력 draft를 ProfileContent가 소유(open 시 현재 닉네임으로 prefill).
   const [draft, setDraft] = useState('');
-  const [nickSheetOpen, setNickSheetOpen] = useState(false);
+  const [nickDialogOpen, setNickDialogOpen] = useState(false);
 
   // 조회 완료 시 입력칸을 현재 닉네임으로 prefill(null=빈 상태면 빈 칸 유지).
   const readyNickname = state.status === 'ready' ? state.profile.nickname : null;
@@ -122,10 +123,10 @@ const ProfileContent = ({ userId }: { userId: string }) => {
   const handleSave = async () => {
     try {
       await saveNickname({ nickname: draft });
-      setNickSheetOpen(false);
+      setNickDialogOpen(false);
       await refresh();
     } catch {
-      // 실패는 useUpdateProfile.error(인라인)로 표시. 입력값/시트는 유지.
+      // 실패는 useUpdateProfile.error(인라인)로 표시. 입력값/다이얼로그는 유지.
     }
   };
 
@@ -183,7 +184,7 @@ const ProfileContent = ({ userId }: { userId: string }) => {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="닉네임 편집"
-              onPress={() => setNickSheetOpen(true)}
+              onPress={() => setNickDialogOpen(true)}
               style={[
                 styles.editBtn,
                 { backgroundColor: theme.color.surfaceAlt, borderRadius: theme.radius.full },
@@ -275,44 +276,21 @@ const ProfileContent = ({ userId }: { userId: string }) => {
         ) : null}
       </ScrollView>
 
-      {/* 닉네임 편집 시트 */}
-      <Sheet visible={nickSheetOpen} onClose={() => setNickSheetOpen(false)} title="닉네임 편집">
-        <TextInput
-          value={draft}
-          onChangeText={(t) => setDraft(t)}
-          placeholder="닉네임을 입력하세요"
-          placeholderTextColor={theme.color.fgAssistive}
-          maxLength={NICKNAME_MAX_LENGTH}
-          editable={!savingNickname}
-          autoFocus
-          style={[
-            styles.input,
-            theme.typography.body,
-            {
-              color: theme.color.fg,
-              backgroundColor: theme.color.surface,
-              borderColor: theme.color.primary,
-              borderRadius: theme.radius.control,
-              paddingVertical: theme.spacing[14],
-              paddingHorizontal: theme.spacing[16],
-            },
-          ]}
-        />
-        {nicknameMessage ? (
-          <Text variant="bodySm" color="error" style={{ marginTop: theme.spacing[8] }}>
-            {nicknameMessage}
-          </Text>
-        ) : null}
-        <Button
-          title="저장"
-          size="lg"
-          full
-          loading={savingNickname}
-          disabled={!canSave}
-          onPress={handleSave}
-          style={{ marginTop: theme.spacing[14] }}
-        />
-      </Sheet>
+      {/* 닉네임 편집 다이얼로그(킷 mk-extra:24-64 RenameDialog 공용화) — controlled(draft는 ProfileContent 소유).
+          saveDisabled=!canSave(빈/미변경/검증실패 시 비활성), error=nicknameMessage(검증 메시지). extra 없음(초대코드 미동봉, AC3.7). */}
+      <RenameDialog
+        open={nickDialogOpen}
+        title="닉네임"
+        value={draft}
+        onChange={setDraft}
+        onCancel={() => setNickDialogOpen(false)}
+        onSave={() => void handleSave()}
+        placeholder="닉네임을 입력하세요"
+        maxLength={NICKNAME_MAX_LENGTH}
+        saving={savingNickname}
+        error={nicknameMessage}
+        saveDisabled={!canSave}
+      />
     </Screen>
   );
 };
@@ -346,5 +324,4 @@ const styles = StyleSheet.create({
   // 로그아웃 행 — 설정 카드와 동일 톤(surface 카드), 텍스트는 error 컬러(파괴적), 중앙 정렬.
   signOutRow: { paddingVertical: 16, alignItems: 'center' },
   signOutLabel: { fontSize: 15 },
-  input: { borderWidth: 2 },
 });
