@@ -14,6 +14,7 @@ const baseProps = {
   confirmVisible: false,
   isCouple: true,
   onCloseMenu: jest.fn(),
+  onSelectRename: jest.fn(),
   onSelectLeave: jest.fn(),
   onCloseConfirm: jest.fn(),
   onConfirmLeave: jest.fn(),
@@ -24,9 +25,17 @@ beforeEach(() => {
 });
 
 describe('LeaveLogSheets — ⋯ 메뉴', () => {
-  it('menuVisible=true면 "로그 나가기"(danger) 메뉴 행을 표시한다 (MuklogDetail MenuRow 패턴)', () => {
+  it('menuVisible=true면 "로그 이름 변경" + "로그 나가기"(danger) 메뉴 2행을 표시한다', () => {
     renderWithTheme(<LeaveLogSheets {...baseProps} menuVisible />);
+    expect(screen.getByLabelText('로그 이름 변경')).toBeTruthy();
     expect(screen.getByLabelText('로그 나가기')).toBeTruthy();
+  });
+
+  it('"로그 이름 변경" 탭 → onSelectRename 콜백을 호출한다(RenameDialog open은 부모)', () => {
+    const onSelectRename = jest.fn();
+    renderWithTheme(<LeaveLogSheets {...baseProps} menuVisible onSelectRename={onSelectRename} />);
+    fireEvent.press(screen.getByLabelText('로그 이름 변경'));
+    expect(onSelectRename).toHaveBeenCalledTimes(1);
   });
 
   it('menuVisible=false면 메뉴 행이 없다', () => {

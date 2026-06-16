@@ -13,7 +13,7 @@
 // ⚠️ 파트너 실데이터/사진/맛집 수는 백엔드 미존재 → UI 골격만 재현(플레이스홀더). 추가 페치/RPC 변경 없음(UI-only).
 import React from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, View } from 'react-native';
-import { useNavigation, type NavigationProp } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, type NavigationProp } from '@react-navigation/native';
 
 import { Avatar, Button, Card, Icon, IconName, MemberBadge, Screen, Text } from '@/components';
 import { useAuth } from '@/features/auth';
@@ -153,6 +153,21 @@ export const LogListScreen = () => {
   // 인증 트리에서만 렌더되므로 authenticated가 정상. 비인증 시 안전한 폴백 표시.
   const userId = authState.status === 'authenticated' ? authState.userId : '';
   const self = useSelfDisplay({ userId });
+
+  // 화면 재포커스 시 목록 재조회 — 로그 삭제/나가기 후 돌아오면 사라진 로그가 즉시 빠지도록(room-lifecycle 정합).
+  //   useFocusEffect 콜백 참조 안정성 필수 → ref + 빈 deps useCallback(컨벤션 허용 예외, LogScreen 선례).
+  //   첫 포커스 = 마운트 시 Provider 초기 로드와 겹치므로 가드(중복 조회 회피). 이후 재진입에서만 refresh.
+  const refreshRef = React.useRef(refresh);
+  refreshRef.current = refresh;
+  const hasFocusedRef = React.useRef(false);
+  const handleFocus = React.useCallback(function refreshMyLogsOnRefocus() {
+    if (!hasFocusedRef.current) {
+      hasFocusedRef.current = true;
+      return;
+    }
+    void refreshRef.current();
+  }, []);
+  useFocusEffect(handleFocus);
 
   // 생성 핸들러 — PlusHeaderButton과 동일(createRoom→refresh, 실패 시 Alert). 빈상태/하단 CTA 공용.
   const handleCreate = async () => {

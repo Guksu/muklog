@@ -12,6 +12,7 @@ import { useTheme } from '@/theme';
 import type { ColorToken } from '@/theme';
 
 // 카피(퍼블리싱 SSOT) — plan §4. 커플=24h 유예 안내 / 솔로=즉시 삭제 경고.
+const MENU_RENAME_LABEL = '로그 이름 변경';
 const MENU_LEAVE_LABEL = '로그 나가기';
 const COUPLE_TITLE = '로그에서 나갈까요?';
 const COUPLE_BODY = '이 로그가 24시간 뒤 삭제돼요. 그 전에 다시 들어와 취소할 수 있어요.\n(상대의 기록도 함께 사라져요.)';
@@ -30,6 +31,8 @@ export type LeaveLogSheetsProps = {
   isCouple: boolean;
   /** 메뉴 딤/요청 닫기. */
   onCloseMenu: () => void;
+  /** 메뉴 "로그 이름 변경" 탭 — 부모가 메뉴 닫고 RenameDialog open(타이틀 탭 대체, 사용자 요청). */
+  onSelectRename: () => void;
   /** 메뉴 "로그 나가기" 탭 — 부모가 메뉴 닫고 확인 시트 open. */
   onSelectLeave: () => void;
   /** 확인 시트 딤/"취소" 닫기. */
@@ -47,6 +50,7 @@ export const LeaveLogSheets = ({
   confirmVisible,
   isCouple,
   onCloseMenu,
+  onSelectRename,
   onSelectLeave,
   onCloseConfirm,
   onConfirmLeave,
@@ -61,9 +65,15 @@ export const LeaveLogSheets = ({
 
   return (
     <>
-      {/* ⋯ 메뉴 시트 — MuklogDetail mk-log:195-202 패턴. 단일 danger 행. */}
+      {/* ⋯ 메뉴 시트 — MuklogDetail mk-log:195-202 패턴. 이름 변경(일반) + 나가기(danger) 2행. */}
       <Sheet visible={menuVisible} onClose={onCloseMenu}>
         <View style={styles.menuList}>
+          <MenuRow
+            icon={IconName.Pencil}
+            label={MENU_RENAME_LABEL}
+            accessibilityLabel={MENU_RENAME_LABEL}
+            onPress={onSelectRename}
+          />
           <MenuRow
             icon={IconName.Trash}
             label={MENU_LEAVE_LABEL}

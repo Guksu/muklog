@@ -19,8 +19,18 @@ jest.mock('@/features/profile', () => ({ useProfile: jest.fn() }));
 jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
 
 const mockNavigate = jest.fn();
+// useFocusEffect: 마운트 시 콜백 1회 실행(첫 포커스). refireFocus로 재포커스(로그 삭제/나가기 후 복귀) 흉내.
+let lastFocusCb: (() => void) | null = null;
+const refireFocus = () => lastFocusCb?.();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),
+  useFocusEffect: (cb: () => void) => {
+    const ReactLib = require('react');
+    ReactLib.useEffect(() => {
+      lastFocusCb = cb;
+      cb();
+    }, [cb]);
+  },
 }));
 
 import { useMyLogsContext, useCreateRoom } from '@/features/room';
@@ -69,6 +79,22 @@ beforeEach(() => {
   createRoom.mockReset();
   setupCommon();
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+});
+
+describe('LogListScreen — 포커스 재조회(로그 삭제/나가기 후 정합)', () => {
+  it('첫 포커스(마운트)에선 refresh를 호출하지 않는다(Provider 초기 로드와 중복 방지)', () => {
+    useMyLogsContextMock.mockReturnValue({ state: { status: 'ready', logs: [log()] }, refresh });
+    renderWithTheme(<LogListScreen />);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('재포커스(다른 화면서 복귀) 시 refresh로 목록을 갱신한다 — 삭제된 로그가 즉시 빠진다', () => {
+    useMyLogsContextMock.mockReturnValue({ state: { status: 'ready', logs: [log()] }, refresh });
+    renderWithTheme(<LogListScreen />);
+    expect(refresh).not.toHaveBeenCalled();
+    refireFocus();
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('LogListScreen — 상태 분기', () => {

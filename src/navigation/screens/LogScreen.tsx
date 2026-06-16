@@ -514,8 +514,8 @@ export const LogScreen = () => {
           accessibilityLabel="뒤로 가기"
           onPress={() => navigation.goBack()}
         />
-        {/* 킷 mk-log:32-41 — 아바타 겹침 + 로그명 + ✏️를 하나의 탭 가능 버튼으로(탭 → 이름 편집 시트 open). */}
-        <LogTitleButton title={title} avatarSlot={avatarSlot} onEdit={handleOpenNameEdit} />
+        {/* 아바타 겹침 + 로그명 표시(display-only). 이름 변경은 ⋯메뉴 "로그 이름 변경"으로 이전(사용자 요청) — 타이틀 탭 동작 없음. */}
+        <LogTitleButton title={title} avatarSlot={avatarSlot} />
         {/* ⋯ 더보기 — 나가기 메뉴 시트 open(LogTitleButton flex:1로 우측 끝 정렬, ui-spec §3.3-1). */}
         <IconButton
           name={IconName.MoreHorizontal}
@@ -610,6 +610,10 @@ export const LogScreen = () => {
         confirmVisible={confirmOpen}
         isCouple={isCouple}
         onCloseMenu={() => setMenuOpen(false)}
+        onSelectRename={() => {
+          setMenuOpen(false);
+          handleOpenNameEdit();
+        }}
         onSelectLeave={() => {
           setMenuOpen(false);
           setConfirmOpen(true);

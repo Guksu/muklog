@@ -328,8 +328,10 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 22, lineHeight: 26 },
   settingsCard: { marginTop: 20 },
   settingsRow: { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 14 },
-  settingsLabel: { flex: 1, fontSize: 15 },
+  // fontSize 15로 키우면서 lineHeight도 함께 키운다 — spotCount 변종 lineHeight(14)<fontSize(15)면
+  //   한글 글리프 상단이 클립돼 "흰색으로 덮인" 것처럼 보임(RN 텍스트 클리핑). lineHeight 20으로 여유 확보.
+  settingsLabel: { flex: 1, fontSize: 15, lineHeight: 20 },
   // 로그아웃 행 — 설정 카드와 동일 톤(surface 카드), 텍스트는 error 컬러(파괴적), 중앙 정렬.
   signOutRow: { paddingVertical: 16, alignItems: 'center' },
-  signOutLabel: { fontSize: 15 },
+  signOutLabel: { fontSize: 15, lineHeight: 20 },
 });

@@ -53,17 +53,9 @@ jest.mock('@/features/room', () => {
   // deletionCountdownLabel·errors(mapRoomError)는 실 구현(라벨 계산·취소 실패 토스트 메시지 직접 검증).
   const countdown = jest.requireActual('@/features/room/deletionCountdownLabel');
   const errors = jest.requireActual('@/features/room/errors');
-  // 더블: 제목 + ✏️를 하나의 탭 버튼으로(label "로그 이름 편집"). avatarSlot는 그대로 렌더.
-  const LogTitleButton = ({
-    title,
-    onEdit,
-    avatarSlot,
-  }: {
-    title: string;
-    onEdit: () => void;
-    avatarSlot?: unknown;
-  }) =>
-    h(Pressable, { accessibilityLabel: '로그 이름 편집', onPress: onEdit }, avatarSlot, h(Text, null, title));
+  // 더블: display-only 제목(탭 동작 없음). 이름 변경은 ⋯메뉴 "로그 이름 변경"으로 이전. avatarSlot는 그대로 렌더.
+  const LogTitleButton = ({ title, avatarSlot }: { title: string; avatarSlot?: unknown }) =>
+    h(View, null, avatarSlot, h(Text, null, title));
   // 나가기 시트 probe — 배선(menu/confirm/couple/leaving/leaveError props + 콜백)만 검증. 카피·비주얼은 LeaveLogSheets.spec.
   const LeaveLogSheets = (props: Record<string, unknown>) =>
     h(
@@ -74,6 +66,7 @@ jest.mock('@/features/room', () => {
         null,
         `menu:${props.menuVisible}|confirm:${props.confirmVisible}|couple:${props.isCouple}|leaving:${props.leaving}|err:${props.leaveError ?? '-'}`,
       ),
+      h(Pressable, { accessibilityLabel: 'probe-select-rename', onPress: props.onSelectRename as () => void }),
       h(Pressable, { accessibilityLabel: 'probe-select-leave', onPress: props.onSelectLeave as () => void }),
       h(Pressable, { accessibilityLabel: 'probe-confirm-leave', onPress: props.onConfirmLeave as () => void }),
       h(Pressable, { accessibilityLabel: 'probe-close-menu', onPress: props.onCloseMenu as () => void }),
@@ -449,12 +442,14 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
     expect(screen.getByText('민지 ♥ 짝꿍')).toBeTruthy();
   });
 
-  it('헤더 제목 버튼(✏️)을 탭하면 이름 편집 다이얼로그가 열린다', () => {
+  it('⋯메뉴 "로그 이름 변경"을 탭하면 이름 편집 다이얼로그가 열린다(타이틀 탭 아님)', () => {
     setRoomState(readyRoom({ name: '우리 맛집' }));
     renderWithTheme(<LogScreen />);
-    // 닫힘 상태: 입력(accessibilityLabel "로그 이름")이 없음.
+    // 닫힘 상태: 입력(accessibilityLabel "로그 이름")이 없음. 타이틀은 display-only(편집 진입점 아님).
     expect(screen.queryByLabelText('로그 이름')).toBeNull();
-    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    expect(screen.queryByLabelText('로그 이름 편집')).toBeNull();
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
     // 열림: 입력 + subtitle(💡 제거, plan D-7) 노출.
     expect(screen.getByLabelText('로그 이름')).toBeTruthy();
     expect(screen.getByText('비워두면 기본 이름으로 돌아가요')).toBeTruthy();
@@ -465,7 +460,8 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
     setRoomState(readyRoom({ name: null }));
     renderWithTheme(<LogScreen />);
 
-    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
     fireEvent.changeText(screen.getByLabelText('로그 이름'), '새이름');
     fireEvent.press(screen.getByLabelText('저장'));
 
@@ -486,7 +482,8 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
     setRoomState(readyRoom({ name: '기존이름', memberCount: 1 }));
     renderWithTheme(<LogScreen />);
 
-    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
     fireEvent.changeText(screen.getByLabelText('로그 이름'), '');
     fireEvent.press(screen.getByLabelText('저장'));
 
@@ -505,7 +502,8 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
     setRoomState(readyRoom({ name: null }));
     renderWithTheme(<LogScreen />);
 
-    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
     fireEvent.changeText(screen.getByLabelText('로그 이름'), 'x');
     fireEvent.press(screen.getByLabelText('저장'));
 
@@ -522,7 +520,8 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
     useRenameRoomMock.mockReturnValue({ renameRoom, loading: true, error: null });
     setRoomState(readyRoom({ name: null }));
     renderWithTheme(<LogScreen />);
-    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
     const save = screen.getByLabelText('저장');
     expect(save.props.accessibilityState?.disabled ?? save.props.disabled).toBeTruthy();
   });
@@ -530,26 +529,30 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
   it('솔로(memberCount<2)면 다이얼로그에 초대코드(extra)를 노출한다 (AC2.5)', () => {
     setRoomState(readyRoom({ name: null, memberCount: 1 }));
     renderWithTheme(<LogScreen />);
-    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
     expect(screen.getByLabelText('rename-extra')).toBeTruthy();
   });
 
   it('커플(memberCount>=2)이면 다이얼로그에 초대코드(extra)를 노출하지 않는다 (AC2.5)', () => {
     setRoomState(readyRoom({ name: null, memberCount: 2 }));
     renderWithTheme(<LogScreen />);
-    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
     expect(screen.queryByLabelText('rename-extra')).toBeNull();
   });
 
   it('취소하면 다이얼로그가 닫히고, 재오픈 시 현재 로그명으로 초기화한다 (AC2.6)', () => {
     setRoomState(readyRoom({ name: '우리 맛집' }));
     renderWithTheme(<LogScreen />);
-    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
     fireEvent.changeText(screen.getByLabelText('로그 이름'), '바뀐값');
     fireEvent.press(screen.getByLabelText('취소'));
     expect(screen.queryByLabelText('로그 이름')).toBeNull();
     // 재오픈: 폐기된 '바뀐값'이 아니라 현재 로그명으로 draft 재초기화.
-    fireEvent.press(screen.getByLabelText('로그 이름 편집'));
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
     expect(screen.getByLabelText('로그 이름').props.value).toBe('우리 맛집');
   });
 });
