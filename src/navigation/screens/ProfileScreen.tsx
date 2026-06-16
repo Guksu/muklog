@@ -8,8 +8,10 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { Avatar, Button, Icon, IconName, RenameDialog, Screen, SubBar, Text } from '@/components';
+import { Routes, type AppStackParamList } from '../routes';
 import { useAuth } from '@/features/auth';
 import {
   computeProfileStats,
@@ -23,12 +25,13 @@ import {
 import { useMyLogs } from '@/features/room';
 import { useTheme } from '@/theme';
 
-// 설정 리스트 행(킷 mk-log.jsx:422) — 비활성 플레이스홀더(차기 기능).
+// 설정 리스트 행(킷 mk-log.jsx:422). route가 있으면 탭→navigate, 없으면 비활성 플레이스홀더(차기 기능).
 //   ⚠️ wishlist 스프린트(델타 #5): "위시리스트" 행 제거. 위시리스트는 로그 내부 세그먼트로 진입(중복 진입점 제거, 킷 정합).
+//   notif-settings: "알림 설정" 행만 route=NotifSettings로 활성화(나머지는 동작 변경 없음).
 const SETTINGS_ROWS = [
-  { icon: IconName.Bell, label: '알림 설정' },
-  { icon: IconName.CircleInfo, label: '이용 안내' },
-  { icon: IconName.Setting, label: '설정' },
+  { icon: IconName.Bell, label: '알림 설정', route: Routes.NotifSettings },
+  { icon: IconName.CircleInfo, label: '이용 안내', route: null },
+  { icon: IconName.Setting, label: '설정', route: null },
 ] as const;
 
 const AVATAR_SIZE = 96;
@@ -52,7 +55,7 @@ export const ProfileScreen = () => {
 
 const ProfileContent = ({ userId }: { userId: string }) => {
   const theme = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { signOut } = useAuth();
   const { state, refresh } = useProfile({ userId });
   const { saveNickname, changeAvatar, savingNickname, uploadingAvatar, error } = useUpdateProfile({
@@ -230,9 +233,14 @@ const ProfileContent = ({ userId }: { userId: string }) => {
           ]}
         >
           {SETTINGS_ROWS.map((row, index) => (
-            <View
+            <Pressable
               key={row.label}
               testID={`settings-row-${row.label}`}
+              accessibilityRole="button"
+              accessibilityLabel={row.label}
+              // route 있는 행만 탭 활성(없으면 비활성 플레이스홀더 — 기존 동작 유지).
+              disabled={row.route === null}
+              onPress={row.route !== null ? () => navigation.navigate(row.route) : undefined}
               style={[
                 styles.settingsRow,
                 index < SETTINGS_ROWS.length - 1
@@ -245,7 +253,7 @@ const ProfileContent = ({ userId }: { userId: string }) => {
                 {row.label}
               </Text>
               <Icon name={IconName.ChevronRight} size={17} color="fgAssistive" />
-            </View>
+            </Pressable>
           ))}
         </View>
 

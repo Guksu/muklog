@@ -12,6 +12,7 @@ import { HomeTabs } from './HomeTabs';
 import { Routes, type AppStackParamList } from './routes';
 import { JoinLogScreen } from './screens/JoinLogScreen';
 import { LogScreen } from './screens/LogScreen';
+import { NotifSettingsScreen } from './screens/NotifSettingsScreen';
 import { MuklogDetailRoute } from './screens/MuklogDetailRoute';
 import { MuklogEditorRoute } from './screens/MuklogEditorRoute';
 import { ProfileScreen } from './screens/ProfileScreen';
@@ -55,6 +56,12 @@ export const AppNavigator = () => {
       <Stack.Screen
         name={Routes.RoomCreated}
         component={RoomCreatedRoute}
+        options={{ headerShown: false }}
+      />
+      {/* notif-settings: 알림 설정(자체 SubBar). 네이티브 헤더 숨김(이중 헤더 방지). */}
+      <Stack.Screen
+        name={Routes.NotifSettings}
+        component={NotifSettingsScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

@@ -24,8 +24,11 @@ jest.mock('@/features/profile', () => {
 });
 jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
 jest.mock('@/features/room', () => ({ useMyLogs: jest.fn() }));
-// SubBar(뒤로) 사용을 위한 navigation 모킹 — goBack만 필요.
-jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ goBack: jest.fn() }) }));
+// SubBar(뒤로) + 설정 행 진입을 위한 navigation 모킹 — goBack/navigate.
+const mockNavigate = jest.fn();
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({ goBack: jest.fn(), navigate: mockNavigate }),
+}));
 
 // Alert.alert: 확인 버튼(onPress)을 즉시 호출하도록 모킹(로그아웃 확인 흐름 검증).
 import { Alert } from 'react-native';
@@ -137,6 +140,21 @@ describe('ProfileScreen — ready 구조(B3)', () => {
     // 델타 #5(B9): 위시리스트는 로그 세그먼트로 진입 → 프로필 중복 진입점 제거.
     expect(screen.queryByText('위시리스트')).toBeNull();
     expect(screen.queryByTestId('settings-row-위시리스트')).toBeNull();
+  });
+
+  it('"알림 설정" 행 탭 → NotifSettings로 navigate 한다 (notif-settings T9)', () => {
+    mockNavigate.mockClear();
+    renderWithTheme(<ProfileScreen />);
+    fireEvent.press(screen.getByTestId('settings-row-알림 설정'));
+    expect(mockNavigate).toHaveBeenCalledWith('NotifSettings');
+  });
+
+  it('"이용 안내"/"설정" 행은 비활성(탭해도 navigate 미발생) — 기존 동작 유지 (T9 회귀)', () => {
+    mockNavigate.mockClear();
+    renderWithTheme(<ProfileScreen />);
+    fireEvent.press(screen.getByTestId('settings-row-이용 안내'));
+    fireEvent.press(screen.getByTestId('settings-row-설정'));
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it('아바타 업로드 에러 메시지를 표시한다 (P6)', () => {

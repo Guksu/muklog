@@ -12,6 +12,7 @@ export { DatePickerSheet, type DatePickerSheetProps } from './DatePickerSheet';
 export { RenameDialog, type RenameDialogProps } from './RenameDialog';
 export { SubBar, type SubBarProps } from './SubBar';
 export { Stars, type StarsProps } from './Stars';
+export { MkSwitch, type MkSwitchProps } from './MkSwitch';
 export { Chip, type ChipProps } from './Chip';
 export {
   SegmentControl,

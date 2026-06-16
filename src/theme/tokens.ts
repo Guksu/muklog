@@ -114,6 +114,10 @@ const lightColor = {
   //   positive 배경 = .mk-toast.pos #1E7A47(딥 그린). success(#00BF40)/successStrong(#009632)과 톤·의미 구분(토스트 전용).
   toastBg: '#2A2422',
   toastPositiveBg: '#1E7A47',
+  // 스위치(MkSwitch) 노브색 — 킷 mk-extra.jsx:17 노브 background "#fff" verbatim(iOS 스타일 스위치).
+  //   iOS 토글 노브는 라이트/다크 공통 흰색이고 킷이 verbatim #fff를 쓰므로(킷=SSOT) 전용 토큰으로 정합
+  //   (mapLocate·calendarSun 등 verbatim 인라인값을 전용 토큰화한 기존 패턴 동일). 다크 미러: darkColor 스프레드로 흰색 유지.
+  switchKnob: palette.white,
 } as const;
 
 // 시맨틱 컬러 (다크) — 시맨틱만 오버라이드. 신규 키도 동일 키로 미러링(tsc 키 일관성, 엣지1).
@@ -161,6 +165,9 @@ export const shadow = {
   // dialog = 중앙 알림형 다이얼로그 카드(RenameDialog) — 킷 mk-extra:37 box-shadow 0 20px 50px rgba(0,0,0,.28).
   //   RN shadowRadius는 CSS blur(50)와 1:1은 아니나 근사. 검정 그림자(컬러 아님, 킷 동일). shadow.toast보다 깊은 떠있음(offset 20).
   dialog: { shadowColor:'#000', shadowOpacity:0.28, shadowRadius:50, shadowOffset:{width:0,height:20}, elevation:24 },
+  // knob = 스위치(MkSwitch) 노브 — 킷 mk-extra:17 box-shadow 0 2px 6px rgba(0,0,0,.22) 정합(트랙 위에 떠 있는 작은 원).
+  //   검정 그림자(컬러 아님, 킷 동일). RN shadowRadius는 CSS blur(6)와 1:1은 아니나 근사. shadow.seg보다 약간 깊은 떠있음.
+  knob: { shadowColor:'#000', shadowOpacity:0.22, shadowRadius:6, shadowOffset:{width:0,height:2}, elevation:3 },
 } as const;
 
 // 타이포 [프로젝트 정의 — Pretendard 기반]. RN: rem→px(×16), lineHeight는 절대값.
@@ -210,6 +217,12 @@ export const typography = {
   calendarDay:      makeTypography({ size: 14.5, ratio: 1, family: 'Pretendard-SemiBold' }),  // 600/14.5 날짜 셀 기본(킷 mk-extra:114)
   calendarDayStrong:makeTypography({ size: 14.5, ratio: 1, family: 'Pretendard-Bold' }),      // 800/14.5 날짜 셀 선택/오늘(킷 mk-extra:114)
   dateRowValue:     makeTypography({ size: 15, ratio: 1, family: 'Pretendard-SemiBold' }),    // 600/15 방문일 진입 행 날짜 텍스트(킷 mk-log:418)
+  // ── 알림 설정(notif-settings)로 추가한 킷 정합 역할 토큰 (킷 mk-extra NotifSettingsScreen 128-175) ──
+  notifItemTitle:   makeTypography({ size: 15.5, ratio: 1.3, family: 'Pretendard-Bold' }),    // 700/15.5 마스터 토글 제목 "새 먹로그 알림"(킷 mk-extra:143)
+  notifItemDesc:    makeTypography({ size: 12.5, ratio: 1.4, family: 'Pretendard-Medium' }),  // 500/12.5 마스터 토글 부제(킷 mk-extra:144, text-alternative)
+  notifSectionLabel:makeTypography({ size: 13, ratio: 1, family: 'Pretendard-Bold' }),        // 800/13 "로그별 알림" 섹션 라벨(킷 mk-extra:151, text-alternative)
+  notifLogName:     makeTypography({ size: 14.5, ratio: 1.3, family: 'Pretendard-SemiBold' }),// 600/14.5 로그별 행 로그명(킷 mk-extra:162, 1줄 ellipsis)
+  notifHint:        makeTypography({ size: 12, ratio: 1.6, family: 'Pretendard-Medium' }),    // 500/12 하단 안내 카피(킷 mk-extra:168, text-assistive)
 } as const;
 
 export const themes = {

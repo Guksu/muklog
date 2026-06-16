@@ -15,6 +15,8 @@ export const Routes = {
   MuklogEditor: 'MuklogEditor',
   // FLAG-3: 로그 생성 완료 축하(킷 mk-home CreatedScreen) — 초대코드 공유 + 로그 열기/나중에. param { roomId, code }
   RoomCreated: 'RoomCreated',
+  // notif-settings: 알림 설정(SubBar + 마스터/로그별 토글). 로컬 영속(AsyncStorage), DB 변경 0. param 없음.
+  NotifSettings: 'NotifSettings',
 } as const;
 
 // 위시 "다녀왔어요" → MuklogEditor 생성 모드 프리필(wishlist plan §4.5). 위시 항목의 place 필드를 그대로 싣어
@@ -47,6 +49,8 @@ export type AppStackParamList = {
   };
   // 생성 완료 축하: 방금 만든 로그의 roomId + 공유용 초대코드(createRoom 반환값 직접 전달). FLAG-3.
   [Routes.RoomCreated]: { roomId: string; code: string };
+  // 알림 설정: param 없음(영속은 로컬, 로그 목록은 MyLogsProvider 공유). notif-settings.
+  [Routes.NotifSettings]: undefined;
 };
 
 // 홈 탭 네비게이터 파라미터 목록 (디폴트 = LogList)

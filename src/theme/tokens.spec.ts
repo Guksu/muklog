@@ -247,6 +247,22 @@ describe('tokens — toast (하단 플로팅 토스트, wishlist)', () => {
   });
 });
 
+describe('tokens — switch (MkSwitch, notif-settings)', () => {
+  it('노브색이 킷 mk-extra:17 verbatim #fff(흰색)다', () => {
+    expect(themes.light.color.switchKnob).toBe('#FFFFFF');
+  });
+
+  it('iOS 노브는 라이트/다크 공통 흰색이다(다크 미러 패리티)', () => {
+    expect(themes.dark.color.switchKnob).toBe('#FFFFFF');
+  });
+
+  it('shadow.knob가 킷 노브(0 2px 6px rgba(0,0,0,.22)) 정합이다(mk-extra:17)', () => {
+    expect(shadow.knob.shadowOpacity).toBe(0.22);
+    expect(shadow.knob.shadowRadius).toBe(6);
+    expect(shadow.knob.shadowOffset).toEqual({ width: 0, height: 2 });
+  });
+});
+
 describe('tokens — scrimStrong (킷 정합)', () => {
   it('사진 위 글래스 배지 scrim 불투명도가 킷 .32다(mk-log:94)', () => {
     expect(themes.light.color.scrimStrong).toBe('rgba(0,0,0,0.32)');
