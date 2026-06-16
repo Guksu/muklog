@@ -6,7 +6,30 @@ import { fireEvent, screen } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
-import { Sheet } from './Sheet';
+import {
+  Sheet,
+  shouldDismissSheet,
+  SHEET_DISMISS_DISTANCE,
+  SHEET_DISMISS_VELOCITY,
+} from './Sheet';
+
+describe('shouldDismissSheet — 핸들 드래그 닫기 판정', () => {
+  it('아래로 거리 임계 초과면 닫는다', () => {
+    expect(shouldDismissSheet({ dy: SHEET_DISMISS_DISTANCE + 1, vy: 0 })).toBe(true);
+  });
+
+  it('느리게 끌어도 속도 임계 초과(빠른 플릭)면 닫는다', () => {
+    expect(shouldDismissSheet({ dy: 10, vy: SHEET_DISMISS_VELOCITY + 0.1 })).toBe(true);
+  });
+
+  it('거리·속도 모두 임계 미달이면 닫지 않는다(스냅백)', () => {
+    expect(shouldDismissSheet({ dy: 10, vy: 0.1 })).toBe(false);
+  });
+
+  it('위로 끈 경우(dy<=0)는 닫지 않는다', () => {
+    expect(shouldDismissSheet({ dy: -100, vy: -1 })).toBe(false);
+  });
+});
 
 describe('Sheet', () => {
   it('visible=false면 children을 렌더하지 않는다', () => {
