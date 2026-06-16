@@ -10,6 +10,11 @@ import { renderWithTheme } from '@/test/renderWithTheme';
 const mockParams: { current: unknown } = { current: { roomId: 'r1' } };
 const mockGoBack = jest.fn();
 const mockNavigate = jest.fn();
+// room-lifecycle(T9~T11) — useLeaveRoom/useCancelRoomDeletion 더블 + loading/error 가변 상태.
+const mockLeaveRoom = jest.fn();
+const mockCancelRoomDeletion = jest.fn();
+const mockLeaveHookState: { loading: boolean; error: string | null } = { loading: false, error: null };
+const mockCancelHookState: { loading: boolean; error: string | null } = { loading: false, error: null };
 // useFocusEffect: 마운트 시 콜백 1회 실행(첫 포커스). refireFocus로 재포커스(에디터/상세 복귀) 흉내.
 let lastFocusCb: (() => void) | null = null;
 const refireFocus = () => lastFocusCb?.();
@@ -45,6 +50,9 @@ jest.mock('@/features/room', () => {
   const h = ReactLib.createElement;
   const code = jest.requireActual('@/features/room/code');
   const logName = jest.requireActual('@/features/room/logName');
+  // deletionCountdownLabel·errors(mapRoomError)는 실 구현(라벨 계산·취소 실패 토스트 메시지 직접 검증).
+  const countdown = jest.requireActual('@/features/room/deletionCountdownLabel');
+  const errors = jest.requireActual('@/features/room/errors');
   // 더블: 제목 + ✏️를 하나의 탭 버튼으로(label "로그 이름 편집"). avatarSlot는 그대로 렌더.
   const LogTitleButton = ({
     title,
@@ -56,12 +64,49 @@ jest.mock('@/features/room', () => {
     avatarSlot?: unknown;
   }) =>
     h(Pressable, { accessibilityLabel: '로그 이름 편집', onPress: onEdit }, avatarSlot, h(Text, null, title));
+  // 나가기 시트 probe — 배선(menu/confirm/couple/leaving/leaveError props + 콜백)만 검증. 카피·비주얼은 LeaveLogSheets.spec.
+  const LeaveLogSheets = (props: Record<string, unknown>) =>
+    h(
+      View,
+      { accessibilityLabel: 'leave-log-sheets' },
+      h(
+        Text,
+        null,
+        `menu:${props.menuVisible}|confirm:${props.confirmVisible}|couple:${props.isCouple}|leaving:${props.leaving}|err:${props.leaveError ?? '-'}`,
+      ),
+      h(Pressable, { accessibilityLabel: 'probe-select-leave', onPress: props.onSelectLeave as () => void }),
+      h(Pressable, { accessibilityLabel: 'probe-confirm-leave', onPress: props.onConfirmLeave as () => void }),
+      h(Pressable, { accessibilityLabel: 'probe-close-menu', onPress: props.onCloseMenu as () => void }),
+      h(Pressable, { accessibilityLabel: 'probe-close-confirm', onPress: props.onCloseConfirm as () => void }),
+    );
+  // 예약삭제 배너 probe — countdownLabel/isRequester/canceling props + onCancel 콜백 검증. 노출 게이팅은 LogScreen.
+  const ScheduledDeletionBanner = (props: Record<string, unknown>) =>
+    h(
+      View,
+      { accessibilityLabel: 'scheduled-deletion-banner' },
+      h(Text, null, `requester:${props.isRequester}|canceling:${props.canceling}|label:${props.countdownLabel}`),
+      h(Pressable, { accessibilityLabel: 'probe-cancel-deletion', onPress: props.onCancel as () => void }),
+    );
   return {
     ...code,
     ...logName,
+    ...countdown,
+    ...errors,
     useRoom: jest.fn(),
     useRenameRoom: jest.fn(),
+    useLeaveRoom: () => ({
+      leaveRoom: mockLeaveRoom,
+      loading: mockLeaveHookState.loading,
+      error: mockLeaveHookState.error,
+    }),
+    useCancelRoomDeletion: () => ({
+      cancelRoomDeletion: mockCancelRoomDeletion,
+      loading: mockCancelHookState.loading,
+      error: mockCancelHookState.error,
+    }),
     LogTitleButton,
+    LeaveLogSheets,
+    ScheduledDeletionBanner,
   };
 });
 
@@ -264,6 +309,13 @@ beforeEach(() => {
   });
   mockAddWishlist.mockResolvedValue({ id: 'w-new' });
   mockRemoveWishlist.mockResolvedValue(undefined);
+  // room-lifecycle 더블 초기화.
+  mockLeaveRoom.mockReset();
+  mockCancelRoomDeletion.mockReset();
+  mockLeaveHookState.loading = false;
+  mockLeaveHookState.error = null;
+  mockCancelHookState.loading = false;
+  mockCancelHookState.error = null;
 });
 
 describe('LogScreen', () => {
@@ -724,5 +776,183 @@ describe('LogScreen — 위시리스트 세그먼트(wishlist, TC-6/B7 · TC-1·
     });
     expect(refreshMuklogs).toHaveBeenCalledTimes(1);
     expect(refreshWishlist).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LogScreen — room-lifecycle 나가기/예약삭제 배선 (T9~T11)', () => {
+  const readyCouple = (over?: Record<string, unknown>) => ({
+    status: 'ready',
+    room: {
+      roomId: 'r1',
+      inviteCode: 'ABCDEF',
+      memberCount: 2,
+      mode: 'couple',
+      name: null,
+      deleteScheduledAt: null,
+      deleteRequestedBy: null,
+      ...over,
+    },
+  });
+  const readySolo = (over?: Record<string, unknown>) => ({
+    status: 'ready',
+    room: {
+      roomId: 'r1',
+      inviteCode: 'ABCDEF',
+      memberCount: 1,
+      mode: 'couple',
+      name: null,
+      deleteScheduledAt: null,
+      deleteRequestedBy: null,
+      ...over,
+    },
+  });
+  // probe Text(단일 문자열 children)에서 직렬화된 props 문자열을 읽는다.
+  const sheetsText = (): string => screen.getByText(/^menu:/).props.children as string;
+  const bannerText = (): string => screen.getByText(/^requester:/).props.children as string;
+
+  // ── T9: ⋯ 메뉴 + 확인 시트 분기 ──────────────────────────────────────────
+  it('헤더 ⋯ 버튼 탭 → 나가기 메뉴 시트가 열린다 (menuVisible=true)', () => {
+    setRoomState(readyCouple());
+    renderWithTheme(<LogScreen />);
+    expect(sheetsText()).toContain('menu:false');
+    fireEvent.press(screen.getByLabelText('더보기'));
+    expect(sheetsText()).toContain('menu:true');
+  });
+
+  it('메뉴 "로그 나가기"(probe-select-leave) → 메뉴 닫고 확인 시트 open', () => {
+    setRoomState(readyCouple());
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-leave'));
+    const t = sheetsText();
+    expect(t).toContain('menu:false');
+    expect(t).toContain('confirm:true');
+  });
+
+  it('커플(memberCount>=2)이면 isCouple=true 로 시트에 전달한다 (24h 유예 카피 분기 근거)', () => {
+    setRoomState(readyCouple());
+    renderWithTheme(<LogScreen />);
+    expect(sheetsText()).toContain('couple:true');
+  });
+
+  it('솔로(memberCount=1)이면 isCouple=false 로 전달한다 (즉시 삭제 카피 분기 근거)', () => {
+    setRoomState(readySolo());
+    renderWithTheme(<LogScreen />);
+    expect(sheetsText()).toContain('couple:false');
+  });
+
+  // ── T10: 나가기 액션 배선 ─────────────────────────────────────────────────
+  it('커플 나가기 확인 → leaveRoom({roomId}) 호출, scheduled 성공 시 확인 닫고 refresh(배너 표시)·goBack 안 함', async () => {
+    setRoomState(readyCouple());
+    mockLeaveRoom.mockResolvedValue({
+      scheduled: true,
+      roomDeleted: false,
+      deleteScheduledAt: '2026-06-17T00:00:00.000Z',
+      roomId: 'r1',
+    });
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-leave'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('probe-confirm-leave'));
+    });
+    expect(mockLeaveRoom).toHaveBeenCalledWith({ roomId: 'r1' });
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(mockGoBack).not.toHaveBeenCalled();
+    expect(sheetsText()).toContain('confirm:false');
+  });
+
+  it('솔로 삭제 확인 → roomDeleted 성공 시 goBack 호출(목록 복귀)', async () => {
+    setRoomState(readySolo());
+    mockLeaveRoom.mockResolvedValue({
+      scheduled: false,
+      roomDeleted: true,
+      deleteScheduledAt: null,
+      roomId: 'r1',
+    });
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-leave'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('probe-confirm-leave'));
+    });
+    expect(mockLeaveRoom).toHaveBeenCalledWith({ roomId: 'r1' });
+    await waitFor(() => expect(mockGoBack).toHaveBeenCalledTimes(1));
+  });
+
+  it('나가기 실패(reject) → goBack·refresh 안 하고 확인 시트 유지(leaveError 인라인)', async () => {
+    setRoomState(readyCouple());
+    mockLeaveRoom.mockRejectedValue(new Error('NOT_AUTHENTICATED'));
+    mockLeaveHookState.error = '세션이 만료됐어요. 앱을 다시 시작해 주세요.';
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-leave'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('probe-confirm-leave'));
+    });
+    expect(mockGoBack).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+    const t = sheetsText();
+    expect(t).toContain('confirm:true');
+    expect(t).toContain('세션이 만료됐어요');
+  });
+
+  it('leaving(useLeaveRoom.loading) 상태를 시트에 전달한다', () => {
+    setRoomState(readyCouple());
+    mockLeaveHookState.loading = true;
+    renderWithTheme(<LogScreen />);
+    expect(sheetsText()).toContain('leaving:true');
+  });
+
+  // ── T11: 예약삭제 배너 + 취소 ─────────────────────────────────────────────
+  it('deleteScheduledAt가 null이면 예약삭제 배너를 렌더하지 않는다 (게이팅)', () => {
+    setRoomState(readyCouple({ deleteScheduledAt: null }));
+    renderWithTheme(<LogScreen />);
+    expect(screen.queryByLabelText('scheduled-deletion-banner')).toBeNull();
+  });
+
+  it('deleteScheduledAt가 있으면 배너 렌더 + 요청자(meId==deleteRequestedBy)면 isRequester=true', () => {
+    setRoomState(
+      readyCouple({ deleteScheduledAt: '2026-06-17T00:00:00.000Z', deleteRequestedBy: 'me-uid' }),
+    );
+    renderWithTheme(<LogScreen />);
+    expect(screen.getByLabelText('scheduled-deletion-banner')).toBeTruthy();
+    expect(bannerText()).toContain('requester:true');
+  });
+
+  it('상대가 요청자면(meId != deleteRequestedBy) isRequester=false (취소 버튼 미노출 근거·이중 방어)', () => {
+    setRoomState(
+      readyCouple({ deleteScheduledAt: '2026-06-17T00:00:00.000Z', deleteRequestedBy: 'partner-uid' }),
+    );
+    renderWithTheme(<LogScreen />);
+    expect(bannerText()).toContain('requester:false');
+  });
+
+  it('배너 "삭제 취소"(probe-cancel-deletion) → cancelRoomDeletion({roomId}) 호출 후 refresh(배너 사라짐)', async () => {
+    setRoomState(
+      readyCouple({ deleteScheduledAt: '2026-06-17T00:00:00.000Z', deleteRequestedBy: 'me-uid' }),
+    );
+    mockCancelRoomDeletion.mockResolvedValue({ canceled: true, roomId: 'r1' });
+    renderWithTheme(<LogScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('probe-cancel-deletion'));
+    });
+    expect(mockCancelRoomDeletion).toHaveBeenCalledWith({ roomId: 'r1' });
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it('취소 실패(reject·NOT_SCHEDULED) → 한국어 토스트 노출 + refresh로 상태 reconcile', async () => {
+    setRoomState(
+      readyCouple({ deleteScheduledAt: '2026-06-17T00:00:00.000Z', deleteRequestedBy: 'me-uid' }),
+    );
+    mockCancelRoomDeletion.mockRejectedValue(new Error('NOT_SCHEDULED'));
+    renderWithTheme(<LogScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('probe-cancel-deletion'));
+    });
+    await waitFor(() =>
+      expect(screen.getByText('이미 삭제 예약이 해제됐거나 없는 로그예요.')).toBeTruthy(),
+    );
+    expect(refresh).toHaveBeenCalled();
   });
 });

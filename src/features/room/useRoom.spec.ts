@@ -38,7 +38,15 @@ describe('useRoom', () => {
     });
     expect(result.current.state).toEqual({
       status: 'ready',
-      room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 2, mode: 'couple', name: '우리 맛집' },
+      room: {
+        roomId: 'r1',
+        inviteCode: 'ABCDEF',
+        memberCount: 2,
+        mode: 'couple',
+        name: '우리 맛집',
+        deleteScheduledAt: null,
+        deleteRequestedBy: null,
+      },
     });
   });
 
@@ -54,7 +62,47 @@ describe('useRoom', () => {
     });
     expect(result.current.state).toEqual({
       status: 'ready',
-      room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 1, mode: 'solo', name: null },
+      room: {
+        roomId: 'r1',
+        inviteCode: 'ABCDEF',
+        memberCount: 1,
+        mode: 'solo',
+        name: null,
+        deleteScheduledAt: null,
+        deleteRequestedBy: null,
+      },
+    });
+  });
+
+  it('delete_scheduled_at·delete_requested_by 투영 시 camel로 매핑한다 (room-lifecycle 경계)', async () => {
+    rpc.mockResolvedValueOnce({
+      data: {
+        room_id: 'r1',
+        invite_code: 'ABCDEF',
+        member_count: 2,
+        mode: 'couple',
+        name: '우리 맛집',
+        delete_scheduled_at: '2026-06-17T00:00:00.000Z',
+        delete_requested_by: 'u9',
+      },
+      error: null,
+    });
+    const { result } = renderHook(() => useRoom({ roomId: 'r1' }));
+
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('ready');
+    });
+    expect(result.current.state).toEqual({
+      status: 'ready',
+      room: {
+        roomId: 'r1',
+        inviteCode: 'ABCDEF',
+        memberCount: 2,
+        mode: 'couple',
+        name: '우리 맛집',
+        deleteScheduledAt: '2026-06-17T00:00:00.000Z',
+        deleteRequestedBy: 'u9',
+      },
     });
   });
 
@@ -125,7 +173,15 @@ describe('useRoom', () => {
     await waitFor(() => {
       expect(result.current.state).toEqual({
         status: 'ready',
-        room: { roomId: 'r1', inviteCode: 'WXYZ23', memberCount: 1, mode: 'solo', name: '새이름' },
+        room: {
+          roomId: 'r1',
+          inviteCode: 'WXYZ23',
+          memberCount: 1,
+          mode: 'solo',
+          name: '새이름',
+          deleteScheduledAt: null,
+          deleteRequestedBy: null,
+        },
       });
     });
   });

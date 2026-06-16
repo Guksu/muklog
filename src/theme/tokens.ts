@@ -102,6 +102,10 @@ const lightColor = {
   scrimStrong: palette.scrimStrong,
   // 파괴 액션(삭제) — 킷 status-negative(#E5484D). negativeFg=버튼 글자 흰색.
   negative: palette.statusNegative, negativeFg: palette.white,
+  // 파괴 상태(예약삭제) 배너 약톤 배경(room-lifecycle) — 킷 비종속 신규 UI(plan §4 "status-negative weak 톤").
+  //   negative(#E5484D)의 저투명 틴트. error*(검증/조회 실패 텍스트) 의미와 분리(negative=파괴 의미) → 전용 약톤 추가.
+  //   primaryWeak(#EAF0FF)·errorWeak(#FEECEC)가 solid hex인 반면, 정확한 #E5484D 계열을 묶기 위해 rgba 틴트(다크 미러 override).
+  negativeWeak: 'rgba(229,72,77,0.10)',
   // 지도 "주변 음식점" 핀/범례 dot 웜그레이(킷 #B6ABA0). 라이트/다크 공통(지도 위 마커라 톤 고정).
   mapNearbyPin: palette.mapNearbyPin,
   // 지도 현재위치 FAB 아이콘 블루(킷 #3B82F6). 라이트/다크 공통(흰 surface FAB 위 고정 톤).
@@ -135,6 +139,8 @@ const darkColor = {
   // 다크 세그 트랙 — 킷 figma 다크 --fill-alternative(rgba(112,115,124,.12)).
   fillAlt: 'rgba(112,115,124,0.12)',
   successWeak:'rgba(0,191,64,0.18)', warningWeak:'rgba(255,146,0,0.18)', errorWeak:'rgba(255,66,66,0.18)',
+  // 다크 미러 — 어두운 surface(#171717) 위에서도 약톤이 보이도록 라이트(.10)보다 진하게(.22).
+  negativeWeak: 'rgba(229,72,77,0.22)',
 } as const;
 
 // 스페이싱 [확인 — 원티드 실제 스케일, px → RN 숫자]

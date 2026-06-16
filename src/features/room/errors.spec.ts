@@ -56,7 +56,7 @@ describe('mapRoomError — log-invite 신규 토큰 (2종, get_room, C2)', () =>
     );
   });
 
-  it('ROOM_ERROR_MESSAGES는 정확히 10개의 토큰 키를 가진다 (기존 9 + log-name 1, C2 단일 출처)', () => {
+  it('ROOM_ERROR_MESSAGES는 정확히 12개의 토큰 키를 가진다 (기존 10 + room-lifecycle 2, C2 단일 출처)', () => {
     expect(Object.keys(ROOM_ERROR_MESSAGES).sort()).toEqual(
       [
         'ALREADY_IN_ROOM',
@@ -66,10 +66,32 @@ describe('mapRoomError — log-invite 신규 토큰 (2종, get_room, C2)', () =>
         'NAME_TOO_LONG',
         'NOT_AUTHENTICATED',
         'NOT_A_MEMBER',
+        'NOT_DELETION_REQUESTER',
+        'NOT_SCHEDULED',
         'ROOM_FULL',
         'ROOM_NOT_FOUND',
         'SOLO_ROOM_NOT_JOINABLE',
       ].sort(),
+    );
+  });
+});
+
+describe('mapRoomError — room-lifecycle 신규 토큰 (2종, cancel_room_deletion, C2)', () => {
+  it('NOT_SCHEDULED', () => {
+    expect(mapRoomError({ error: new Error('NOT_SCHEDULED') })).toBe(
+      '이미 삭제 예약이 해제됐거나 없는 로그예요.',
+    );
+  });
+
+  it('NOT_DELETION_REQUESTER', () => {
+    expect(mapRoomError({ error: new Error('NOT_DELETION_REQUESTER') })).toBe(
+      '나가기를 요청한 사람만 취소할 수 있어요.',
+    );
+  });
+
+  it('Postgres가 NOT_DELETION_REQUESTER 토큰을 텍스트로 감싸도 포함 매칭한다', () => {
+    expect(mapRoomError({ error: new Error('ERROR: NOT_DELETION_REQUESTER (SQLSTATE P0001)') })).toBe(
+      '나가기를 요청한 사람만 취소할 수 있어요.',
     );
   });
 });

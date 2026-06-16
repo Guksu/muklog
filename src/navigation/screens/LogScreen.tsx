@@ -41,8 +41,14 @@ import {
 import { useAuth } from '@/features/auth';
 import { useProfile } from '@/features/profile';
 import {
+  deletionCountdownLabel,
   displayLogName,
+  LeaveLogSheets,
   LogTitleButton,
+  mapRoomError,
+  ScheduledDeletionBanner,
+  useCancelRoomDeletion,
+  useLeaveRoom,
   useRenameRoom,
   useRoom,
 } from '@/features/room';
@@ -212,6 +218,9 @@ export const LogScreen = () => {
   const { state, refresh } = useRoom({ roomId: roomId ?? '' });
   const { state: profileState } = useProfile({ userId: meId });
   const { renameRoom, loading: renaming, error: renameError } = useRenameRoom();
+  // 나가기/예약삭제 취소(room-lifecycle). leaveRoom 결과(scheduled/roomDeleted)로 nav·refresh 분기(§3 통합 레시피).
+  const { leaveRoom, loading: leaving, error: leaveError } = useLeaveRoom();
+  const { cancelRoomDeletion, loading: canceling } = useCancelRoomDeletion();
   const meNickname =
     profileState.status === 'ready' && profileState.profile.nickname
       ? profileState.profile.nickname
@@ -222,6 +231,10 @@ export const LogScreen = () => {
   //   RenameDialog는 controlled → 입력 draft를 부모(LogScreen)가 소유한다(open 시 현재 로그명으로 초기화).
   const [editOpen, setEditOpen] = React.useState(false);
   const [nameDraft, setNameDraft] = React.useState('');
+
+  // 나가기 메뉴/확인 시트 open 상태(로컬 UI, 순수 boolean). 메뉴 → 확인 → leaveRoom 성공 분기(§3.3).
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
 
   // ── 위시리스트(wishlist 스프린트) — 세그 카운트·본문·추가/삭제/다녀왔어요 데이터 소유 ──────────────
   //   먹로그/위시 목록을 LogScreen이 단일 소유(세그 카운트 확보·이중 로드 0). MuklogList/WishlistView는 presentational.
@@ -434,6 +447,36 @@ export const LogScreen = () => {
     }
   };
 
+  // 나가기 확정 — 커플=24h 예약 후 확인 닫고 refresh(배너 표시·화면 유지) / 솔로=즉시 삭제 후 목록 복귀(goBack).
+  //   실패(throw)는 useLeaveRoom.error → LeaveLogSheets leaveError 인라인. 확인 시트 유지(재시도, plan §4).
+  //   목록 refresh는 LogListScreen 포커스 정책이 담당(여기선 goBack만, 비용 §8).
+  const handleLeave = async () => {
+    try {
+      const res = await leaveRoom({ roomId });
+      setConfirmOpen(false);
+      if (res.roomDeleted) {
+        navigation.goBack();
+        return;
+      }
+      // 커플 예약 → 예약 배너 표시 위해 1회 refresh(화면 유지).
+      await refresh();
+    } catch {
+      // error는 useLeaveRoom.error로 노출 → 확인 시트 인라인. 시트 유지(닫지 않음).
+    }
+  };
+
+  // 예약 삭제 취소(요청자 전용) — 성공 시 refresh로 배너 사라짐. 실패 시 한국어 토스트 + refresh로 상태 reconcile
+  //   (예: cron이 먼저 삭제 → NOT_SCHEDULED → 토스트 안내 후 refresh로 화면 정합, plan §6).
+  const handleCancelDeletion = async () => {
+    try {
+      await cancelRoomDeletion({ roomId });
+      await refresh();
+    } catch (err) {
+      showToast({ message: mapRoomError({ error: err }), tone: 'neutral' });
+      await refresh();
+    }
+  };
+
   // 헤더 아바타 겹침 슬롯(LogTitleButton.avatarSlot로 주입). 데이터(아바타 url·커플 여부)는 여기서 구성.
   const avatarSlot = (
     <View style={styles.avatarStack}>
@@ -473,7 +516,31 @@ export const LogScreen = () => {
         />
         {/* 킷 mk-log:32-41 — 아바타 겹침 + 로그명 + ✏️를 하나의 탭 가능 버튼으로(탭 → 이름 편집 시트 open). */}
         <LogTitleButton title={title} avatarSlot={avatarSlot} onEdit={handleOpenNameEdit} />
+        {/* ⋯ 더보기 — 나가기 메뉴 시트 open(LogTitleButton flex:1로 우측 끝 정렬, ui-spec §3.3-1). */}
+        <IconButton
+          name={IconName.MoreHorizontal}
+          size={24}
+          color="fg"
+          accessibilityLabel="더보기"
+          onPress={() => setMenuOpen(true)}
+        />
       </View>
+
+      {/* 예약삭제 배너 — 헤더 아래·세그 위, deleteScheduledAt 있을 때만(게이팅은 여기, ui-spec §3.2).
+          세그 무관 항상 표시(예약은 로그 전체 상태). 요청자=취소 버튼 / 상대=안내만(ScheduledDeletionBanner 내부). */}
+      {room.deleteScheduledAt ? (
+        <View style={{ paddingHorizontal: theme.spacing[20], paddingTop: theme.spacing[8] }}>
+          <ScheduledDeletionBanner
+            countdownLabel={deletionCountdownLabel({
+              scheduledAt: room.deleteScheduledAt,
+              now: Date.now(),
+            })}
+            isRequester={meId === room.deleteRequestedBy}
+            onCancel={() => void handleCancelDeletion()}
+            canceling={canceling}
+          />
+        </View>
+      ) : null}
 
       {/* 세그먼트(기록 N / 위시리스트 M) — 킷 mk-log:56-72. 컨테이너 패딩 "6px 20px 2px"(상6/좌우20/하2). */}
       <View style={styles.segWrap}>
@@ -534,6 +601,23 @@ export const LogScreen = () => {
         saving={renaming}
         error={renameError}
         extra={isCouple ? undefined : <InviteCodeCard code={room.inviteCode} compact />}
+      />
+
+      {/* 나가기 메뉴 + 확인 시트(room-lifecycle, 킷 비종속·MuklogDetail 패턴) — open은 LogScreen 소유, RPC·nav는 handleLeave.
+          성공 시 닫기는 controlled(커플=refresh·솔로=goBack). 카피 분기(커플 24h 유예 / 솔로 즉시)는 isCouple으로. */}
+      <LeaveLogSheets
+        menuVisible={menuOpen}
+        confirmVisible={confirmOpen}
+        isCouple={isCouple}
+        onCloseMenu={() => setMenuOpen(false)}
+        onSelectLeave={() => {
+          setMenuOpen(false);
+          setConfirmOpen(true);
+        }}
+        onCloseConfirm={() => setConfirmOpen(false)}
+        onConfirmLeave={() => void handleLeave()}
+        leaving={leaving}
+        leaveError={leaveError}
       />
 
       {/* 위시 추가 성공 토스트(하단 플로팅) — 킷 mk-log:33 "위시리스트에 담았어요 📍". 자동 사라짐은 Toast 소유. */}

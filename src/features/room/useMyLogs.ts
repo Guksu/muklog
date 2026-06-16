@@ -21,6 +21,8 @@ export type MyLog = {
   createdAt: string; // ISO
   joinedAt: string; // ISO
   name: string | null; // 사용자 지정 로그 이름(null=미지정 → 카드에서 폴백 표기, log-name)
+  deleteScheduledAt: string | null; // 예약 삭제 시각(ISO) | null. LogList 배지 후속 대비 투영(이번 표시 OUT, room-lifecycle).
+  deleteRequestedBy: string | null; // 나가기를 요청한 사용자 id | null.
 };
 
 export type MyLogsState =
@@ -36,6 +38,8 @@ type MyLogRow = {
   created_at: string;
   joined_at: string;
   name?: string | null; // list_my_rooms name 투영(log-name). 누락/null 모두 null로 흡수.
+  delete_scheduled_at?: string | null; // room-lifecycle 투영. 누락/null 모두 null로 흡수.
+  delete_requested_by?: string | null; // room-lifecycle 투영. 동상.
 };
 
 /**
@@ -50,6 +54,8 @@ const toMyLog = ({ row }: { row: MyLogRow }): MyLog => ({
   createdAt: row.created_at,
   joinedAt: row.joined_at,
   name: row.name ?? null,
+  deleteScheduledAt: row.delete_scheduled_at ?? null,
+  deleteRequestedBy: row.delete_requested_by ?? null,
 });
 
 /**

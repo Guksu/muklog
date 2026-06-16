@@ -22,6 +22,10 @@ export const ROOM_ERROR_MESSAGES: Record<string, string> = {
   // log-name 신규 토큰 (plan §3.4, C2). rename_room(p_room_id, p_name) RPC가 raise.
   //   ⚠️ SQL(raise) ↔ 이 매핑이 단일 출처 — 20260615120000_log_name.sql 과 동기화 유지.
   NAME_TOO_LONG: '이름은 20자까지 쓸 수 있어요.',
+  // room-lifecycle 신규 토큰 (plan §3.6, C2). cancel_room_deletion(p_room_id) RPC가 raise.
+  //   ⚠️ SQL(raise) ↔ 이 매핑이 단일 출처 — 20260616130000_room_lifecycle.sql 과 동기화 유지.
+  NOT_SCHEDULED: '이미 삭제 예약이 해제됐거나 없는 로그예요.',
+  NOT_DELETION_REQUESTER: '나가기를 요청한 사람만 취소할 수 있어요.',
 };
 
 /** 토큰 미일치(네트워크/그 외) 시 기본 메시지. */

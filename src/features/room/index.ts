@@ -6,6 +6,11 @@ export { useRoom, type RoomDetail, type RoomDetailState } from './useRoom';
 export { useCreateRoom, type CreateRoomResult } from './useCreateRoom';
 export { useJoinRoom, type JoinRoomResult } from './useJoinRoom';
 export { useLeaveRoom, type LeaveRoomResult } from './useLeaveRoom';
+export {
+  useCancelRoomDeletion,
+  type CancelRoomDeletionResult,
+} from './useCancelRoomDeletion';
+export { deletionCountdownLabel } from './deletionCountdownLabel';
 export { useRenameRoom, type RenameRoomResult } from './useRenameRoom';
 export {
   LOG_NAME_MAX_LENGTH,
@@ -23,3 +28,9 @@ export {
 } from './code';
 // 로그 이름(log-name) 진입 버튼 — 편집 표현부는 공용 RenameDialog(@/components)로 통일(기존 편집 시트 폐기, rename-dialog D-4).
 export { LogTitleButton, type LogTitleButtonProps } from './components/LogTitleButton';
+// 로그 나가기/예약삭제 UI(room-lifecycle, 킷 비종속·MuklogDetail 패턴 재사용) — presentational. RPC·배선은 developer.
+export { LeaveLogSheets, type LeaveLogSheetsProps } from './LeaveLogSheets';
+export {
+  ScheduledDeletionBanner,
+  type ScheduledDeletionBannerProps,
+} from './ScheduledDeletionBanner';

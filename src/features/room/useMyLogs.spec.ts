@@ -17,6 +17,8 @@ const row = (over?: Partial<{
   created_at: string;
   joined_at: string;
   name: string | null;
+  delete_scheduled_at: string | null;
+  delete_requested_by: string | null;
 }>) => ({
   room_id: 'r1',
   mode: 'couple',
@@ -57,6 +59,8 @@ describe('useMyLogs', () => {
           createdAt: '2026-06-10T00:00:00.000Z',
           joinedAt: '2026-06-10T01:00:00.000Z',
           name: '우리 맛집',
+          deleteScheduledAt: null,
+          deleteRequestedBy: null,
         },
         {
           roomId: 'r2',
@@ -65,6 +69,8 @@ describe('useMyLogs', () => {
           createdAt: '2026-06-10T00:00:00.000Z',
           joinedAt: '2026-06-09T00:00:00.000Z',
           name: null,
+          deleteScheduledAt: null,
+          deleteRequestedBy: null,
         },
       ],
     });
@@ -87,6 +93,30 @@ describe('useMyLogs', () => {
     });
     const logs = result.current.state.status === 'ready' ? result.current.state.logs : [];
     expect(logs.map((l) => l.name)).toEqual(['맛집로그', null, null]);
+  });
+
+  it('delete_scheduled_at·delete_requested_by 투영: 값 있으면 camel 매핑, 누락/null이면 null (room-lifecycle 경계)', async () => {
+    rpc.mockResolvedValueOnce({
+      data: [
+        row({
+          room_id: 'r1',
+          delete_scheduled_at: '2026-06-17T00:00:00.000Z',
+          delete_requested_by: 'u9',
+        }),
+        row({ room_id: 'r2' }), // 두 키 누락 → null
+      ],
+      error: null,
+    });
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('ready');
+    });
+    const logs = result.current.state.status === 'ready' ? result.current.state.logs : [];
+    expect(logs.map((l) => [l.deleteScheduledAt, l.deleteRequestedBy])).toEqual([
+      ['2026-06-17T00:00:00.000Z', 'u9'],
+      [null, null],
+    ]);
   });
 
   it('빈 배열이면 ready + logs:[] 로 전이한다 (빈 상태=정상, 에러 아님) (C9)', async () => {

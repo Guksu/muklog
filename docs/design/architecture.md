@@ -120,9 +120,9 @@ wishlist_items                   -- 로그(방)별 "가보고 싶은 곳" 위시
 - **사진 5장 제한**: 앱에서 1차 차단 + `muklog_photos` INSERT 트리거로 2차 검증(`order_index 0~4`).
 - **영상 제한**: 먹로그당 1개 + 길이 ≤ 2000ms. 앱에서 1차 차단(촬영 2초 컷·압축) + `muklogs` 트리거로 `video_duration_ms ≤ 2000` 2차 검증.
 - **방 나가기 — 즉시판(출시: `room-leave` 스프린트)**: `leave_room()` RPC가 호출자 멤버십을 **즉시 해지**한다(예약/유예/cron 없음). 나간 뒤 방 멤버가 **0명이면 방+하위 데이터 삭제**, **1명 이상이면 방 보존**(남은 멤버 데이터 손실 0, invite_code 유지로 재입장 가능). 진입점은 **Profile 화면**(솔로·커플 공통). 상세는 `docs/sprint/sprint-20260610-room-leave/plan.md`.
-- **방 삭제 라이프사이클(구현 추후 — room-lifecycle 스프린트)**:
-  - **커플방 자동삭제(#2)**: `mode='couple'` 이고 멤버 1명인 채로 `created_at` 후 24h 경과 시 삭제. 예약-삭제 cron(Supabase pg_cron 또는 스케줄 Edge Function)이 주기 점검.
-  - **나가기 24h 유예(#5)**: 커플방에서 한 명이 나가기 → `delete_scheduled_at = now()+24h`, `delete_requested_by = 나간 사람`. 24h 내 **나간 사람만** 취소(두 필드 NULL로) 가능. 미취소 시 cron이 방+데이터 전체 삭제(남은 멤버 데이터 포함). 솔로방에는 나가기 유예 미적용.
+- **방 삭제 라이프사이클(room-lifecycle 스프린트 — 2026-06-16)**:
+  - **커플방 자동삭제(#2) — 폐기(2026-06-16 사용자 결정)**: ~~`mode='couple'` & 멤버 1명 & `created_at`+24h 경과 시 삭제~~ → **폐기.** 멀티로그 전환으로 `create_room`이 **모든 신규 로그를 `mode='couple'` 기본값**으로 만들어(`rooms.mode` stale) #2 기준을 문자 그대로 구현하면 **정당한 영구 솔로 로그를 24h 후 전부 삭제**하는 데이터 유실 버그가 된다. 멀티로그 모델에서 1인 로그는 정당한 영구 솔로 로그이므로 **자동삭제 없음, 솔로 로그 영구 유지.** cron은 #5 예약 경과 삭제만 수행.
+  - **나가기 24h 유예(#5)**: 커플방에서 한 명이 나가기 → `delete_scheduled_at = now()+24h`, `delete_requested_by = 나간 사람`. 24h 내 **나간 사람만** 취소(두 필드 NULL로) 가능. 미취소 시 cron이 방+데이터 전체 삭제(남은 멤버 데이터 포함). 솔로방 나가기는 유예 미적용(즉시 삭제 — room-leave 즉시판). **인프라: Supabase pg_cron(in-DB, 외부 호출 0) 매시(`0 * * * *`) 점검 → 예약 경과 방 + Storage(`muklog-photos/{room_id}/%`) 정리.** RPC `leave_room(p_room_id)`(커플=예약/솔로=즉시) + `cancel_room_deletion(p_room_id)`(요청자만). 상세 `docs/sprint/sprint-20260616-room-lifecycle/plan.md`.
     > ⚠️ **즉시 나가기(`room-leave`)와의 관계(사용자 승인된 divergence)**: 위 유예/취소/cron은 무거워 `room-lifecycle`로 **보류**한다. 1차 출시는 §위 "즉시판"(유예 없이 즉시 해지 + 0명 시 삭제, **남은 멤버는 보존**)이다. `delete_scheduled_at`/`delete_requested_by` 컬럼은 선반영돼 있어 추후 `leave_room` 본문만 교체하면 유예 모델로 확장된다.
 - **RLS(Row Level Security)**: 모든 테이블에 활성화. 사용자는 **자신이 멤버인 방**의 데이터만 read/write. 핵심 정책:
   - `muklogs`: select=`room_id IN (select room_id from room_members where user_id = auth.uid())`. insert=`created_by=auth.uid() and 내 방`. **update(`muklogs_update_own`)·delete(`muklogs_delete_own`)=`created_by=auth.uid() and 내 방`**(수정=muklog-edit, 삭제 정책=muklog-photos 롤백용 선반영·muklog-edit에서 삭제 UI 사용).
@@ -213,7 +213,7 @@ Profile (헤더 진입)
 | `map-tab-nearby` (슬라이스2) | 일반 음식점 viewport 핀 — 지도 idle→`BOUNDS_CHANGED`(bbox) + RN `useNearbyPlaces`(디바운스 500ms·양자화 캐시·최소이동 임계·레이스 가드)로 **신규 `nearby-search` Edge Function**(Kakao `category.json` FD6+rect, size15·page 미사용, `KAKAO_REST_API_KEY` 재사용) 조회. saved(primary)/주변(`mapNearbyPin #B6ABA0`) 핀 머지·좌표근접 dedup·색 구분, 주변 핀 탭→`NearbySpotCard`(이름·카테고리·거리). `MapMarker.saved` boolean 폭확장(회귀 0). **비용 가드레일 테스트로 강제**(다중이동 1회·재방문 0·임계). 주변핀→먹로그추가·정확 dedup·필터칩·클러스터링 OUT(후속). QA 2분할 통과(757 green). 라이브 스모크 이월. `docs/sprint/sprint-20260615-map-tab-nearby/`. | #6 | ✅ 완료(라이브 스모크 이월) |
 | `map-locate-button` | **지도 현재위치 버튼**: 우하단 FAB(킷 mk-home:289-298, `locate` 아이콘·`mapLocate #3B82F6`·`shadow.fab`) → 탭 시 `getCurrentPositionAsync` **재취득** → `RECENTER` 메시지로 `__muklogRecenter`(panTo + me 마커 fresh 좌표 갱신). `useLocationPermission.refreshCoords`(탭당 1회·in-flight 가드), `handleLocate`(미결정→권한요청 / 거부→no-op / granted→재센터). 순수 클라(마이그레이션·Edge Function·신규 Kakao 호출 0). QA 2분할 통과(832 green). me 마커 펄스(mkLocate)는 옵션 후속. 라이브: 재빌드 불필요(JS), 디바이스 스모크. `docs/sprint/sprint-20260615-map-locate-button/`. | #5 | ✅ 완료(디바이스 스모크 이월) |
 | ~~`room-promote`~~ | (흡수됨) 솔로→커플 전환이 멀티 로그 모델에서 "초대코드로 조인 시 자동 커플화"로 단순화 → `log-invite`로 흡수 | #1 | ~~폐기~~ |
-| `room-lifecycle` (추후) | 예약 삭제 cron: 커플방 24h 미입장 자동삭제(#2) + 나가기 24h 유예/취소(#5). Supabase pg_cron 또는 스케줄 Edge Function. (즉시 나가기는 `room-leave`로 분리 출시) | #2·#5 신규 | **보류(설계만)** |
+| `room-lifecycle` | 예약 삭제 라이프사이클: **나가기 24h 유예/취소(#5)** + 예약 경과 cron + Storage 정리. `leave_room(p_room_id)` 재설계(커플=24h 예약/솔로=즉시 삭제) + `cancel_room_deletion(p_room_id)`(요청자만) + `delete_expired_rooms()` **pg_cron**(in-DB·외부호출 0) 매시 잡 + `storage.objects muklog-photos/{room_id}/%` 메타 정리 + `list_my_rooms`/`get_room` 예약필드 투영 + LogScreen ⋯나가기·예약삭제 배너·취소(킷 비종속). **#2 커플방 자동삭제는 폐기**(멀티로그에서 모든 로그 mode='couple'→솔로 유실 버그, 사용자 결정·솔로 영구 유효). `docs/sprint/sprint-20260616-room-lifecycle/`. | #5 신규 | 진행 |
 
 각 스프린트는 `planner → developer → qa` 순으로 진행하며, 오케스트레이터(`sprint-orchestrator` 스킬)가 조율한다.
 
@@ -233,8 +233,8 @@ Profile (헤더 진입)
 
 - ~~원티드 토큰 실제 값 확보~~ → **해결.** 별도 builbook 프로젝트의 `wanted-design-system` 토큰을 RN용 `theme/tokens.ts`로 변환. 상세는 `.claude/skills/rn-supabase-dev/references/wanted-tokens.md` (컬러·스페이싱=원티드 실값, 타이포·radius·shadow=프로젝트 정의). 폰트는 Pretendard를 `expo-font`로 로드.
 - 푸시 알림(상대가 먹로그 추가 시) — MVP 이후.
-- ~~방 나가기 / 재초대 흐름~~ → **결정됨.** 나가기는 24h 유예 + 나간 사람만 취소(#5). 솔로↔커플 모드 도입(#1). **단, 예약 삭제 cron 구현은 `room-lifecycle` 스프린트로 보류**(스키마 필드만 선반영). → **즉시판은 `room-leave` 스프린트로 우선 출시**(유예 없이 즉시 해지 + 0명 시 방 삭제, 남은 멤버 보존). 유예/취소/cron만 `room-lifecycle` 보류(사용자 승인 divergence).
-- **예약 삭제 인프라 미정 사항**: pg_cron(확장 활성화 필요) vs 스케줄 Edge Function 중 택1, cron 주기(예: 매시 vs 매일), 삭제 시 Storage 파일 정리 방식 — `room-lifecycle` 스프린트 착수 시 확정.
+- ~~방 나가기 / 재초대 흐름~~ → **결정됨.** 나가기는 24h 유예 + 나간 사람만 취소(#5). 솔로↔커플 모드 도입(#1). **즉시판은 `room-leave` 스프린트로 우선 출시**(유예 없이 즉시 해지 + 0명 시 방 삭제, 남은 멤버 보존). **유예/취소/cron은 `room-lifecycle` 스프린트(2026-06-16)에서 구현**(아래 항목).
+- ~~**예약 삭제 인프라 미정 사항**: pg_cron vs 스케줄 Edge Function, cron 주기, Storage 정리 방식~~ → **결정됨(`room-lifecycle` 2026-06-16)**: **pg_cron**(in-DB·외부 호출 0·무료 티어, Dashboard 확장 활성 필요) + **매시**(`0 * * * *`, 24h 윈도우 지연 ≤1h) + 삭제 함수가 `storage.objects` 메타행(`muklog-photos/{room_id}/%`)을 방 행 삭제와 같은 트랜잭션에서 정리(외부 호출 0; 실파일 GC는 라이브 스모크 확인, 고아 시 `pg_net` 후속). **#2 커플방 자동삭제는 폐기**(위 §라이프사이클 — 멀티로그에서 솔로 유실 버그).
 - ~~솔로방의 커플 전환(초대코드 사후 발급)~~ → **멀티 로그 모델로 흡수.** 모든 로그는 솔로로 시작, 로그 내 초대코드로 조인 시 자동 커플화(`log-invite`).
 - **멀티 로그 전환(2026-06-10 결정 → `multi-log-home` ✅ 완료)**: 1인 多로그 + 온보딩 폐기 + HomeTabs(로그 목록)/LogScreen 2단 구조. 후속 미정 사항:
   - ~~**로그 식별/이름**: 이번엔 미도입(자동/생략)~~ → **`log-name` ✅ 완료(2026-06-15)**: `rooms.name` + `rename_room` RPC + 카드/헤더 표시·헤더 ✏️ 편집, 이름 없으면 본인 닉 폴백. **대표 이미지(로그 커버)는 여전히 후속**(`log-cover` 슬라이스).

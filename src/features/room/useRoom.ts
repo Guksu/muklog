@@ -21,6 +21,8 @@ export type RoomDetail = {
   memberCount: number; // 1=혼자 / 2=둘이 (DEFINER 집계)
   mode: RoomMode;
   name: string | null; // 사용자 지정 로그 이름(null=미지정 → 헤더에서 폴백 표기, log-name)
+  deleteScheduledAt: string | null; // 예약 삭제 시각(ISO) | null=예약 없음 (room-lifecycle)
+  deleteRequestedBy: string | null; // 나가기를 요청한 사용자 id | null. meId와 비교해 취소권 판정.
 };
 
 export type RoomDetailState =
@@ -35,6 +37,8 @@ type RoomRow = {
   member_count?: number;
   mode?: RoomMode;
   name?: string | null; // get_room name 키(log-name). nullable — 누락 검사에 포함하지 않음(누락=정상).
+  delete_scheduled_at?: string | null; // room-lifecycle 투영. nullable — 누락/null 모두 null로 흡수.
+  delete_requested_by?: string | null; // room-lifecycle 투영. nullable — 동상.
 };
 
 /**
@@ -75,6 +79,8 @@ export const useRoom = ({ roomId }: { roomId: string }) => {
         memberCount: row.member_count,
         mode: row.mode,
         name: row.name ?? null,
+        deleteScheduledAt: row.delete_scheduled_at ?? null,
+        deleteRequestedBy: row.delete_requested_by ?? null,
       },
     });
   };
