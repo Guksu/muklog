@@ -594,7 +594,9 @@ const styles = StyleSheet.create({
   glassBtn: { overflow: 'hidden' },
   indicator: {
     position: 'absolute',
-    bottom: 14,
+    // 본문이 marginTop:-18로 사진 하단 18px를 덮으므로(라운드 겹침), 인디케이터는 그 위로(>18) 올려야 가려지지 않는다.
+    //   bottom 26 = 18(본문 겹침) + 8(여유) → 사진 하단 가까이 유지하되 본문에 안 가림.
+    bottom: 26,
     left: 0,
     right: 0,
     flexDirection: 'row',

@@ -4,6 +4,7 @@
 //   검증: 캐러셀(0/1/N장·인디케이터), category/rating/memo NULL 폴백, back→onBack, share/more 부재,
 //         작성자 라벨, hasCoords stub 분기, loading/notFound/error 상태.
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { fireEvent, screen } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
@@ -109,6 +110,15 @@ describe('MuklogDetailScreen — 사진 캐러셀 (AC a/b)', () => {
     expect(screen.getAllByTestId('muklog-detail-photo')).toHaveLength(3);
     // FoodCover 폴백은 사진이 있으면 렌더하지 않는다.
     expect(screen.queryByTestId('muklog-detail-cover-fallback')).toBeNull();
+  });
+
+  it('인디케이터 bottom이 본문 겹침(marginTop -18)을 넘어 가려지지 않는다 (회귀: 불릿이 상세에 가림)', () => {
+    renderReady({
+      photos: [photo({ orderIndex: 0, uri: 'u0' }), photo({ orderIndex: 1, uri: 'u1' })],
+    });
+    const indicator = screen.getByTestId('muklog-detail-indicator');
+    // 본문이 사진 하단 18px를 덮으므로 인디케이터 bottom은 18 초과여야 한다(그래야 본문 위로 보임).
+    expect(StyleSheet.flatten(indicator.props.style).bottom).toBeGreaterThan(18);
   });
 
   it('사진 1장이면 인디케이터를 표시하지 않는다', () => {
