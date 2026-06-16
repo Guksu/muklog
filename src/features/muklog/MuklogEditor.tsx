@@ -17,10 +17,11 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { Icon, IconName, Screen, Stars, SubBar, Text } from '@/components';
+import { DatePickerSheet, Icon, IconName, Screen, Stars, SubBar, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 import { MUKLOG_CATEGORIES, MUKLOG_CATEGORY_KEYS, type MuklogCategoryKey } from './categories';
+import { formatVisitedDate } from './formatVisitedDate';
 import { mapMuklogError } from './errors';
 import { mapKakaoCategory } from './kakaoCategory';
 import { PhotoPickerGrid } from './PhotoPickerGrid';
@@ -177,6 +178,8 @@ export const MuklogEditor = ({
   const [rating, setRating] = useState(initial?.rating ?? 0);
   const [memo, setMemo] = useState(initial?.memo ?? '');
   const [visitedAt, setVisitedAt] = useState(initial?.visitedAt ?? todayLocalDate());
+  // 방문일 캘린더 시트 열림 상태(date-picker T4). 행 탭→열기, 선택/취소→닫기.
+  const [dateOpen, setDateOpen] = useState(false);
   // 편집 사진 슬롯(existing+new 혼합). initial 사진을 existing 슬롯으로 시드(킷 mk-log:287).
   const [editorPhotos, setEditorPhotos] = useState<EditorPhoto[]>(
     () =>
@@ -599,18 +602,30 @@ export const MuklogEditor = ({
           style={[styles.input, styles.memo, fieldInput]}
         />
 
-        {/* 방문일 (기본 today, 미래 차단은 검증이 최종 방어) */}
+        {/* 방문일 (기본 today, 미래 차단은 검증이 최종 방어) — 탭형 행→DatePickerSheet(킷 mk-log:416-420). */}
         <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
           방문일
         </Text>
-        <TextInput
-          accessibilityLabel="방문일"
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`방문일 ${formatVisitedDate({ visitedAt, withDow: true })}, 선택`}
+          onPress={() => setDateOpen(true)}
+          style={[styles.dateRow, { borderColor: theme.color.hairline, backgroundColor: theme.color.surface }]}
+        >
+          <Icon name={IconName.Calendar} size={19} color="primary" />
+          <Text variant="dateRowValue" color="fg" style={{ flex: 1 }}>
+            {formatVisitedDate({ visitedAt, withDow: true })}
+          </Text>
+          <Icon name={IconName.ChevronDown} size={18} color="fgAssistive" />
+        </Pressable>
+        <DatePickerSheet
+          visible={dateOpen}
           value={visitedAt}
-          onChangeText={setVisitedAt}
-          maxLength={10}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={theme.color.fgMuted}
-          style={[styles.input, fieldInput]}
+          onClose={() => setDateOpen(false)}
+          onSelect={({ date }) => {
+            setVisitedAt(date);
+            setDateOpen(false);
+          }}
         />
 
         {error ? (
@@ -635,4 +650,14 @@ const styles = StyleSheet.create({
   // FLAG-1b: 장소 검색 진입 버튼(킷 searchBtn mk-log:497, border 1.5) / "변경" 링크(킷 mk-log:309 우측 정렬). 검색뷰=PlaceSearchView.
   searchBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5 },
   changeBtn: { alignSelf: 'flex-end' },
+  // 방문일 진입 행(킷 lk.dateRow mk-log:602) — gap 10·padding 14/16·radius 16·border 1.5 line.
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+  },
 });

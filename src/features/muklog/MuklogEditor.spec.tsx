@@ -18,7 +18,9 @@ jest.mock('expo-image-picker', () => ({
 import * as ImagePicker from 'expo-image-picker';
 
 import { MuklogEditor, type MuklogPlaceSearchControl } from './MuklogEditor';
+import { formatVisitedDate } from './formatVisitedDate';
 import { type MuklogEditInitial, type PlaceSearchItem } from './types';
+import { todayLocalDate } from './validate';
 
 const editInitial = (over?: Partial<MuklogEditInitial>): MuklogEditInitial => ({
   muklogId: 'mk-1',
@@ -427,7 +429,8 @@ describe('MuklogEditor — 편집 모드 (initial / onSubmit) [§5 ④]', () => 
     expect(screen.getByText('먹로그 편집')).toBeTruthy();
     expect(screen.getByLabelText('장소 이름').props.value).toBe('트라토리아 보나');
     expect(screen.getByLabelText('메모').props.value).toBe('인생 까르보나라');
-    expect(screen.getByLabelText('방문일').props.value).toBe('2026-02-14');
+    // T-MIG: 방문일 TextInput 제거 → 탭형 날짜 행 표시 단언(킷 fmtDate withDow). 저장 계약은 :498에서 회귀 가드.
+    expect(screen.getByLabelText('방문일 2026.02.14 (토), 선택')).toBeTruthy();
     expect(screen.getByLabelText('카테고리 파스타·양식').props.accessibilityState?.selected).toBe(true);
     expect(screen.getByLabelText('수정')).toBeTruthy();
   });
@@ -612,5 +615,72 @@ describe('MuklogEditor — 장소검색 풀스크린 스왑 상태머신 (FLAG-1
     renderWithTheme(<MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} />);
     expect(screen.queryByLabelText('장소 검색하기')).toBeNull();
     expect(screen.getByLabelText('장소 이름')).toBeTruthy();
+  });
+});
+
+describe('MuklogEditor — 방문일 캘린더 시트 배선 (date-picker T4)', () => {
+  // AC4.1 — 방문일 TextInput 제거 → 탭형 날짜 행(button).
+  it('방문일 영역에 TextInput("방문일")이 없고 탭형 날짜 행(button)이 있다', () => {
+    renderWithTheme(
+      <MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} initial={editInitial()} onSubmit={jest.fn()} />,
+    );
+    expect(screen.queryByLabelText('방문일')).toBeNull(); // 구 TextInput label 부재
+    const row = screen.getByLabelText('방문일 2026.02.14 (토), 선택');
+    expect(row.props.accessibilityRole).toBe('button');
+  });
+
+  // AC4.2 — 행에 현재 visitedAt 포맷 표시(withDow).
+  it('편집 프리필 visitedAt을 "YYYY.MM.DD (요일)"로 행에 표시한다', () => {
+    renderWithTheme(
+      <MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} initial={editInitial()} onSubmit={jest.fn()} />,
+    );
+    expect(screen.getByText('2026.02.14 (토)')).toBeTruthy();
+  });
+
+  // AC4.3 — 행 탭 → DatePickerSheet 오픈.
+  it('날짜 행 탭 → DatePickerSheet(방문일 선택)가 열린다', () => {
+    renderWithTheme(
+      <MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} initial={editInitial()} onSubmit={jest.fn()} />,
+    );
+    expect(screen.queryByText('방문일 선택')).toBeNull();
+    fireEvent.press(screen.getByLabelText('방문일 2026.02.14 (토), 선택'));
+    expect(screen.getByText('방문일 선택')).toBeTruthy();
+    expect(screen.getByText('2026년 2월')).toBeTruthy();
+  });
+
+  // AC4.4 — 시트 선택 → 행 표시 갱신 + 시트 닫힘.
+  it('시트에서 날짜 선택 → 행 표시 갱신 후 시트가 닫힌다', () => {
+    renderWithTheme(
+      <MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} initial={editInitial()} onSubmit={jest.fn()} />,
+    );
+    fireEvent.press(screen.getByLabelText('방문일 2026.02.14 (토), 선택'));
+    fireEvent.press(screen.getByTestId('date-cell-10')); // 2026-02-10(화), 과거라 선택 가능
+    expect(screen.getByLabelText('방문일 2026.02.10 (화), 선택')).toBeTruthy();
+    expect(screen.queryByText('방문일 선택')).toBeNull(); // 선택 후 onClose
+  });
+
+  // AC4.5 — 선택 후 저장(작성) → createMuklog payload visitedAt = 시트 ISO(YYYY-MM-DD).
+  it('작성: 시트에서 1일 선택 후 저장하면 createMuklog payload.visitedAt이 그 ISO다', async () => {
+    const now = new Date();
+    const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    renderEditor();
+    fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+    fireEvent.press(screen.getByLabelText(`방문일 ${formatVisitedDate({ visitedAt: todayLocalDate(), withDow: true })}, 선택`));
+    fireEvent.press(screen.getByTestId('date-cell-1')); // 이번 달 1일(과거/오늘)
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('저장'));
+    });
+    await waitFor(() => expect(createMuklog).toHaveBeenCalledTimes(1));
+    expect(createMuklog).toHaveBeenCalledWith({
+      input: expect.objectContaining({ visitedAt: firstOfMonth }),
+    });
+  });
+
+  // AC4.6 — 작성 기본 진입 시 행이 today 포맷 표시(빈값 아님).
+  it('작성 기본 진입 시 날짜 행이 오늘(todayLocalDate) 포맷을 표시한다', () => {
+    renderEditor();
+    const todayLabel = formatVisitedDate({ visitedAt: todayLocalDate(), withDow: true });
+    expect(screen.getByText(todayLabel)).toBeTruthy();
   });
 });

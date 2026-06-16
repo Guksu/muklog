@@ -15,6 +15,8 @@ export const IconName = {
   Plus: 'plus',
   ChevronRight: 'chevron-right',
   ChevronLeft: 'chevron-left',
+  // 방문일 진입 행 우측 펼침 표식(date-picker) — 킷 mk-log:419 chevron-down.
+  ChevronDown: 'chevron-down',
   Person: 'person',
   PersonFill: 'person-fill',
   Location: 'location',

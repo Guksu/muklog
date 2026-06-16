@@ -57,6 +57,9 @@ const palette = {
   //   브랜드 primary(#3366FF)와 미세 차이지만 킷이 verbatim으로 #3B82F6를 쓰므로(킷=디자인 기준) 전용 토큰으로 정합.
   //   me 마커(파란 점)도 킷에서 같은 계열이나 그 비주얼은 WebView 격리 영역(mapHtml, developer)이라 별도.
   mapLocate:'#3B82F6',
+  // 캘린더 시트 요일 헤더 색 — 킷 DatePickerSheet(mk-extra:100) 일=#E5484D(빨강)·토=#3B82F6(파랑) verbatim 인라인 실값.
+  //   값은 각각 statusNegative(#E5484D)·mapLocate(#3B82F6)와 동일하나 의미가 다르므로(요일 강조) 전용 토큰으로 분리(킷=SSOT).
+  calendarSun:'#E5484D', calendarSat:'#3B82F6',
 } as const;
 
 // 그라데이션 stops(시맨틱 color 맵은 단일 string 토큰만 담으므로 배열은 별도 export).
@@ -103,6 +106,9 @@ const lightColor = {
   mapNearbyPin: palette.mapNearbyPin,
   // 지도 현재위치 FAB 아이콘 블루(킷 #3B82F6). 라이트/다크 공통(흰 surface FAB 위 고정 톤).
   mapLocate: palette.mapLocate,
+  // 캘린더 시트 요일 헤더 색(킷 mk-extra:100). 일=빨강·토=파랑. 지도 위 마커처럼 톤 고정이 아니라
+  //   웜 배경(라이트)·다크 배경 모두에서 가독한 강조색이라 라이트/다크 공통 채택(darkColor 스프레드로 미러).
+  calendarSun: palette.calendarSun, calendarSat: palette.calendarSat,
   // 토스트 — 킷 .mk-toast(index.html:37-42). 인버스 pill이라 라이트/다크 공통(항상 어두운 배경 + 흰 텍스트).
   //   neutral 배경 = --mk-ink(#2A2422 literal, fg와 동일 톤이나 인버스 surface라 fg 토큰과 의미 분리 — 다크에서 fg는 밝아져 부적합).
   //   positive 배경 = .mk-toast.pos #1E7A47(딥 그린). success(#00BF40)/successStrong(#009632)과 톤·의미 구분(토스트 전용).
@@ -198,6 +204,12 @@ export const typography = {
   dialogTitle:   makeTypography({ size: 17.5, ratio: 1.3, family: 'Pretendard-Bold' }),   // 800/17.5 RenameDialog 제목(킷 mk-extra:40)
   dialogSubtitle:makeTypography({ size: 12.5, ratio: 1.5, family: 'Pretendard-Medium' }), // 500/12.5 RenameDialog 보조문(킷 mk-extra:41, text-alternative)
   dialogInput:   makeTypography({ size: 16, ratio: 1.2, family: 'Pretendard-SemiBold' }), // 600/16 RenameDialog 입력·취소(킷 mk-extra:46,57). 저장(800/16)은 button 토큰 재사용.
+  // ── 방문일 캘린더 시트(date-picker)로 추가한 킷 정합 역할 토큰 (킷 mk-extra DatePickerSheet 88-118, mk-log dateRow 418) ──
+  calendarMonth:    makeTypography({ size: 17, ratio: 1, family: 'Pretendard-Bold' }),       // 800/17 월 네비 라벨 "YYYY년 M월"(킷 mk-extra:93)
+  calendarDow:      makeTypography({ size: 12, ratio: 1, family: 'Pretendard-Bold' }),        // 700/12 요일 헤더 일~토(킷 mk-extra:99). badge(12/Bold)와 값 동일하나 의미 분리.
+  calendarDay:      makeTypography({ size: 14.5, ratio: 1, family: 'Pretendard-SemiBold' }),  // 600/14.5 날짜 셀 기본(킷 mk-extra:114)
+  calendarDayStrong:makeTypography({ size: 14.5, ratio: 1, family: 'Pretendard-Bold' }),      // 800/14.5 날짜 셀 선택/오늘(킷 mk-extra:114)
+  dateRowValue:     makeTypography({ size: 15, ratio: 1, family: 'Pretendard-SemiBold' }),    // 600/15 방문일 진입 행 날짜 텍스트(킷 mk-log:418)
 } as const;
 
 export const themes = {

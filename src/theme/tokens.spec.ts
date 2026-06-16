@@ -269,6 +269,45 @@ describe('tokens — spacing 보강', () => {
   });
 });
 
+describe('tokens — 캘린더 요일 색 (date-picker, 킷 mk-extra:100)', () => {
+  it('일요일 헤더색이 킷 #E5484D다', () => {
+    expect(themes.light.color.calendarSun).toBe('#E5484D');
+  });
+
+  it('토요일 헤더색이 킷 #3B82F6다', () => {
+    expect(themes.light.color.calendarSat).toBe('#3B82F6');
+  });
+
+  it('라이트/다크 공통(웜·다크 배경 모두 가독한 강조색)', () => {
+    expect(themes.dark.color.calendarSun).toBe('#E5484D');
+    expect(themes.dark.color.calendarSat).toBe('#3B82F6');
+  });
+});
+
+describe('tokens — 캘린더 타이포 (date-picker, 킷 mk-extra DatePickerSheet)', () => {
+  it('월 네비 라벨이 800/17(Bold)다 (킷 mk-extra:93)', () => {
+    expect(typography.calendarMonth.fontSize).toBe(17);
+    expect(typography.calendarMonth.fontFamily).toBe('Pretendard-Bold');
+  });
+
+  it('요일 헤더가 700/12(Bold)다 (킷 mk-extra:99)', () => {
+    expect(typography.calendarDow.fontSize).toBe(12);
+    expect(typography.calendarDow.fontFamily).toBe('Pretendard-Bold');
+  });
+
+  it('날짜 셀 기본/강조가 14.5(SemiBold/Bold)다 (킷 mk-extra:114)', () => {
+    expect(typography.calendarDay.fontSize).toBe(14.5);
+    expect(typography.calendarDay.fontFamily).toBe('Pretendard-SemiBold');
+    expect(typography.calendarDayStrong.fontSize).toBe(14.5);
+    expect(typography.calendarDayStrong.fontFamily).toBe('Pretendard-Bold');
+  });
+
+  it('방문일 진입 행 날짜 텍스트가 600/15(SemiBold)다 (킷 mk-log:418)', () => {
+    expect(typography.dateRowValue.fontSize).toBe(15);
+    expect(typography.dateRowValue.fontFamily).toBe('Pretendard-SemiBold');
+  });
+});
+
 describe('tokens — fgDisabled (킷 --text-disable)', () => {
   it('비활성 텍스트색이 킷 --text-disable rgba(55,56,60,.16)다(figma-variables.css:207)', () => {
     expect(themes.light.color.fgDisabled).toBe('rgba(55,56,60,0.16)');
