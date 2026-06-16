@@ -9,9 +9,20 @@ import { renderWithTheme } from '@/test/renderWithTheme';
 
 const mockParams: { current: unknown } = { current: { roomId: 'r1' } };
 const mockGoBack = jest.fn();
+const mockNavigate = jest.fn();
+// useFocusEffect: 마운트 시 콜백 1회 실행(첫 포커스). refireFocus로 재포커스(에디터/상세 복귀) 흉내.
+let lastFocusCb: (() => void) | null = null;
+const refireFocus = () => lastFocusCb?.();
 jest.mock('@react-navigation/native', () => ({
   useRoute: () => ({ params: mockParams.current }),
-  useNavigation: () => ({ goBack: mockGoBack }),
+  useNavigation: () => ({ goBack: mockGoBack, navigate: mockNavigate }),
+  useFocusEffect: (cb: () => void) => {
+    const ReactLib = require('react');
+    ReactLib.useEffect(() => {
+      lastFocusCb = cb;
+      cb();
+    }, [cb]);
+  },
 }));
 
 // safe-area: 헤더 top inset 동적 반영(킷 MK_STATUS_PAD=56 고정 → insets.top 번역) 검증용으로 가변 모킹.
@@ -108,18 +119,91 @@ jest.mock('@/features/auth', () => ({
 
 // 본인 프로필(헤더 로그명/아바타). 배럴만 모킹 — Avatar의 avatarDefault(서브모듈)는 실 구현 사용.
 jest.mock('@/features/profile', () => ({ useProfile: jest.fn() }));
+// 먹로그/위시 데이터 훅 — LogScreen이 소유(세그 카운트). 더블로 state 주입 + 컴포넌트는 probe.
+const mockUseMuklogs = jest.fn();
+const refreshMuklogs = jest.fn();
+const mockUsePlaceSearch = jest.fn();
 jest.mock('@/features/muklog', () => {
-  const { View, Text } = require('react-native');
+  const { View, Text, Pressable } = require('react-native');
   return {
+    useMuklogs: () => mockUseMuklogs(),
+    usePlaceSearch: () => mockUsePlaceSearch(),
+    // placeFieldsFromItem(검색결과→선택) — 고정 매핑 더블(LogScreen이 AddWishlistInput으로 싣는지 검증).
+    placeFieldsFromItem: ({ item }: { item: { kakaoPlaceId: string } }) => ({
+      placeName: '성수동 베이커리',
+      category: 'cafe',
+      area: '성수동',
+      address: null,
+      roadAddress: '서울 성동구 연무장길 1',
+      kakaoPlaceId: item.kakaoPlaceId,
+      lat: 37.544,
+      lng: 127.055,
+    }),
+    // MuklogList probe — state(ready/loading) 반영 + roomId·meId 노출('log' 세그에서만 마운트=FAB 존재).
     MuklogList: ({ roomId, meId }: { roomId: string; meId: string }) => (
       <View accessibilityLabel="muklog-list">
         <Text>{`list:${roomId}:${meId}`}</Text>
       </View>
     ),
+    // PlaceSearchView probe — 위시 추가 검색 스왑. 결과선택/직접입력/뒤로 트리거 노출.
+    PlaceSearchView: (props: Record<string, unknown>) => (
+      <View accessibilityLabel="place-search">
+        <Pressable
+          accessibilityLabel="search-pick"
+          onPress={() => {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- 테스트 probe: 명명 파라미터 타입은 jest.mock hoist가 거부.
+            (props.onSelectResult as Function)({ item: { kakaoPlaceId: '12345' } });
+          }}
+        />
+        <Pressable accessibilityLabel="search-manual" onPress={props.onUseManualInput as () => void} />
+        <Pressable accessibilityLabel="search-back" onPress={props.onBack as () => void} />
+      </View>
+    ),
   };
 });
 
-import { fireEvent, waitFor } from '@testing-library/react-native';
+// 위시 데이터 훅 + WishlistView probe(onAdd/onVisit/onRemove 트리거 노출).
+const mockUseWishlist = jest.fn();
+const refreshWishlist = jest.fn();
+const mockAddWishlist = jest.fn();
+const mockRemoveWishlist = jest.fn();
+jest.mock('@/features/wishlist', () => {
+  const { View, Text, Pressable } = require('react-native');
+  return {
+    useWishlist: () => mockUseWishlist(),
+    useAddWishlist: () => ({ addWishlist: mockAddWishlist, loading: false, error: null }),
+    useRemoveWishlist: () => ({ removeWishlist: mockRemoveWishlist, loading: false, error: null }),
+    WishlistView: (props: Record<string, unknown>) => {
+      const items = props.items as { id: string; placeName: string }[];
+      return (
+        <View accessibilityLabel="wishlist-view">
+          <Pressable accessibilityLabel="wish-add" onPress={props.onAdd as () => void} />
+          {items.map((it) => (
+            <View key={it.id}>
+              <Text>{`wish:${it.placeName}`}</Text>
+              <Pressable
+                accessibilityLabel={`wish-visit-${it.id}`}
+                onPress={() => {
+                  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- 테스트 probe: 명명 파라미터 타입은 jest.mock hoist가 거부.
+                  (props.onVisit as Function)({ id: it.id });
+                }}
+              />
+              <Pressable
+                accessibilityLabel={`wish-remove-${it.id}`}
+                onPress={() => {
+                  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- 테스트 probe: 명명 파라미터 타입은 jest.mock hoist가 거부.
+                  (props.onRemove as Function)({ id: it.id });
+                }}
+              />
+            </View>
+          ))}
+        </View>
+      );
+    },
+  };
+});
+
+import { act, fireEvent, waitFor } from '@testing-library/react-native';
 
 import { useRoom, useRenameRoom } from '@/features/room';
 import { useProfile } from '@/features/profile';
@@ -138,8 +222,11 @@ const setRoomState = (state: unknown) => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockGoBack.mockClear();
+  mockNavigate.mockClear();
   refresh.mockReset();
   renameRoom.mockReset();
+  refreshMuklogs.mockReset();
+  refreshWishlist.mockReset();
   mockTopInset.current = 0;
   mockParams.current = { roomId: 'r1' };
   setRoomState({ status: 'loading' });
@@ -148,6 +235,18 @@ beforeEach(() => {
     state: { status: 'ready', profile: { nickname: '민지', avatarUrl: null } },
     refresh: jest.fn(),
   });
+  // 위시 스프린트: LogScreen이 소유하는 먹로그/위시/검색 훅 기본값(세그 카운트·본문).
+  mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh: refreshMuklogs });
+  mockUseWishlist.mockReturnValue({ state: { status: 'ready', items: [] }, refresh: refreshWishlist });
+  mockUsePlaceSearch.mockReturnValue({
+    query: '',
+    setQuery: jest.fn(),
+    status: 'idle',
+    results: [],
+    errorMessage: null,
+  });
+  mockAddWishlist.mockResolvedValue({ id: 'w-new' });
+  mockRemoveWishlist.mockResolvedValue(undefined);
 });
 
 describe('LogScreen', () => {
@@ -357,5 +456,230 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
     fireEvent.press(screen.getByLabelText('로그 이름 편집'));
     const save = screen.getByLabelText('저장');
     expect(save.props.accessibilityState?.disabled ?? save.props.disabled).toBeTruthy();
+  });
+});
+
+describe('LogScreen — 위시리스트 세그먼트(wishlist, TC-6/B7 · TC-1·2·4·5)', () => {
+  const readyRoom = (over?: Record<string, unknown>) => ({
+    status: 'ready',
+    room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 1, mode: 'couple', name: null, ...over },
+  });
+  const wishItem = (over?: Record<string, unknown>) => ({
+    id: 'w1',
+    roomId: 'r1',
+    placeName: '성수동 베이커리',
+    category: 'cafe',
+    area: '성수동',
+    roadAddress: '서울 성동구 연무장길 1',
+    lat: 37.544,
+    lng: 127.055,
+    kakaoPlaceId: '12345',
+    note: null,
+    addedBy: 'me-uid',
+    addedByMe: true,
+    createdAt: '2026-06-16T10:00:00.000Z',
+    ...over,
+  });
+
+  beforeEach(() => {
+    setRoomState(readyRoom());
+  });
+
+  it('세그먼트에 "기록 N" / "위시리스트 M" 카운트를 표시한다 (TC-6 카운트)', () => {
+    mockUseMuklogs.mockReturnValue({
+      state: { status: 'ready', muklogs: [{ id: 'm1' }, { id: 'm2' }] },
+      refresh: refreshMuklogs,
+    });
+    mockUseWishlist.mockReturnValue({
+      state: { status: 'ready', items: [wishItem()] },
+      refresh: refreshWishlist,
+    });
+    renderWithTheme(<LogScreen />);
+    expect(screen.getByText('기록 2')).toBeTruthy();
+    expect(screen.getByText('위시리스트 1')).toBeTruthy();
+  });
+
+  it('기본 세그는 log — MuklogList(+FAB) 마운트, WishlistView 미마운트 (TC-6 기본값)', () => {
+    renderWithTheme(<LogScreen />);
+    expect(screen.getByLabelText('muklog-list')).toBeTruthy();
+    expect(screen.queryByLabelText('wishlist-view')).toBeNull();
+  });
+
+  it('초대 영역(💌 솔로 배너)은 \'log\' 세그 본문에만 렌더, \'wish\' 세그에선 미렌더한다 (I1, 킷 mk-log:74-90)', () => {
+    setRoomState(readyRoom({ memberCount: 1 }));
+    renderWithTheme(<LogScreen />);
+    // log 세그(기본): 초대 배너 노출(세그 아래 본문 상단).
+    expect(screen.getByText('연인을 초대해보세요')).toBeTruthy();
+    // wish 세그: 초대 미렌더.
+    fireEvent.press(screen.getByText('위시리스트 0'));
+    expect(screen.queryByText('연인을 초대해보세요')).toBeNull();
+    // log 세그 복귀: 초대 재노출.
+    fireEvent.press(screen.getByText('기록 0'));
+    expect(screen.getByText('연인을 초대해보세요')).toBeTruthy();
+  });
+
+  it('커플 컴팩트 초대행도 \'wish\' 세그에선 미렌더한다 (I1)', () => {
+    setRoomState(readyRoom({ memberCount: 2 }));
+    renderWithTheme(<LogScreen />);
+    expect(screen.getByText('초대코드 ABCDEF')).toBeTruthy();
+    fireEvent.press(screen.getByText('위시리스트 0'));
+    expect(screen.queryByText('초대코드 ABCDEF')).toBeNull();
+  });
+
+  it('"위시리스트" 세그 탭 → WishlistView 마운트 + MuklogList(+FAB) 언마운트(위시 세그 FAB 숨김) (TC-6/B7)', () => {
+    mockUseWishlist.mockReturnValue({
+      state: { status: 'ready', items: [wishItem()] },
+      refresh: refreshWishlist,
+    });
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByText('위시리스트 1'));
+    expect(screen.getByLabelText('wishlist-view')).toBeTruthy();
+    expect(screen.queryByLabelText('muklog-list')).toBeNull();
+    expect(screen.getByText('wish:성수동 베이커리')).toBeTruthy();
+  });
+
+  it('위시 세그에서 "기록" 세그로 복귀 → MuklogList 재마운트', () => {
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByText('위시리스트 0'));
+    expect(screen.queryByLabelText('muklog-list')).toBeNull();
+    fireEvent.press(screen.getByText('기록 0'));
+    expect(screen.getByLabelText('muklog-list')).toBeTruthy();
+  });
+
+  it('위시 loading이면 로더를 표시한다 (TC-1 빈/로딩)', () => {
+    mockUseWishlist.mockReturnValue({ state: { status: 'loading' }, refresh: refreshWishlist });
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByText('위시리스트 0'));
+    expect(screen.getByTestId('wishlist-loading')).toBeTruthy();
+  });
+
+  it('위시 error면 메시지 + 다시 시도 → refreshWishlist', () => {
+    mockUseWishlist.mockReturnValue({
+      state: { status: 'error', message: '위시리스트를 불러오지 못했어요. 다시 시도해 주세요.' },
+      refresh: refreshWishlist,
+    });
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByText('위시리스트 0'));
+    expect(screen.getByText('위시리스트를 불러오지 못했어요. 다시 시도해 주세요.')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('다시 시도'));
+    expect(refreshWishlist).toHaveBeenCalled();
+  });
+
+  it('카드 ✕(삭제) → removeWishlist({id}) 후 위시 목록 refresh (TC-4)', async () => {
+    mockUseWishlist.mockReturnValue({
+      state: { status: 'ready', items: [wishItem({ id: 'w7' })] },
+      refresh: refreshWishlist,
+    });
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByText('위시리스트 1'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('wish-remove-w7'));
+    });
+    expect(mockRemoveWishlist).toHaveBeenCalledWith({ id: 'w7' });
+    expect(refreshWishlist).toHaveBeenCalled();
+  });
+
+  it('"다녀왔어요" → navigate(MuklogEditor, {roomId, prefill, fromWishlistId}) (TC-5/B5)', () => {
+    mockUseWishlist.mockReturnValue({
+      state: { status: 'ready', items: [wishItem({ id: 'w7' })] },
+      refresh: refreshWishlist,
+    });
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByText('위시리스트 1'));
+    fireEvent.press(screen.getByLabelText('wish-visit-w7'));
+    expect(mockNavigate).toHaveBeenCalledWith('MuklogEditor', {
+      roomId: 'r1',
+      prefill: {
+        placeName: '성수동 베이커리',
+        category: 'cafe',
+        area: '성수동',
+        roadAddress: '서울 성동구 연무장길 1',
+        lat: 37.544,
+        lng: 127.055,
+        kakaoPlaceId: '12345',
+      },
+      fromWishlistId: 'w7',
+    });
+  });
+
+  it('"추가" → PlaceSearchView 풀스크린 스왑(검색뷰 표시)', () => {
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByText('위시리스트 0'));
+    fireEvent.press(screen.getByLabelText('wish-add'));
+    expect(screen.getByLabelText('place-search')).toBeTruthy();
+  });
+
+  it('검색 결과 선택 → addWishlist(매핑 AddWishlistInput) + refresh + 검색뷰 복귀 (TC-2/B8)', async () => {
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByText('위시리스트 0'));
+    fireEvent.press(screen.getByLabelText('wish-add'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('search-pick'));
+    });
+    expect(mockAddWishlist).toHaveBeenCalledWith({
+      input: {
+        roomId: 'r1',
+        placeName: '성수동 베이커리',
+        category: 'cafe',
+        area: '성수동',
+        roadAddress: '서울 성동구 연무장길 1',
+        lat: 37.544,
+        lng: 127.055,
+        kakaoPlaceId: '12345',
+      },
+    });
+    expect(refreshWishlist).toHaveBeenCalled();
+    expect(screen.queryByLabelText('place-search')).toBeNull();
+    // 토스트 "위시리스트에 담았어요 📍"(킷 mk-log:33) 노출.
+    expect(screen.getByText('위시리스트에 담았어요 📍')).toBeTruthy();
+  });
+
+  it('직접 입력(0건 폴백) → 검색어를 placeName으로 addWishlist(좌표 null)', async () => {
+    mockUsePlaceSearch.mockReturnValue({
+      query: '노포국밥',
+      setQuery: jest.fn(),
+      status: 'ready',
+      results: [],
+      errorMessage: null,
+    });
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByText('위시리스트 0'));
+    fireEvent.press(screen.getByLabelText('wish-add'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('search-manual'));
+    });
+    expect(mockAddWishlist).toHaveBeenCalledWith({
+      input: {
+        roomId: 'r1',
+        placeName: '노포국밥',
+        category: null,
+        area: null,
+        roadAddress: null,
+        lat: null,
+        lng: null,
+        kakaoPlaceId: null,
+      },
+    });
+  });
+
+  it('검색 취소(뒤로) → 추가 없이 위시 세그 복귀', () => {
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByText('위시리스트 0'));
+    fireEvent.press(screen.getByLabelText('wish-add'));
+    fireEvent.press(screen.getByLabelText('search-back'));
+    expect(screen.queryByLabelText('place-search')).toBeNull();
+    expect(mockAddWishlist).not.toHaveBeenCalled();
+  });
+
+  it('재포커스(에디터/상세 복귀) 시 먹로그·위시 목록을 함께 refresh (다녀왔어요/삭제 반영, 폴링 아님)', () => {
+    renderWithTheme(<LogScreen />);
+    // 첫 포커스(마운트)는 가드 → refresh 미호출.
+    expect(refreshMuklogs).not.toHaveBeenCalled();
+    expect(refreshWishlist).not.toHaveBeenCalled();
+    act(() => {
+      refireFocus();
+    });
+    expect(refreshMuklogs).toHaveBeenCalledTimes(1);
+    expect(refreshWishlist).toHaveBeenCalledTimes(1);
   });
 });

@@ -195,6 +195,58 @@ describe('tokens — typography (AC-5)', () => {
   });
 });
 
+describe('tokens — fillAlt (세그먼트 트랙, wishlist)', () => {
+  it('세그먼트 트랙 배경이 킷 --fill-alt rgba(112,115,124,.05)다(mk-log:58)', () => {
+    expect(themes.light.color.fillAlt).toBe('rgba(112,115,124,0.05)');
+  });
+
+  it('fillAlt(채움)는 hairlineAlt(.08 라인)와 의미·값이 분리된다', () => {
+    expect(themes.light.color.fillAlt).not.toBe(themes.light.color.hairlineAlt);
+  });
+
+  it('다크 세그 트랙은 더 진한 rgba(112,115,124,.12)다', () => {
+    expect(themes.dark.color.fillAlt).toBe('rgba(112,115,124,0.12)');
+  });
+});
+
+describe('tokens — shadow.seg (세그먼트 선택칸, wishlist)', () => {
+  it('선택칸 그림자가 킷 mk-log:65(0 1px 4px rgba(0,0,0,.08)) 정합이다', () => {
+    expect(shadow.seg.shadowOpacity).toBe(0.08);
+    expect(shadow.seg.shadowRadius).toBe(4);
+    expect(shadow.seg.shadowOffset).toEqual({ width: 0, height: 1 });
+  });
+
+  it('seg는 카드 섀도우(shadow.card)와 분리된 떠있는 컨트롤 전용이다', () => {
+    expect(shadow.seg).not.toBe(shadow.card);
+  });
+});
+
+describe('tokens — toast (하단 플로팅 토스트, wishlist)', () => {
+  it('neutral 배경이 킷 .mk-toast --mk-ink #2A2422다(index.html:39)', () => {
+    expect(themes.light.color.toastBg).toBe('#2A2422');
+  });
+
+  it('positive 배경이 킷 .mk-toast.pos #1E7A47다(index.html:42)', () => {
+    expect(themes.light.color.toastPositiveBg).toBe('#1E7A47');
+  });
+
+  it('positive 토스트색은 success(#00BF40)/successStrong과 의미·값이 분리된다', () => {
+    expect(themes.light.color.toastPositiveBg).not.toBe(themes.light.color.success);
+    expect(themes.light.color.toastPositiveBg).not.toBe(themes.light.color.successStrong);
+  });
+
+  it('인버스 pill이라 라이트/다크 공통이다(항상 어두운 배경)', () => {
+    expect(themes.dark.color.toastBg).toBe('#2A2422');
+    expect(themes.dark.color.toastPositiveBg).toBe('#1E7A47');
+  });
+
+  it('shadow.toast가 킷 .mk-toast(0 10px 30px rgba(0,0,0,.28)) 정합이다', () => {
+    expect(shadow.toast.shadowOpacity).toBe(0.28);
+    expect(shadow.toast.shadowRadius).toBe(30);
+    expect(shadow.toast.shadowOffset).toEqual({ width: 0, height: 10 });
+  });
+});
+
 describe('tokens — scrimStrong (킷 정합)', () => {
   it('사진 위 글래스 배지 scrim 불투명도가 킷 .32다(mk-log:94)', () => {
     expect(themes.light.color.scrimStrong).toBe('rgba(0,0,0,0.32)');

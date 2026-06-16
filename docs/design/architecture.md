@@ -95,6 +95,21 @@ muklog_photos                    -- 먹로그당 최대 5장 (영상 1개와는 
   storage_path text             -- muklog-photos/{room_id}/{muklog_id}/{uuid}.jpg
   order_index smallint          -- 0~4
   created_at  timestamptz
+
+wishlist_items                   -- 로그(방)별 "가보고 싶은 곳" 위시리스트 (wishlist 스프린트)
+  id             uuid PK
+  room_id        uuid → rooms ON DELETE CASCADE  (NOT NULL)
+  place_name     text  (NOT NULL)
+  category       text                 -- 8종 중 하나(앱 강제), nullable
+  area           text                 -- 동네 표시(예: "성수동"), nullable
+  road_address   text                 -- 도로명, nullable
+  lat            double precision      -- nullable(검색 미선택/수동 시 NULL)
+  lng            double precision      -- nullable
+  kakao_place_id text                  -- Kakao 장소 id, nullable
+  note           text                  -- nullable (입력 UI는 추후, 표시만)
+  added_by       uuid → profiles  (NOT NULL)  -- 담은 사람. 표시단에서 본인/짝꿍(익명) 매핑
+  created_at     timestamptz
+  -- index (room_id, created_at desc) — 최신 추가 우선 목록
 ```
 
 > **미디어 구성**: 먹로그당 사진 0~5장(`muklog_photos`) + 2초 영상 0~1개(`muklogs.video_path`). 사진과 영상은 독립 슬롯이며 영상은 항상 옵션이다. 영상 버킷은 `muklog-media`(또는 `muklog-photos`와 분리 운영)로 두고 RLS는 사진과 동일하게 상위 방 멤버십으로 검증한다.
@@ -112,6 +127,7 @@ muklog_photos                    -- 먹로그당 최대 5장 (영상 1개와는 
 - **RLS(Row Level Security)**: 모든 테이블에 활성화. 사용자는 **자신이 멤버인 방**의 데이터만 read/write. 핵심 정책:
   - `muklogs`: select=`room_id IN (select room_id from room_members where user_id = auth.uid())`. insert=`created_by=auth.uid() and 내 방`. **update(`muklogs_update_own`)·delete(`muklogs_delete_own`)=`created_by=auth.uid() and 내 방`**(수정=muklog-edit, 삭제 정책=muklog-photos 롤백용 선반영·muklog-edit에서 삭제 UI 사용).
   - `muklog_photos`: select/insert/delete=상위 `muklog`의 room 멤버십(insert/delete는 created_by 본인). **update(`muklog_photos_update_member`)=동일 조건**(muklog-edit 사진 재정렬 order_index reindex용).
+  - `wishlist_items`(wishlist 스프린트): select=`room_id IN (내 방)`. insert=`added_by=auth.uid() and 내 방`. **delete=`room_id IN (내 방)`(룸 멤버 누구나 — 공유 위시 리스트 semantics, 작성자 제한 없음)**. update 정책 없음(편집 OUT). 조회/추가/삭제는 **일반 쿼리**(DEFINER RPC·Realtime 미사용 — 비용 가드레일).
 - **Storage 정책**: `muklog-photos` 버킷은 경로 첫 세그먼트(`room_id`)가 멤버인 방일 때만 접근.
 
 ---
@@ -143,8 +159,13 @@ HomeTabs (Tab Navigator, 디폴트 = 먹로그)
   └─ Tab2: 지도 (Map)  ── (추후 map-tab) 현재위치 + 핀
 
 LogScreen (로그 진입 — 한 로그의 공간)
+  ├─ **세그먼트(기록 N / 위시리스트 N)** (wishlist 스프린트) — 헤더 아래 2탭. 'log'=MuklogList+FAB / 'wish'=WishlistView(FAB 숨김)
   ├─ 초대 UI: 이 로그의 6자리 초대코드 표시 + 복사 → 파트너 초대(= 커플화). (log-invite 스프린트)
   ├─ MuklogList   맛집 카드 리스트 (대표사진 + 가게명 + 위치 + 날짜)  ── muklog-list 스프린트
+  ├─ **WishlistView** 가보고 싶은 곳 리스트(빈상태/항목카드/추가/다녀왔어요/삭제) ── wishlist 스프린트.
+  │     · 추가 → PlaceSearchView(Kakao Local, muklog-place 재사용) → `wishlist_items` insert
+  │     · 다녀왔어요 → MuklogEditor 생성모드 prefill(place/cat/area/road/좌표) + 생성 성공 시 위시 삭제(취소 시 보존)
+  │     · 담은 사람: 본인=내 닉/아바타 / 파트너=익명 "짝꿍"(RLS 제약, log-name 폴백과 동일)
   ├─ MuklogDetail 사진 캐러셀(최대5) + 영상 + 메모 + 위치 미니맵
   └─ **MuklogEditor (풀스크린 라우트)** 장소검색(Kakao Local) + 사진5 + 2초 영상(옵션) + 메모 + 별점 + 방문일
         ※ ui-fidelity-audit(2026-06-14): ~~하단 시트~~ → **풀스크린 화면(Screen+SubBar+저장)**으로 전환. 장소검색은 에디터 내 **searching 상태 → 전용 풀스크린 검색뷰(PlaceSearchView) 스왑**(킷 mk-log 정합), 선택/직접입력/취소 시 폼 복귀. 진입: MuklogList FAB(작성)·MuklogDetail more(편집) → `navigate(MuklogEditor)`.
@@ -155,7 +176,8 @@ LogScreen (로그 진입 — 한 로그의 공간)
   └─ 24h 유예/취소(추후 `room-lifecycle`)
 
 Profile (헤더 진입)
-  └─ 닉네임 편집 + 아바타 이미지 업로드(Storage)
+  ├─ 닉네임 편집 + 아바타 이미지 업로드(Storage)
+  └─ 설정 메뉴: **"위시리스트" 행 제거**(wishlist 스프린트 — 킷 정합, 위시는 LogScreen 세그먼트로 진입). 알림 설정·이용 안내 등 나머지 행 재정의는 후속
 ```
 
 ---
@@ -177,6 +199,7 @@ Profile (헤더 진입)
 | `google-oauth-web` | **Google 로그인 OAuth 웹 전환**: 라이브 검증 중 발견 — 네이티브 `@react-native-google-signin`(GIDSignIn)이 idToken에 자동으로 심는 nonce를 노출/제어 불가 → Supabase GoTrue nonce 검증을 통과 못 함(`Passed nonce…`/`Nonces mismatch`). 라이브러리 제거하고 **`signInWithOAuth`(PKCE)+`expo-web-browser`+`exchangeCodeForSession`** 웹 플로우로 교체(`src/features/auth/oauthSignIn.ts`). Apple은 네이티브 유지. `supabase` 클라 `flowType: 'pkce'`, 앱 스킴 `muklog://` 리다이렉트. 백엔드: Supabase Google 프로바이더에 웹 Client ID+Secret + Redirect URL `muklog://**`, Google Console에 Supabase 콜백 등록. 라이브 로그인 검증 완료. (별도 sprint 폴더 없음 — 라이브 디버깅 중 처리) | 인증 통합 수정 | ✅ 완료 |
 | `log-invite` | 로그 진입(LogScreen) 후 초대코드 표시·복사 + **로그 입장(join) UI**(`JoinLogScreen` + +버튼 액션시트 "로그 입장"). join으로 2번째 멤버 합류 시 커플화. (구 `room-promote` 흡수 + multi-log-home에서 트리밍한 join UI. `join_room` RPC·`useJoinRoom`·`code.ts`는 multi-log-home에서 선반영/보존됨) | #1 신규 | ✅ 완료 |
 | `log-name` | **로그(방) 이름**: `rooms.name`(nullable) + `rename_room(p_room_id,p_name)` DEFINER RPC(멤버 누구나 수정·name-only·trim/20자) + `list_my_rooms`/`get_room` name 투영. LogScreen 헤더 제목 탭(✏️)→`LogNameSheet` 편집, LogList 카드+헤더 표시. 이름 없으면 **본인 닉 폴백**(솔로 `{닉}의 기록`/커플 `{닉} ♥ 짝꿍` — 파트너는 RLS상 "짝꿍" 고정). `displayLogName`·`normalizeLogName`·`useRenameRoom`. 대표 이미지/Realtime 동기화 OUT(후속). QA 2분할 통과(811 green). 라이브: `supabase db push` 후 스모크. `docs/sprint/sprint-20260615-log-name/`. | architecture §7 '로그 이름' | ✅ 완료(DB push·스모크 이월) |
+| `wishlist` | **위시리스트(가보고 싶은 곳)**: `wishlist_items` 테이블+RLS(룸 멤버 격리, 일반 select/insert/delete·DEFINER/Realtime 미사용) + LogScreen 세그먼트(기록/위시리스트)+FAB 조건 + WishlistView(빈상태/카드/추가/삭제) + 추가=PlaceSearchView(muklog-place 재사용) + "다녀왔어요"→MuklogEditor 생성모드 prefill(성공 시 위시 삭제·취소 시 보존) + added_by 본인/짝꿍(익명) 매핑 + ProfileScreen "위시리스트" 행 제거. 메모입력·편집·필터·Realtime OUT. 킷 `mk-extra.jsx`(WishlistView)·`mk-log.jsx`(세그). `docs/sprint/sprint-20260616-wishlist/`. | 킷 신규(델타 #1·#3·#5) | 진행 |
 | `muklog-video` | 2초 영상 캡처/업로드 (카메라 권한 + `muklogs.video_*` + 용량 가드레일). muklog-editor 이후 의존 | #4 확장 | 예정 |
 | ~~`room-tabs`~~ | (대체됨) 멀티 로그 전환으로 HomeTabs/LogScreen 구조가 됨 → `multi-log-home`로 흡수 | #2 | ~~폐기~~ |
 | `muklog-list` | LogScreen 내 먹로그 카드 리스트 | #3 | ✅ 완료 |

@@ -18,33 +18,74 @@ import {
   usePlaceSearch,
   usePlaceSelection,
   useUpdateMuklog,
+  type MuklogCategoryKey,
   type MuklogEditInitial,
   type MuklogEditSubmitInput,
+  type PlaceSelection,
 } from '@/features/muklog';
+import { useRemoveWishlist } from '@/features/wishlist';
 import { useTheme } from '@/theme';
 
-import { Routes, type AppStackParamList } from '../routes';
+import { Routes, type AppStackParamList, type MuklogEditorPrefill } from '../routes';
+
+// 위시 prefill(라우트 파라미터) → PlaceSelection(에디터 selectedPlace 시드). address는 위시 미저장 → null.
+//   category는 위시에 저장된 8종 key(자유 text) → MuklogCategoryKey로 취급(미지 key는 에디터가 폴백).
+const prefillToSelection = ({ prefill }: { prefill: MuklogEditorPrefill }): PlaceSelection => ({
+  placeName: prefill.placeName,
+  category: prefill.category as MuklogCategoryKey | null,
+  area: prefill.area,
+  address: null,
+  roadAddress: prefill.roadAddress,
+  kakaoPlaceId: prefill.kakaoPlaceId,
+  lat: prefill.lat,
+  lng: prefill.lng,
+});
 
 export const MuklogEditorRoute = () => {
   const route = useRoute<RouteProp<AppStackParamList, typeof Routes.MuklogEditor>>();
-  const { roomId, muklogId } = route.params;
+  const { roomId, muklogId, prefill, fromWishlistId } = route.params;
   // muklogId 유무로 작성/편집 분기. 각 서브 컨테이너가 자신에게 필요한 훅만 호출(조건부 훅 호출 방지).
   if (muklogId !== undefined) {
     return <EditEditorRoute roomId={roomId} muklogId={muklogId} />;
   }
-  return <CreateEditorRoute roomId={roomId} />;
+  // 작성 모드 — 위시 "다녀왔어요"면 prefill(생성 모드 + 프리필) + fromWishlistId(생성 성공 시 위시 삭제) 전달.
+  return <CreateEditorRoute roomId={roomId} prefill={prefill} fromWishlistId={fromWishlistId} />;
 };
 
 // ── 작성 ──────────────────────────────────────────────────────────────────────────
-const CreateEditorRoute = ({ roomId }: { roomId: string }) => {
+const CreateEditorRoute = ({
+  roomId,
+  prefill,
+  fromWishlistId,
+}: {
+  roomId: string;
+  prefill?: MuklogEditorPrefill;
+  fromWishlistId?: string;
+}) => {
   const navigation = useNavigation();
   // 장소검색(muklog-place) — 컨테이너가 검색·선택 상태 소유, 에디터에 controlled 주입.
   const placeSearch = usePlaceSearch();
-  const { selectedPlace, selectPlace, clearPlace } = usePlaceSelection();
+  // 위시 prefill 있으면 selectedPlace로 시드(생성 모드 + 프리필) → 에디터 sync effect가 폼 자동채움.
+  const { selectedPlace, selectPlace, clearPlace } = usePlaceSelection({
+    initial: prefill ? prefillToSelection({ prefill }) : null,
+  });
+  // 위시 "다녀왔어요" 삭제(생성 성공 시점) — 취소 시 보존(plan §4.5·TC-5).
+  const { removeWishlist } = useRemoveWishlist();
 
   const handleBack = () => navigation.goBack();
-  // 저장 성공 → 목록으로 복귀(LogList가 포커스 refresh로 +1 반영).
-  const handleSaved = () => navigation.goBack();
+  // 저장 성공 → 목록으로 복귀(LogScreen이 포커스 refresh로 먹로그+1·위시-1 반영).
+  //   위시 출처(fromWishlistId)가 있으면 생성 성공 콜백에서만 위시 삭제 → 취소(뒤로가기) 시엔 삭제 호출 없음(보존).
+  //   removeWishlist 실패해도 먹로그는 이미 생성됨(우선) → 위시는 남김(데이터 손실 0, 다음 refresh/수동삭제로 정리). 0행 무해.
+  const handleSaved = async () => {
+    if (fromWishlistId) {
+      try {
+        await removeWishlist({ id: fromWishlistId });
+      } catch {
+        // 위시 보존(먹로그 생성 우선). 인라인 에러 미표시 — 화면은 이미 복귀.
+      }
+    }
+    navigation.goBack();
+  };
 
   return (
     <MuklogEditor

@@ -79,6 +79,9 @@ const lightColor = {
   bg: palette.white, surface: palette.white, surfaceAlt: palette.surfaceAlt,
   border: palette.neutral[95], borderStrong: palette.neutral[90],
   hairline: palette.coolGray.hairline, hairlineAlt: palette.coolGray.hairlineAlt,
+  // 세그먼트 컨트롤 트랙 배경 — 킷 --fill-alt(rgba(112,115,124,.05), mk-log:58 세그 트랙).
+  //   라인용 hairlineAlt(.08)와 의미·값 분리(이건 채움 fill). wishlist 세그(기록/위시) 트랙에 사용.
+  fillAlt: 'rgba(112,115,124,0.05)',
   success: palette.green[50], successStrong: palette.green[40], successWeak: palette.green[95],
   warning: palette.orange[50], warningStrong: palette.orange[40], warningWeak: palette.orange[95],
   error: palette.red[50], errorStrong: palette.red[40], errorWeak: palette.red[95],
@@ -100,6 +103,11 @@ const lightColor = {
   mapNearbyPin: palette.mapNearbyPin,
   // 지도 현재위치 FAB 아이콘 블루(킷 #3B82F6). 라이트/다크 공통(흰 surface FAB 위 고정 톤).
   mapLocate: palette.mapLocate,
+  // 토스트 — 킷 .mk-toast(index.html:37-42). 인버스 pill이라 라이트/다크 공통(항상 어두운 배경 + 흰 텍스트).
+  //   neutral 배경 = --mk-ink(#2A2422 literal, fg와 동일 톤이나 인버스 surface라 fg 토큰과 의미 분리 — 다크에서 fg는 밝아져 부적합).
+  //   positive 배경 = .mk-toast.pos #1E7A47(딥 그린). success(#00BF40)/successStrong(#009632)과 톤·의미 구분(토스트 전용).
+  toastBg: '#2A2422',
+  toastPositiveBg: '#1E7A47',
 } as const;
 
 // 시맨틱 컬러 (다크) — 시맨틱만 오버라이드. 신규 키도 동일 키로 미러링(tsc 키 일관성, 엣지1).
@@ -114,6 +122,8 @@ const darkColor = {
   bg: '#171717', surface: '#1F1F1F', surfaceAlt: '#171717',
   border: '#2F2F2F', borderStrong: palette.neutral[30],
   hairline: 'rgba(255,255,255,0.16)', hairlineAlt: 'rgba(255,255,255,0.08)',
+  // 다크 세그 트랙 — 킷 figma 다크 --fill-alternative(rgba(112,115,124,.12)).
+  fillAlt: 'rgba(112,115,124,0.12)',
   successWeak:'rgba(0,191,64,0.18)', warningWeak:'rgba(255,146,0,0.18)', errorWeak:'rgba(255,66,66,0.18)',
 } as const;
 
@@ -136,6 +146,12 @@ export const shadow = {
   // fab = 떠 있는 원형 버튼(지도 현재위치 FAB) — 킷 mk-home:292 box-shadow:0 4px 14px rgba(0,0,0,.18) 정합.
   //   RN은 shadowRadius가 CSS blur와 1:1은 아니나 14로 근사. 컬러 그림자 아님(검정, 킷과 동일).
   fab: { shadowColor:'#000', shadowOpacity:0.18, shadowRadius:14, shadowOffset:{width:0,height:4}, elevation:5 },
+  // seg = 세그먼트 컨트롤 선택칸(트랙 위에 떠 있는 카드) — 킷 mk-log:65 box-shadow 0 1px 4px rgba(0,0,0,.08).
+  //   검정 그림자(컬러 아님, 킷 동일). 카드 소프트 섀도우(shadow.card)보다 얕고 좁음.
+  seg: { shadowColor:'#000', shadowOpacity:0.08, shadowRadius:4, shadowOffset:{width:0,height:1}, elevation:1 },
+  // toast = 하단 플로팅 토스트 pill(떠 있는 오버레이) — 킷 .mk-toast box-shadow 0 10px 30px rgba(0,0,0,.28).
+  //   RN shadowRadius는 CSS blur(30)와 1:1은 아니나 근사. 강한 떠있음(shadow.card·lg보다 진하고 큼).
+  toast: { shadowColor:'#000', shadowOpacity:0.28, shadowRadius:30, shadowOffset:{width:0,height:10}, elevation:8 },
 } as const;
 
 // 타이포 [프로젝트 정의 — Pretendard 기반]. RN: rem→px(×16), lineHeight는 절대값.

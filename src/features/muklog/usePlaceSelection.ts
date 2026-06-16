@@ -16,10 +16,13 @@ export type UsePlaceSelectionResult = {
 /**
  * 장소 선택 상태를 보유하는 컨테이너 훅. 결과를 고르면 자동채움값(PlaceSelection)을 보관하고,
  * 해제하면 null로 되돌린다(요약카드 토글 + 시트 payload 합류의 단일 출처).
+ * @param initial 초기 선택값(예: 위시 "다녀왔어요" prefill). 미지정 시 null(기존 동작). useState 초기값으로 1회만 시드.
  * @returns selectedPlace + selectPlace/clearPlace
  */
-export const usePlaceSelection = (): UsePlaceSelectionResult => {
-  const [selectedPlace, setSelectedPlace] = useState<PlaceSelection | null>(null);
+export const usePlaceSelection = ({
+  initial,
+}: { initial?: PlaceSelection | null } = {}): UsePlaceSelectionResult => {
+  const [selectedPlace, setSelectedPlace] = useState<PlaceSelection | null>(initial ?? null);
 
   const selectPlace = ({ item }: { item: PlaceSearchItem }) => {
     setSelectedPlace(placeFieldsFromItem({ item }));

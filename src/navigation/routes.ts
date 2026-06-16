@@ -17,6 +17,18 @@ export const Routes = {
   RoomCreated: 'RoomCreated',
 } as const;
 
+// 위시 "다녀왔어요" → MuklogEditor 생성 모드 프리필(wishlist plan §4.5). 위시 항목의 place 필드를 그대로 싣어
+//   재검색 없이 작성 화면에 채운다. address는 위시에 미저장 → 생성 시 null(좌표/road만 보존).
+export type MuklogEditorPrefill = {
+  placeName: string;
+  category: string | null;
+  area: string | null;
+  roadAddress: string | null;
+  lat: number | null;
+  lng: number | null;
+  kakaoPlaceId: string | null;
+};
+
 // 루트(인증 후) 스택 파라미터 목록
 export type AppStackParamList = {
   [Routes.HomeTabs]: undefined;
@@ -26,7 +38,13 @@ export type AppStackParamList = {
   // 상세는 muklogId만 받고 자체 조회(roomId는 조회 결과의 room_id로 충분, RLS가 권한 차단). plan §4.1.
   [Routes.MuklogDetail]: { muklogId: string };
   // 에디터: roomId(저장 대상) + muklogId(있으면 편집 프리필 조회, 없으면 작성). FLAG-1.
-  [Routes.MuklogEditor]: { roomId: string; muklogId?: string };
+  //   wishlist: 위시 "다녀왔어요" → muklogId 없음 + prefill 있음 = 생성 모드 + 프리필. 생성 성공 시 fromWishlistId 위시 삭제.
+  [Routes.MuklogEditor]: {
+    roomId: string;
+    muklogId?: string;
+    prefill?: MuklogEditorPrefill;
+    fromWishlistId?: string;
+  };
   // 생성 완료 축하: 방금 만든 로그의 roomId + 공유용 초대코드(createRoom 반환값 직접 전달). FLAG-3.
   [Routes.RoomCreated]: { roomId: string; code: string };
 };

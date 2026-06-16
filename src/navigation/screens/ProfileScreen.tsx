@@ -23,10 +23,10 @@ import {
 import { useMyLogs } from '@/features/room';
 import { useTheme } from '@/theme';
 
-// 설정 리스트 4행(킷 mk-log.jsx:422) — 비활성 플레이스홀더(차기 기능).
+// 설정 리스트 행(킷 mk-log.jsx:422) — 비활성 플레이스홀더(차기 기능).
+//   ⚠️ wishlist 스프린트(델타 #5): "위시리스트" 행 제거. 위시리스트는 로그 내부 세그먼트로 진입(중복 진입점 제거, 킷 정합).
 const SETTINGS_ROWS = [
   { icon: IconName.Bell, label: '알림 설정' },
-  { icon: IconName.Heart, label: '위시리스트' },
   { icon: IconName.CircleInfo, label: '이용 안내' },
   { icon: IconName.Setting, label: '설정' },
 ] as const;

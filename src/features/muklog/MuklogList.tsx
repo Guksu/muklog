@@ -1,15 +1,17 @@
 // src/features/muklog/MuklogList.tsx
-// LogScreen 맛집 섹션 — mk-log.jsx LogScreen 섹션(54–78) 재현 (plan §6.1 / §5 T10, AC1·AC2·AC11·AC12).
+// LogScreen 'log' 세그 맛집 섹션 — mk-log.jsx LogScreen 섹션(54–78) 재현 (plan §6.1 / §5 T10, AC1·AC2·AC11·AC12).
 //   섹션 헤더("우리 맛집 N" + "최근 순") + 상태 분기(loading/error/empty/ready) + MuklogCard 리스트 + FAB → 에디터.
-//   N = 조회된 리스트 길이(D7, 추가 쿼리 없음). 저장은 에디터 화면에서 → 복귀 시 포커스 refresh로 갱신(AC2·AC12).
+//   N = 조회된 리스트 길이(D7, 추가 쿼리 없음). 저장은 에디터 화면에서 → 복귀 시 LogScreen 포커스 refresh로 갱신(AC2·AC12).
 //   ⚠️ FLAG-1: 입력 시트(MuklogEntrySheet) → 풀스크린 에디터 라우트(MuklogEditor)로 전환. FAB는 navigate만 한다.
 //     장소검색/선택 상태는 에디터 컨테이너(MuklogEditorRoute)가 소유 — 리스트에서 제거.
-//   useMuklogs(진입 1회+refresh)를 소유. 스타일은 토큰만(raw hex 0), 이모지 허용.
+//   ⚠️ wishlist 스프린트: 세그 카운트(기록 N)를 LogScreen이 알아야 해 useMuklogs 소유를 LogScreen으로 이관.
+//     이 컴포넌트는 presentational(state/refresh props 수신) — 데이터 조회·포커스 refresh는 LogScreen이 단일 소유(이중 로드 0).
+//   스타일은 토큰만(raw hex 0), 이모지 허용.
 //
-// 소비: LogScreen이 초대 카드 아래에 <MuklogList roomId meId /> 마운트(roomId=route.params, meId=auth uid).
-import React, { useRef, useState } from 'react';
+// 소비: LogScreen 'log' 세그에서 <MuklogList roomId meId state refresh /> 마운트(state=useMuklogs, meId=auth uid).
+import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useFocusEffect, useNavigation, type NavigationProp } from '@react-navigation/native';
+import { useNavigation, type NavigationProp } from '@react-navigation/native';
 
 import { Button, Chip, Icon, IconName, Text } from '@/components';
 import { Routes, type AppStackParamList } from '@/navigation/routes';
@@ -18,37 +20,24 @@ import { useTheme } from '@/theme';
 import { categoryEmoji, categoryLabel } from './categories';
 import { filterMuklogsByCategory, muklogCategoriesInUse } from './filterByCategory';
 import { MuklogCard } from './MuklogCard';
-import { useMuklogs } from './useMuklogs';
+import { type MuklogsState } from './types';
 
 export type MuklogListProps = {
-  /** 조회 대상 로그 id(LogScreen route.params.roomId). */
+  /** 조회 대상 로그 id(LogScreen route.params.roomId) — FAB navigate 대상. */
   roomId: string;
   /** 현재 사용자 uid — 카드 작성자 라벨 파생용. */
   meId: string;
+  /** 먹로그 목록 상태(LogScreen이 useMuklogs로 소유·주입). */
+  state: MuklogsState;
+  /** 재조회(에러 "다시 시도") — LogScreen useMuklogs.refresh. */
+  refresh: () => Promise<void>;
 };
 
-export const MuklogList = ({ roomId, meId }: MuklogListProps) => {
+export const MuklogList = ({ roomId, meId, state, refresh }: MuklogListProps) => {
   const theme = useTheme();
   const navigation = useNavigation<NavigationProp<AppStackParamList>>();
-  const { state, refresh } = useMuklogs({ roomId });
   // 카테고리 필터(B2) — null="전체". 선택 상태만 화면 보유, 도출/필터는 순수 유틸(filterByCategory).
   const [category, setCategory] = useState<string | null>(null);
-
-  // 최신 refresh를 ref로 보관(stale closure 회피) — focus 콜백을 안정 참조로 유지하기 위함.
-  const refreshRef = useRef(refresh);
-  refreshRef.current = refresh;
-  // 첫 포커스(마운트 로드와 겹침)는 건너뛰고, 상세 등에서 복귀(재포커스) 시에만 refresh(plan §4.3, 폴링 아님).
-  const hasFocusedRef = useRef(false);
-
-  // useFocusEffect는 콜백 참조 안정성이 필수(매 렌더 새 함수면 매번 재구독) → 예외적으로 useCallback 사용(컨벤션 허용 케이스).
-  const handleFocus = React.useCallback(function refreshOnRefocus() {
-    if (!hasFocusedRef.current) {
-      hasFocusedRef.current = true; // 첫 포커스 = 마운트 로드 → 중복 조회 가드(plan §6).
-      return;
-    }
-    void refreshRef.current();
-  }, []);
-  useFocusEffect(handleFocus);
 
   // 섹션 헤더의 N(D7) — ready일 때만 실제 개수, 그 외 0. N은 필터 무관 전체 수(킷 mk-log.jsx:55).
   const count = state.status === 'ready' ? state.muklogs.length : 0;

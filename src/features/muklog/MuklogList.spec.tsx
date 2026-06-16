@@ -1,35 +1,20 @@
 // src/features/muklog/MuklogList.spec.tsx
-// LogScreen 맛집 섹션 — loading/error/empty/ready 분기 + 섹션 헤더 "우리 맛집 N" + FAB→에디터 라우트 이동
-//   (plan §6.1 / §5 T10, AC1·AC2·AC11·AC12). useMuklogs 모킹으로 섹션 동작만 검증.
+// LogScreen 'log' 세그 맛집 섹션 — loading/error/empty/ready 분기 + 섹션 헤더 "우리 맛집 N" + FAB→에디터 라우트 이동
+//   (plan §6.1 / §5 T10, AC1·AC2·AC11·AC12). state/refresh는 props 주입(presentational) — useMuklogs 소유는 LogScreen.
+//   ⚠️ wishlist 스프린트: 데이터 조회·포커스 refresh가 LogScreen으로 이관 → 이 spec은 props 기반 렌더만 검증.
 //   ⚠️ FLAG-1: 입력 시트→풀스크린 에디터 라우트 전환. FAB는 navigate(MuklogEditor)만(장소검색은 에디터 컨테이너로 이동).
 import React from 'react';
-import { act, fireEvent, screen } from '@testing-library/react-native';
+import { fireEvent, screen } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
-import { type Muklog } from './types';
+import { type Muklog, type MuklogsState } from './types';
 
-const mockUseMuklogs = jest.fn();
-const refresh = jest.fn();
-jest.mock('./useMuklogs', () => ({ useMuklogs: () => mockUseMuklogs() }));
-
-// 카드 탭 → navigate(MuklogDetail, { muklogId }) 배선 검증용 navigation 모킹(plan §4.3).
-//   useFocusEffect는 마운트 시 콜백을 1회 실행하도록 모킹(포커스 refresh 검증, plan §4.3).
-//   refireFocus()로 "재포커스(상세 복귀)"를 흉내내 첫 마운트 중복 가드를 검증한다.
+// 카드 탭 → navigate(MuklogDetail, { muklogId }) / FAB → navigate(MuklogEditor, { roomId }) 배선 검증용 navigation 모킹.
 const mockNavigate = jest.fn();
-let lastFocusCallback: (() => void) | null = null;
-const refireFocus = () => lastFocusCallback?.();
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
   useNavigation: () => ({ navigate: mockNavigate }),
-  useFocusEffect: (cb: () => void) => {
-    const React = require('react');
-    React.useEffect(() => {
-      // 실제 useFocusEffect처럼 마운트(첫 포커스) 시 콜백 1회 실행. 이후 refireFocus로 재포커스 흉내.
-      lastFocusCallback = cb;
-      cb();
-    }, [cb]);
-  },
 }));
 
 import { MuklogList } from './MuklogList';
@@ -50,41 +35,37 @@ const muklog = (over?: Partial<Muklog>): Muklog => ({
   ...over,
 });
 
-const renderList = () => renderWithTheme(<MuklogList roomId="r1" meId="me-uid" />);
+const refresh = jest.fn();
+const renderList = ({ state }: { state: MuklogsState }) =>
+  renderWithTheme(<MuklogList roomId="r1" meId="me-uid" state={state} refresh={refresh} />);
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockUseMuklogs.mockReturnValue({ state: { status: 'loading' }, refresh });
 });
 
 describe('MuklogList', () => {
   it('loading이면 로더를 표시한다', () => {
-    mockUseMuklogs.mockReturnValue({ state: { status: 'loading' }, refresh });
-    renderList();
+    renderList({ state: { status: 'loading' } });
     expect(screen.getByTestId('muklog-list-loading')).toBeTruthy();
   });
 
   it('error면 메시지 + 다시 시도 버튼을 표시한다 (AC11)', () => {
-    mockUseMuklogs.mockReturnValue({
+    renderList({
       state: { status: 'error', message: '맛집 목록을 불러오지 못했어요. 다시 시도해 주세요.' },
-      refresh,
     });
-    renderList();
     expect(screen.getByText('맛집 목록을 불러오지 못했어요. 다시 시도해 주세요.')).toBeTruthy();
     fireEvent.press(screen.getByLabelText('다시 시도'));
     expect(refresh).toHaveBeenCalled();
   });
 
   it('빈 목록이면 빈 상태 문구를 표시한다 (AC1)', () => {
-    mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
-    renderList();
+    renderList({ state: { status: 'ready', muklogs: [] } });
     expect(screen.getByText('아직 기록한 맛집이 없어요')).toBeTruthy();
     expect(screen.getByText('우리 맛집 0')).toBeTruthy();
   });
 
   it('빈 상태 이모지(🍽️)에 fontSize보다 큰 lineHeight 헤드룸을 줘 세로 클리핑을 막는다', () => {
-    mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
-    renderList();
+    renderList({ state: { status: 'ready', muklogs: [] } });
     const emojiNode = screen.getByText('🍽️');
     const flat = Object.assign(
       {},
@@ -94,55 +75,46 @@ describe('MuklogList', () => {
   });
 
   it('ready면 섹션 헤더 "우리 맛집 N"과 카드 N개를 표시한다', () => {
-    mockUseMuklogs.mockReturnValue({
+    renderList({
       state: { status: 'ready', muklogs: [muklog({ id: 'm1' }), muklog({ id: 'm2', placeName: '어니언' })] },
-      refresh,
     });
-    renderList();
     expect(screen.getByText('우리 맛집 2')).toBeTruthy();
     expect(screen.getByText('트라토리아 보나')).toBeTruthy();
     expect(screen.getByText('어니언')).toBeTruthy();
   });
 
   it('FAB 탭 시 에디터 라우트로 navigate(MuklogEditor, { roomId })를 호출한다 (AC2, FLAG-1)', () => {
-    mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
-    renderList();
+    renderList({ state: { status: 'ready', muklogs: [] } });
     fireEvent.press(screen.getByLabelText('새 먹로그'));
     expect(mockNavigate).toHaveBeenCalledWith('MuklogEditor', { roomId: 'r1' });
   });
 });
 
 describe('MuklogList — 카테고리 필터 (B2)', () => {
-  const mixedList = () => ({
-    state: {
-      status: 'ready',
-      muklogs: [
-        muklog({ id: 'm1', category: 'pasta', placeName: '파스타집' }),
-        muklog({ id: 'm2', category: 'cafe', placeName: '카페집' }),
-      ],
-    },
-    refresh,
-  });
+  const mixed: MuklogsState = {
+    status: 'ready',
+    muklogs: [
+      muklog({ id: 'm1', category: 'pasta', placeName: '파스타집' }),
+      muklog({ id: 'm2', category: 'cafe', placeName: '카페집' }),
+    ],
+  };
 
   it('ready면 "전체" + 리스트에 존재하는 카테고리 칩을 표시한다', () => {
-    mockUseMuklogs.mockReturnValue(mixedList());
-    renderList();
+    renderList({ state: mixed });
     expect(screen.getByText('전체')).toBeTruthy();
     expect(screen.getByText('파스타·양식')).toBeTruthy();
     expect(screen.getByText('카페·디저트')).toBeTruthy();
   });
 
   it('초기엔 "전체" 선택 + 모든 카드 표시, "우리 맛집 N"=전체 수', () => {
-    mockUseMuklogs.mockReturnValue(mixedList());
-    renderList();
+    renderList({ state: mixed });
     expect(screen.getByText('파스타집')).toBeTruthy();
     expect(screen.getByText('카페집')).toBeTruthy();
     expect(screen.getByText('우리 맛집 2')).toBeTruthy();
   });
 
   it('카테고리 칩 탭 시 해당 cat만 필터하고 "우리 맛집 N"은 전체 수 유지', () => {
-    mockUseMuklogs.mockReturnValue(mixedList());
-    renderList();
+    renderList({ state: mixed });
     fireEvent.press(screen.getByTestId('chip-cafe'));
     expect(screen.queryByText('파스타집')).toBeNull();
     expect(screen.getByText('카페집')).toBeTruthy();
@@ -151,8 +123,7 @@ describe('MuklogList — 카테고리 필터 (B2)', () => {
   });
 
   it('"전체" 칩 탭 시 필터 해제(모두 표시)', () => {
-    mockUseMuklogs.mockReturnValue(mixedList());
-    renderList();
+    renderList({ state: mixed });
     fireEvent.press(screen.getByTestId('chip-cafe'));
     expect(screen.queryByText('파스타집')).toBeNull();
     fireEvent.press(screen.getByTestId('chip-all'));
@@ -161,38 +132,16 @@ describe('MuklogList — 카테고리 필터 (B2)', () => {
   });
 
   it('빈 목록이면 필터 칩 행을 표시하지 않는다', () => {
-    mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
-    renderList();
+    renderList({ state: { status: 'ready', muklogs: [] } });
     expect(screen.queryByText('전체')).toBeNull();
-  });
-});
-
-describe('MuklogList — 포커스 복귀 갱신 (plan §4.3·§6)', () => {
-  it('첫 마운트(첫 포커스)에는 refresh를 호출하지 않는다(중복 가드 — 마운트 로드와 겹침 회피)', () => {
-    mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
-    renderList();
-    expect(refresh).not.toHaveBeenCalled();
-  });
-
-  it('재포커스(상세에서 복귀) 시 refresh를 1회 호출한다(편집/삭제 반영)', () => {
-    mockUseMuklogs.mockReturnValue({ state: { status: 'ready', muklogs: [] }, refresh });
-    renderList();
-    expect(refresh).not.toHaveBeenCalled();
-    // 상세로 갔다 돌아옴(재포커스).
-    act(() => {
-      refireFocus();
-    });
-    expect(refresh).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('MuklogList — 상세 진입 배선 (plan §4.3)', () => {
   it('카드 탭 시 navigate(MuklogDetail, { muklogId: 카드 id })를 호출한다', () => {
-    mockUseMuklogs.mockReturnValue({
+    renderList({
       state: { status: 'ready', muklogs: [muklog({ id: 'm-target', placeName: '트라토리아 보나' })] },
-      refresh,
     });
-    renderList();
     fireEvent.press(screen.getByLabelText('트라토리아 보나 상세 보기'));
     expect(mockNavigate).toHaveBeenCalledWith('MuklogDetail', { muklogId: 'm-target' });
   });

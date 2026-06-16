@@ -129,12 +129,14 @@ describe('ProfileScreen — ready 구조(B3)', () => {
     expect(screen.getByText('2')).toBeTruthy(); // 커플 로그 수(memberCount>=2)
   });
 
-  it('설정 리스트 4행(알림·위시리스트·이용안내·설정)을 표시한다', () => {
+  it('설정 리스트 3행(알림·이용안내·설정)을 표시한다 (wishlist 델타 #5: "위시리스트" 행 제거)', () => {
     renderWithTheme(<ProfileScreen />);
     expect(screen.getByText('알림 설정')).toBeTruthy();
-    expect(screen.getByText('위시리스트')).toBeTruthy();
     expect(screen.getByText('이용 안내')).toBeTruthy();
     expect(screen.getByText('설정')).toBeTruthy();
+    // 델타 #5(B9): 위시리스트는 로그 세그먼트로 진입 → 프로필 중복 진입점 제거.
+    expect(screen.queryByText('위시리스트')).toBeNull();
+    expect(screen.queryByTestId('settings-row-위시리스트')).toBeNull();
   });
 
   it('아바타 업로드 에러 메시지를 표시한다 (P6)', () => {

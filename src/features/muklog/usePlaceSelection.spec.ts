@@ -45,4 +45,35 @@ describe('usePlaceSelection', () => {
     act(() => result.current.clearPlace());
     expect(result.current.selectedPlace).toBeNull();
   });
+
+  it('initial 주입 시 그 값으로 시드한다 (위시 "다녀왔어요" prefill)', () => {
+    const seed = {
+      placeName: '성수동 베이커리',
+      category: 'cafe' as const,
+      area: '성수동',
+      address: null,
+      roadAddress: '서울 성동구 연무장길 1',
+      kakaoPlaceId: '12345',
+      lat: 37.544,
+      lng: 127.055,
+    };
+    const { result } = renderHook(() => usePlaceSelection({ initial: seed }));
+    expect(result.current.selectedPlace).toEqual(seed);
+  });
+
+  it('initial 시드 후에도 clearPlace로 해제할 수 있다', () => {
+    const seed = {
+      placeName: '성수동 베이커리',
+      category: null,
+      area: null,
+      address: null,
+      roadAddress: null,
+      kakaoPlaceId: null,
+      lat: null,
+      lng: null,
+    };
+    const { result } = renderHook(() => usePlaceSelection({ initial: seed }));
+    act(() => result.current.clearPlace());
+    expect(result.current.selectedPlace).toBeNull();
+  });
 });
