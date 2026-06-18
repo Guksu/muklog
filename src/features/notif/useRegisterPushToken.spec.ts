@@ -15,6 +15,8 @@ jest.mock('expo-constants', () => ({
   __esModule: true,
   default: { expoConfig: { extra: { eas: { projectId: 'proj-1' } } } },
 }));
+// 네이티브 가용성 probe — 기본 탑재됨({}≠null). 미탑재 케이스는 테스트에서 null로 오버라이드.
+jest.mock('expo-modules-core', () => ({ requireOptionalNativeModule: jest.fn(() => ({})) }));
 
 // supabase 모킹: from().upsert / from().delete().eq (AuthProvider.spec 패턴 — 외부 변수 사전 선언).
 const mockFrom = jest.fn();
@@ -44,6 +46,9 @@ const notif = jest.requireMock('expo-notifications') as {
   getExpoPushTokenAsync: jest.Mock;
 };
 const device = jest.requireMock('expo-device') as { isDevice: boolean; deviceName: string | null };
+const modulesCore = jest.requireMock('expo-modules-core') as {
+  requireOptionalNativeModule: jest.Mock;
+};
 
 const flush = async () => {
   await act(async () => {
@@ -54,6 +59,7 @@ const flush = async () => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  modulesCore.requireOptionalNativeModule.mockReturnValue({}); // 기본: 네이티브 탑재됨.
   device.isDevice = true;
   device.deviceName = 'iPhone 15';
   notif.getPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
@@ -189,28 +195,23 @@ describe('unregisterDeviceToken — 로그아웃 폐기(T6)', () => {
   });
 });
 
-describe('네이티브 모듈 미탑재 안전성(Dev Client 재빌드 전 크래시 방지)', () => {
-  // 회귀: expo-device/expo-notifications 네이티브 모듈이 없으면(재빌드 전) SDK 접근이 throw.
-  //   등록/폐기 경로가 이를 흡수해 앱을 죽이지 않고 조용히 skip해야 한다(best-effort).
-  it('SDK 접근이 throw해도 등록/폐기는 throw 없이 skip하고 DB 호출을 하지 않는다', async () => {
-    // isDevice 접근 시 "Cannot find native module 'ExpoDevice'" 흉내(throwing getter).
-    Object.defineProperty(device, 'isDevice', {
-      configurable: true,
-      get() {
-        throw new Error("Cannot find native module 'ExpoDevice'");
-      },
-    });
+describe('네이티브 모듈 미탑재 안전성(Dev Client 재빌드 전 — 크래시·스팸 방지)', () => {
+  // 회귀: 재빌드 전 ExpoDevice/ExpoPushTokenManager 미탑재 → requireOptionalNativeModule이 null.
+  //   probe에서 false → expo-device의 throw하는 require를 아예 호출 안 함 → 콘솔 에러/예외 스팸 0, 조용히 skip.
+  it('네이티브 미탑재(probe=null)면 등록/폐기를 조용히 skip한다 — DB 호출·warn 없음', async () => {
+    modulesCore.requireOptionalNativeModule.mockReturnValue(null); // 미탑재 흉내.
 
-    // 등록 경로(authenticated 진입) — 예외 흡수, upsert 미호출.
+    // 등록 경로(authenticated 진입) — 조용히 skip, upsert 미호출, SDK 권한조회 진입 안 함.
     renderHook(() => useRegisterPushToken({ userId: 'u1' }));
     await flush();
     expect(mockUpsert).not.toHaveBeenCalled();
+    expect(notif.getPermissionsAsync).not.toHaveBeenCalled();
 
     // 폐기 경로(로그아웃) — throw 없이 resolve, delete 미호출.
     await expect(unregisterDeviceToken({ userId: 'u1' })).resolves.toBeUndefined();
     expect(mockDelete).not.toHaveBeenCalled();
 
-    // 정리: 다음 테스트의 beforeEach 할당(device.isDevice = true)이 가능하도록 data 속성으로 복원.
-    Object.defineProperty(device, 'isDevice', { configurable: true, writable: true, value: true });
+    // 스팸 없음: 미탑재는 예상된 경로이므로 warn을 찍지 않는다.
+    expect(console.warn).not.toHaveBeenCalled();
   });
 });
