@@ -236,14 +236,15 @@ describe('LogListScreen — 카드(list)', () => {
     expect(screen.queryByText('›')).toBeNull();
   });
 
-  it('카드 푸터에 count-free 중립 카피를 표시한다(거짓 카운트 단언 없음, QA Q9)', () => {
+  it('카드 하단 플레이스홀더(위치핀+카피)를 제거한다(사용자 요청 — 빈 카피/지도 아이콘 노출 안 함)', () => {
     useMyLogsContextMock.mockReturnValue({
       state: { status: 'ready', logs: [log({ roomId: 'r1' })] },
       refresh,
     });
     renderWithTheme(<LogListScreen />);
-    expect(screen.getByText('맛집을 기록해보세요')).toBeTruthy();
-    // 거짓 음성("없어요") 카피는 제거됨.
+    // 하단 플레이스홀더 카피·아이콘 모두 제거(카드 최소 높이로 골격 유지).
+    expect(screen.queryByText('맛집을 기록해보세요')).toBeNull();
+    // 거짓 음성("없어요") 카피도 없음.
     expect(screen.queryByText('아직 기록한 맛집이 없어요')).toBeNull();
   });
 

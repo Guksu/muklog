@@ -32,9 +32,11 @@ export type MuklogListProps = {
   state: MuklogsState;
   /** 재조회(에러 "다시 시도") — LogScreen useMuklogs.refresh. */
   refresh: () => Promise<void>;
+  /** 리스트 스크롤 영역 최상단에 끼우는 노드(초대 영역 등). 고정이 아니라 콘텐츠와 함께 스크롤된다(사용자 요청). */
+  header?: React.ReactNode;
 };
 
-export const MuklogList = ({ roomId, meId, state, refresh }: MuklogListProps) => {
+export const MuklogList = ({ roomId, meId, state, refresh, header }: MuklogListProps) => {
   const theme = useTheme();
   // LogScreen이 'bottom' edge를 떼면서(엣지투엣지 하단 빈 띠 제거) 이 리스트가 화면 끝까지 차므로,
   //   스크롤 tail·FAB 위치에 insets.bottom을 더해 home indicator 클리어런스를 보존한다.
@@ -54,6 +56,9 @@ export const MuklogList = ({ roomId, meId, state, refresh }: MuklogListProps) =>
       <ScrollView
         contentContainerStyle={{ padding: theme.spacing[20], paddingBottom: theme.spacing[80] + insets.bottom }}
       >
+        {/* 스크롤 헤더(초대 영역 등) — 고정이 아니라 콘텐츠와 함께 스크롤돼 위로 사라진다(사용자 요청). */}
+        {header ? <View style={{ marginBottom: theme.spacing[12] }}>{header}</View> : null}
+
         {/* 섹션 헤더 */}
         <View style={[styles.headerRow, { marginBottom: theme.spacing[10] }]}>
           <Text variant="sectionTitle" color="fg">

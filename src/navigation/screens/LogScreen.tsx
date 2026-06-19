@@ -569,23 +569,21 @@ export const LogScreen = () => {
             onRetry={() => void refreshWishlist()}
           />
         ) : (
-          <>
-            {/* 초대 영역(킷 mk-log:74-90) — 'log' 세그 본문 상단(세그 아래). wish 세그엔 미렌더(I1).
-                비주얼(솔로 배너/커플 컴팩트 행)은 불변 — 위치만 킷 정합. */}
-            <View style={{ paddingHorizontal: theme.spacing[20], paddingTop: theme.spacing[12] }}>
-              {isCouple ? (
+          // 초대 영역(킷 mk-log:74-90)을 MuklogList 스크롤 헤더로 주입 — 고정이 아니라 리스트와 함께 스크롤돼
+          //   위로 사라진다(사용자 요청). wish 세그엔 미렌더(I1). 비주얼(솔로 배너/커플 컴팩트 행)은 불변.
+          <MuklogList
+            roomId={roomId}
+            meId={meId}
+            state={muklogsState}
+            refresh={refreshMuklogs}
+            header={
+              isCouple ? (
                 <CompactInviteRow code={room.inviteCode} />
               ) : (
                 <SoloInviteBanner code={room.inviteCode} />
-              )}
-            </View>
-            <MuklogList
-              roomId={roomId}
-              meId={meId}
-              state={muklogsState}
-              refresh={refreshMuklogs}
-            />
-          </>
+              )
+            }
+          />
         )}
       </View>
 

@@ -32,6 +32,9 @@ import { Routes, type AppStackParamList } from '../routes';
 import { formatLogDate } from './formatLogDate';
 
 const CARD_AVATAR_SIZE = 42;
+// 카드 최소 높이 — 하단 플레이스홀더(위치핀+카피) 제거 후에도 카드가 납작해지지 않게 보장(사용자 요청).
+//   콘텐츠는 상단 정렬 → 최소 높이만큼 하단 여백이 생겨 카드에 숨 쉴 공간 확보.
+const CARD_MIN_HEIGHT = 96;
 
 // 본인 닉네임/아바타. userId가 있을 때만 useProfile을 마운트해야 하므로 상위에서 분기.
 //   userId도 함께 노출 → Avatar가 url 없을 때 결정적 디폴트(이모지+컬러)를 파생(plan §3.3).
@@ -62,7 +65,7 @@ const LogCard = ({
   const coverPath = log.previewPaths[0];
   const coverUri = coverPath ? previewUrls[coverPath] : undefined;
   return (
-    <Card accessibilityLabel="로그 열기" onPress={onPress}>
+    <Card accessibilityLabel="로그 열기" onPress={onPress} style={{ minHeight: CARD_MIN_HEIGHT }}>
       {/* 상단: 아바타 + 이름/배지/날짜 + chevron */}
       <View style={styles.cardHeader}>
         <View style={styles.avatarStack}>
@@ -108,14 +111,6 @@ const LogCard = ({
           style={[styles.previewCover, { borderRadius: theme.radius.control, marginTop: theme.spacing[14] }]}
         />
       ) : null}
-
-      {/* 하단: 위치핀 + count-free 중립 카피(맛집 집계 미보유 → 카운트 단언 금지, QA Q9/plan §B4). */}
-      <View style={[styles.cardFooter, { gap: theme.spacing[6], marginTop: theme.spacing[12] }]}>
-        <Icon name={IconName.Location} size={15} color="primary" />
-        <Text variant="spotCount" color="fgWeak">
-          맛집을 기록해보세요
-        </Text>
-      </View>
     </Card>
   );
 };
@@ -279,7 +274,6 @@ const styles = StyleSheet.create({
   // 대표 커버 사진 — 처음 설계(4슬롯 행)의 슬롯 1칸 크기 유지(약 1/4 폭 정사각). 풀폭 배너 아님(카드 크기 보존).
   //   width 23% ≈ (100% - gap 3칸)/4. aspectRatio 1 → 원래 슬롯과 동일 높이. 사진 없으면 미렌더.
   previewCover: { width: '23%', aspectRatio: 1, overflow: 'hidden' },
-  cardFooter: { flexDirection: 'row', alignItems: 'center' },
   cta: {
     flexDirection: 'row',
     alignItems: 'center',

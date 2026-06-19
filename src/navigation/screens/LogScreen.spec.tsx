@@ -195,9 +195,19 @@ jest.mock('@/features/muklog', () => {
       lng: 127.055,
     }),
     // MuklogList probe — state(ready/loading) 반영 + roomId·meId 노출('log' 세그에서만 마운트=FAB 존재).
-    MuklogList: ({ roomId, meId }: { roomId: string; meId: string }) => (
+    //   header(초대 영역)는 스크롤 헤더로 주입되므로 probe도 렌더해야 초대 배너가 화면에 나타난다(스크롤-어웨이 전환).
+    MuklogList: ({
+      roomId,
+      meId,
+      header,
+    }: {
+      roomId: string;
+      meId: string;
+      header?: React.ReactNode;
+    }) => (
       <View accessibilityLabel="muklog-list">
         <Text>{`list:${roomId}:${meId}`}</Text>
+        {header}
       </View>
     ),
     // PlaceSearchView probe — 위시 추가 검색 스왑. 결과선택/직접입력/뒤로 트리거 노출.
