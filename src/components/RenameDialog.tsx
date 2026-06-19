@@ -123,7 +123,8 @@ export const RenameDialog = ({
   };
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onCancel}>
+    // animationType="none": fade면 닫히는 모달이 페이드아웃되는 동안 이전 팝업 내용이 잔상으로 보임. none으로 즉시 전환.
+    <Modal visible transparent animationType="none" onRequestClose={onCancel}>
       {/* 딤 배경 — 탭하면 취소(킷 onClick={cancel}) */}
       <Pressable
         testID="rename-dialog-backdrop"

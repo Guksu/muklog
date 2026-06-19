@@ -88,7 +88,9 @@ export const Sheet = ({ visible, onClose, title, children }: SheetProps) => {
   if (!visible) return null;
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    // animationType="none": fade면 닫히는 모달이 페이드아웃되는 동안 이전 시트 내용이 잔상으로 보임
+    //   (시트→다른 시트 전환 시). none으로 즉시 마운트/언마운트해 잔상 제거(딤=즉시 피드백, 드래그 슬라이드는 유지).
+    <Modal visible transparent animationType="none" onRequestClose={onClose}>
       {/* 딤 배경 — 탭하면 닫힘 */}
       <Pressable
         testID="sheet-backdrop"
