@@ -12,7 +12,7 @@
 // 생산자(소비): useMyLogsContext(state/refresh) + useCreateRoom(생성) + useProfile(닉/아바타) + useNavigation.
 // ⚠️ 파트너 실데이터/사진/맛집 수는 백엔드 미존재 → UI 골격만 재현(플레이스홀더). 추가 페치/RPC 변경 없음(UI-only).
 import React from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation, type NavigationProp } from '@react-navigation/native';
 
 import { Avatar, Button, Card, Icon, IconName, MemberBadge, Screen, Text } from '@/components';
@@ -22,6 +22,7 @@ import {
   displayLogName,
   mapRoomError,
   useCreateRoom,
+  useLogPreviewUrls,
   useMyLogsContext,
   type MyLog,
 } from '@/features/room';
@@ -30,7 +31,6 @@ import { useTheme } from '@/theme';
 import { Routes, type AppStackParamList } from '../routes';
 import { formatLogDate } from './formatLogDate';
 
-const PREVIEW_SLOT_COUNT = 4;
 const CARD_AVATAR_SIZE = 42;
 
 // 본인 닉네임/아바타. userId가 있을 때만 useProfile을 마운트해야 하므로 상위에서 분기.
@@ -49,13 +49,18 @@ const LogCard = ({
   log,
   self,
   onPress,
+  previewUrls,
 }: {
   log: MyLog;
   self: { userId: string; nickname: string; avatarUrl: string | null };
   onPress: () => void;
+  previewUrls: Record<string, string>;
 }) => {
   const theme = useTheme();
   const isCouple = log.memberCount >= 2;
+  // 대표 사진 1장(첫 사진) signed URL. 없으면 카드에 이미지 미노출(사용자 결정).
+  const coverPath = log.previewPaths[0];
+  const coverUri = coverPath ? previewUrls[coverPath] : undefined;
   return (
     <Card accessibilityLabel="로그 열기" onPress={onPress}>
       {/* 상단: 아바타 + 이름/배지/날짜 + chevron */}
@@ -94,22 +99,15 @@ const LogCard = ({
         <Icon name={IconName.ChevronRight} size={18} color="fgAssistive" />
       </View>
 
-      {/* 중간: 미리보기 사진 4슬롯 — 사진 데이터 없음 → 빈 점선 슬롯(가짜 이모지 미사용). 킷 mk-home:61 gap 7. */}
-      <View style={[styles.previewRow, { gap: theme.spacing[7], marginTop: theme.spacing[14] }]}>
-        {Array.from({ length: PREVIEW_SLOT_COUNT }).map((_, index) => (
-          <View
-            key={`slot-${index}`}
-            style={[
-              styles.previewSlot,
-              {
-                borderRadius: theme.radius.control,
-                backgroundColor: theme.color.surfaceAlt,
-                borderColor: theme.color.hairline,
-              },
-            ]}
-          />
-        ))}
-      </View>
+      {/* 중간: 대표 사진 1장(커버) — signed URL 있을 때만 노출. 사진 없으면 미렌더(빈 슬롯 없음, 사용자 결정). */}
+      {coverUri ? (
+        <Image
+          testID="log-preview-thumb"
+          source={{ uri: coverUri }}
+          resizeMode="cover"
+          style={[styles.previewCover, { borderRadius: theme.radius.control, marginTop: theme.spacing[14] }]}
+        />
+      ) : null}
 
       {/* 하단: 위치핀 + count-free 중립 카피(맛집 집계 미보유 → 카운트 단언 금지, QA Q9/plan §B4). */}
       <View style={[styles.cardFooter, { gap: theme.spacing[6], marginTop: theme.spacing[12] }]}>
@@ -168,6 +166,11 @@ export const LogListScreen = () => {
     void refreshRef.current();
   }, []);
   useFocusEffect(handleFocus);
+
+  // 카드 썸네일용 — 모든 로그의 preview_paths를 모아 signed URL 1회 배치 발급(path→URL 맵). 폴링 없음.
+  //   ⚠️ 훅이라 조건부 return 이전에 호출(state 미준비면 빈 배열). 발급은 경로 집합 변경 시에만.
+  const previewPaths = state.status === 'ready' ? state.logs.flatMap((item) => item.previewPaths) : [];
+  const { urls: previewUrls } = useLogPreviewUrls({ paths: previewPaths });
 
   // 생성 핸들러 — PlusHeaderButton과 동일(createRoom→refresh, 실패 시 Alert). 빈상태/하단 CTA 공용.
   const handleCreate = async () => {
@@ -229,6 +232,7 @@ export const LogListScreen = () => {
           <LogCard
             log={item}
             self={self}
+            previewUrls={previewUrls}
             onPress={() => navigation.navigate(Routes.LogScreen, { roomId: item.roomId })}
           />
         )}
@@ -272,8 +276,9 @@ const styles = StyleSheet.create({
   avatarStack: { flexDirection: 'row', alignItems: 'center' },
   cardHeaderBody: { flex: 1, minWidth: 0 },
   cardMeta: { flexDirection: 'row', alignItems: 'center' },
-  previewRow: { flexDirection: 'row' },
-  previewSlot: { flex: 1, aspectRatio: 1, borderWidth: 1, borderStyle: 'dashed' },
+  // 대표 커버 사진 — 처음 설계(4슬롯 행)의 슬롯 1칸 크기 유지(약 1/4 폭 정사각). 풀폭 배너 아님(카드 크기 보존).
+  //   width 23% ≈ (100% - gap 3칸)/4. aspectRatio 1 → 원래 슬롯과 동일 높이. 사진 없으면 미렌더.
+  previewCover: { width: '23%', aspectRatio: 1, overflow: 'hidden' },
   cardFooter: { flexDirection: 'row', alignItems: 'center' },
   cta: {
     flexDirection: 'row',

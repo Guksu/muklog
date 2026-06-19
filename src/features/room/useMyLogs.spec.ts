@@ -19,6 +19,7 @@ const row = (over?: Partial<{
   name: string | null;
   delete_scheduled_at: string | null;
   delete_requested_by: string | null;
+  preview_paths: string[] | null;
 }>) => ({
   room_id: 'r1',
   mode: 'couple',
@@ -61,6 +62,7 @@ describe('useMyLogs', () => {
           name: '우리 맛집',
           deleteScheduledAt: null,
           deleteRequestedBy: null,
+          previewPaths: [],
         },
         {
           roomId: 'r2',
@@ -71,6 +73,7 @@ describe('useMyLogs', () => {
           name: null,
           deleteScheduledAt: null,
           deleteRequestedBy: null,
+          previewPaths: [],
         },
       ],
     });
@@ -117,6 +120,24 @@ describe('useMyLogs', () => {
       ['2026-06-17T00:00:00.000Z', 'u9'],
       [null, null],
     ]);
+  });
+
+  it('preview_paths 투영: 값 있으면 string[] 매핑, 누락/null이면 [] (log-preview-photos 경계)', async () => {
+    rpc.mockResolvedValueOnce({
+      data: [
+        row({ room_id: 'r1', preview_paths: ['r1/m1/a.jpg', 'r1/m1/b.jpg'] }),
+        row({ room_id: 'r2', preview_paths: null }), // null → []
+        { room_id: 'r3', mode: 'solo', member_count: 1, created_at: 'x', joined_at: 'x' }, // 키 누락 → []
+      ],
+      error: null,
+    });
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('ready');
+    });
+    const logs = result.current.state.status === 'ready' ? result.current.state.logs : [];
+    expect(logs.map((l) => l.previewPaths)).toEqual([['r1/m1/a.jpg', 'r1/m1/b.jpg'], [], []]);
   });
 
   it('빈 배열이면 ready + logs:[] 로 전이한다 (빈 상태=정상, 에러 아님) (C9)', async () => {

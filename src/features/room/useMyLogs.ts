@@ -23,6 +23,7 @@ export type MyLog = {
   name: string | null; // 사용자 지정 로그 이름(null=미지정 → 카드에서 폴백 표기, log-name)
   deleteScheduledAt: string | null; // 예약 삭제 시각(ISO) | null. LogList 배지 후속 대비 투영(이번 표시 OUT, room-lifecycle).
   deleteRequestedBy: string | null; // 나가기를 요청한 사용자 id | null.
+  previewPaths: string[]; // 카드 썸네일용 최근 사진 경로 최대 4장(storage_path). signed URL은 useLogPreviewUrls가 발급.
 };
 
 export type MyLogsState =
@@ -40,6 +41,7 @@ type MyLogRow = {
   name?: string | null; // list_my_rooms name 투영(log-name). 누락/null 모두 null로 흡수.
   delete_scheduled_at?: string | null; // room-lifecycle 투영. 누락/null 모두 null로 흡수.
   delete_requested_by?: string | null; // room-lifecycle 투영. 동상.
+  preview_paths?: string[] | null; // log_preview_photos 투영. 누락/null → [].
 };
 
 /**
@@ -56,6 +58,7 @@ const toMyLog = ({ row }: { row: MyLogRow }): MyLog => ({
   name: row.name ?? null,
   deleteScheduledAt: row.delete_scheduled_at ?? null,
   deleteRequestedBy: row.delete_requested_by ?? null,
+  previewPaths: row.preview_paths ?? [],
 });
 
 /**

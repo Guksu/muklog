@@ -11,7 +11,13 @@ import { renderWithTheme } from '@/test/renderWithTheme';
 jest.mock('@/features/room', () => {
   const errors = jest.requireActual('@/features/room/errors');
   const logName = jest.requireActual('@/features/room/logName');
-  return { ...errors, ...logName, useMyLogsContext: jest.fn(), useCreateRoom: jest.fn() };
+  return {
+    ...errors,
+    ...logName,
+    useMyLogsContext: jest.fn(),
+    useCreateRoom: jest.fn(),
+    useLogPreviewUrls: jest.fn(() => ({ urls: {} })),
+  };
 });
 
 // 본인 프로필(카드/CTA 닉네임 표시)
@@ -43,6 +49,9 @@ const useMyLogsContextMock = useMyLogsContext as jest.Mock;
 const useCreateRoomMock = useCreateRoom as jest.Mock;
 const useProfileMock = useProfile as jest.Mock;
 const useAuthMock = useAuth as jest.Mock;
+const useLogPreviewUrlsMock = (
+  jest.requireMock('@/features/room') as { useLogPreviewUrls: jest.Mock }
+).useLogPreviewUrls;
 
 const refresh = jest.fn();
 const createRoom = jest.fn();
@@ -54,6 +63,7 @@ const log = (over?: Partial<{
   createdAt: string;
   joinedAt: string;
   name: string | null;
+  previewPaths: string[];
 }>) => ({
   roomId: 'r1',
   mode: 'couple',
@@ -61,6 +71,7 @@ const log = (over?: Partial<{
   createdAt: '2026-06-10T00:00:00.000Z',
   joinedAt: '2026-06-10T01:00:00.000Z',
   name: null,
+  previewPaths: [],
   ...over,
 });
 
@@ -78,6 +89,7 @@ beforeEach(() => {
   refresh.mockReset();
   createRoom.mockReset();
   setupCommon();
+  useLogPreviewUrlsMock.mockReturnValue({ urls: {} }); // 기본: 발급된 URL 없음.
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
 });
 
@@ -94,6 +106,29 @@ describe('LogListScreen — 포커스 재조회(로그 삭제/나가기 후 정�
     expect(refresh).not.toHaveBeenCalled();
     refireFocus();
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LogListScreen — 카드 대표 사진(첫 사진 1장·없으면 미노출)', () => {
+  it('previewPaths[0]의 signed URL이 있으면 커버 1장을 노출한다', () => {
+    useMyLogsContextMock.mockReturnValue({
+      state: { status: 'ready', logs: [log({ previewPaths: ['r1/m1/a.jpg'] })] },
+      refresh,
+    });
+    useLogPreviewUrlsMock.mockReturnValue({ urls: { 'r1/m1/a.jpg': 'https://s/a' } });
+    renderWithTheme(<LogListScreen />);
+    const thumbs = screen.getAllByTestId('log-preview-thumb');
+    expect(thumbs).toHaveLength(1);
+    expect(thumbs[0].props.source).toEqual({ uri: 'https://s/a' });
+  });
+
+  it('사진이 없으면(previewPaths 빈 배열) 커버를 노출하지 않는다', () => {
+    useMyLogsContextMock.mockReturnValue({
+      state: { status: 'ready', logs: [log({ previewPaths: [] })] },
+      refresh,
+    });
+    renderWithTheme(<LogListScreen />);
+    expect(screen.queryByTestId('log-preview-thumb')).toBeNull();
   });
 });
 

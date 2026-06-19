@@ -13,6 +13,7 @@ const makeLog = ({ memberCount }: { memberCount: number }) => ({
   name: null,
   deleteScheduledAt: null,
   deleteRequestedBy: null,
+  previewPaths: [],
 });
 
 describe('computeProfileStats', () => {
