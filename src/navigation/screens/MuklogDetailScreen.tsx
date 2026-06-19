@@ -218,8 +218,16 @@ export const MuklogDetailScreen = ({
   const hasMemo = muklog.memo !== null && muklog.memo.trim().length > 0;
   const memoText = hasMemo ? muklog.memo! : '메모가 없어요';
 
-  const hasRoad = muklog.roadAddress !== null && muklog.roadAddress.trim().length > 0;
-  const locationText = hasRoad ? muklog.roadAddress! : '위치 정보 없음';
+  const addressText = (muklog.roadAddress ?? '').trim();
+  const locationText = addressText.length > 0 ? addressText : '위치 정보 없음'; // InfoRow "위치" 값
+  // 하단 위치 박스 메시지: 주소 있으면 주소, 주소는 없지만 좌표가 있으면 안내, 둘 다 없을 때만 미보유 stub.
+  //   (기존엔 항상 "위치 정보가 아직 없어요"만 표시해 주소가 있어도 비어 보였음 — hasCoords/주소 분기 누락 버그.)
+  const locationBoxText =
+    addressText.length > 0
+      ? addressText
+      : muklog.hasCoords
+        ? '지도에 위치가 저장됐어요'
+        : '위치 정보가 아직 없어요';
   const dateText = formatVisitedDate({ visitedAt: muklog.visitedAt });
 
   const authorIsMe = muklog.createdBy === meId;
@@ -411,7 +419,8 @@ export const MuklogDetailScreen = ({
             </View>
           </View>
 
-          {/* 위치(미니맵) — 킷 mk-log:186-191. 좌표 없음(hasCoords=false) → stub 플레이스홀더(실지도 OUT). */}
+          {/* 위치 — 킷 mk-log:186-191의 미니맵 슬롯(실 지도 OUT). 주소 있으면 주소를, 없으면 안내/미보유 메시지를 표시.
+              (실 인터랙티브 미니맵은 후속 — map-tab WebView 재사용 가능.) */}
           <Text variant="sectionLabel" color="fg" style={[styles.sectionTitle, { marginTop: theme.spacing[24], marginBottom: theme.spacing[10] }]}>
             위치
           </Text>
@@ -423,16 +432,9 @@ export const MuklogDetailScreen = ({
               { backgroundColor: theme.color.surfaceAlt, gap: theme.spacing[6] },
             ]}
           >
-            <Icon name={IconName.Location} size={26} color="fgAssistive" />
-            <Text variant="bodySm" color="fgMuted">
-              위치 정보가 아직 없어요
-            </Text>
-          </View>
-          {/* 도로명 한 줄 — 킷 mk-log:188-191. */}
-          <View style={[styles.roadRow, { gap: theme.spacing[6], marginTop: theme.spacing[10] }]}>
-            <Icon name={IconName.Location} size={15} color="fgMuted" />
-            <Text variant="bodySm" color="fgWeak" style={styles.roadText}>
-              {locationText}
+            <Icon name={IconName.Location} size={26} color={addressText.length > 0 ? 'primary' : 'fgAssistive'} />
+            <Text variant="bodySm" color="fgMuted" style={styles.roadText}>
+              {locationBoxText}
             </Text>
           </View>
         </View>
@@ -626,7 +628,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  roadRow: { flexDirection: 'row', alignItems: 'center' },
   roadText: { flex: 1 },
   // more 메뉴 시트(킷 mk-log:197 gap 4) + 구분 헤어라인(킷 mk-log:199 height 1).
   menuList: { gap: 4 },

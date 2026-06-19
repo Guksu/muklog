@@ -5,7 +5,7 @@
 //         작성자 라벨, hasCoords stub 분기, loading/notFound/error 상태.
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { fireEvent, screen, within } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -166,15 +166,25 @@ describe('MuklogDetailScreen — 본문 NULL 폴백 (AC c)', () => {
   });
 });
 
-describe('MuklogDetailScreen — 위치/미니맵 stub (AC ⑤)', () => {
-  it('hasCoords=false면 미니맵 stub + 위치 InfoRow에 roadAddress', () => {
-    renderReady({ hasCoords: false, roadAddress: '서울 마포구 연남로 1' });
-    expect(screen.getByTestId('muklog-detail-map-stub')).toBeTruthy();
+describe('MuklogDetailScreen — 위치 섹션', () => {
+  it('roadAddress가 있으면 위치 박스에 주소를 표시한다(빈 stub 아님 — 회귀: 항상 "없어요" 표시되던 버그)', () => {
+    renderReady({ roadAddress: '서울 마포구 연남로 1', hasCoords: true });
+    const box = screen.getByTestId('muklog-detail-map-stub');
+    // 박스 안에 주소가 보이고, "위치 정보가 아직 없어요" stub은 없다.
     expect(screen.getAllByText('서울 마포구 연남로 1').length).toBeGreaterThan(0);
+    expect(within(box).queryByText('위치 정보가 아직 없어요')).toBeNull();
   });
 
-  it('roadAddress null이면 위치를 "위치 정보 없음"으로 표시한다', () => {
-    renderReady({ hasCoords: false, roadAddress: null });
+  it('주소는 없지만 좌표가 있으면 박스에 "지도에 위치가 저장됐어요"를 표시한다', () => {
+    renderReady({ roadAddress: null, hasCoords: true });
+    const box = screen.getByTestId('muklog-detail-map-stub');
+    expect(within(box).getByText('지도에 위치가 저장됐어요')).toBeTruthy();
+  });
+
+  it('주소·좌표 모두 없으면 박스에 "위치 정보가 아직 없어요" + InfoRow "위치 정보 없음"', () => {
+    renderReady({ roadAddress: null, hasCoords: false });
+    const box = screen.getByTestId('muklog-detail-map-stub');
+    expect(within(box).getByText('위치 정보가 아직 없어요')).toBeTruthy();
     expect(screen.getAllByText('위치 정보 없음').length).toBeGreaterThan(0);
   });
 });
