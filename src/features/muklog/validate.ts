@@ -6,6 +6,9 @@
 import { MuklogErrorToken } from './errors';
 import { type CreateMuklogInput, type NormalizedMuklogInput } from './types';
 
+/** 메모 최소 길이(필수 입력, 사용자 요청). 에디터 저장 게이팅·검증의 단일 출처. */
+export const MEMO_MIN_LENGTH = 5;
+
 /**
  * 오늘 날짜를 로컬 기준 'YYYY-MM-DD'로 반환한다(타임존 시프트 없이 표시·비교용).
  * @returns 'YYYY-MM-DD'
@@ -68,6 +71,12 @@ export const normalizeMuklogInput = ({
     throw new Error(MuklogErrorToken.VisitedAtInFuture);
   }
 
+  // 메모 필수·최소 5자(사용자 요청). 빈/공백/5자 미만이면 거부(클라 1차 — DB 트리거는 레거시 행 보호 위해 미강제).
+  const memo = (input.memo ?? '').trim();
+  if (memo.length < MEMO_MIN_LENGTH) {
+    throw new Error(MuklogErrorToken.MemoTooShort);
+  }
+
   // place 좌표(muklog-place, plan §3.8): 유한 number만 통과. 한쪽이라도 결측/NaN이면 쌍 무결성 위해 둘 다 null
   //   (지도 map-tab가 lat is not null만 핀 → 반쪽 좌표 차단). 좌표 쌍은 placeFieldsFromItem이 이미 보장하나 2차 방어.
   const latRaw = finiteCoord({ value: input.lat });
@@ -80,7 +89,7 @@ export const normalizeMuklogInput = ({
     category: trimToNull({ value: input.category }),
     area: trimToNull({ value: input.area }),
     rating,
-    memo: trimToNull({ value: input.memo }),
+    memo,
     visitedAt,
     kakaoPlaceId: trimToNull({ value: input.kakaoPlaceId }),
     address: trimToNull({ value: input.address }),

@@ -71,12 +71,27 @@ describe('MuklogEditor', () => {
     expect(save.props.accessibilityState?.disabled).toBe(true);
   });
 
+  it('메모가 5자 미만이면 저장 비활성 + 힌트 표시(메모 필수·최소 5자)', () => {
+    renderEditor();
+    fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+    fireEvent.changeText(screen.getByLabelText('메모'), '맛'); // 1자 < 5
+    expect(screen.getByLabelText('저장').props.accessibilityState?.disabled).toBe(true);
+    expect(screen.getByTestId('memo-hint')).toBeTruthy();
+  });
+
+  it('메모 5자 이상이면 저장 활성(장소명도 있을 때)', () => {
+    renderEditor();
+    fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+    fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요'); // 5자
+    expect(screen.getByLabelText('저장').props.accessibilityState?.disabled).toBe(false);
+  });
+
   it('장소명 입력 후 저장 시 createMuklog(input)을 호출하고 onSaved를 부른다 (AC2·AC12)', async () => {
     renderEditor();
     fireEvent.changeText(screen.getByLabelText('장소 이름'), '트라토리아 보나');
     fireEvent.press(screen.getByLabelText('카테고리 파스타·양식'));
     fireEvent.press(screen.getByLabelText('별점 5점'));
-    fireEvent.changeText(screen.getByLabelText('메모'), '맛있었다');
+    fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요');
 
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
@@ -89,7 +104,7 @@ describe('MuklogEditor', () => {
         placeName: '트라토리아 보나',
         category: 'pasta',
         rating: 5,
-        memo: '맛있었다',
+        memo: '맛있었어요',
       }),
     });
     expect(onSaved).toHaveBeenCalledTimes(1);
@@ -139,6 +154,7 @@ describe('MuklogEditor', () => {
     launchMock.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'file://a.jpg' }] });
     renderEditor();
     fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+    fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요'); // 메모 필수 ≥5자(저장 게이팅 충족)
 
     await act(async () => {
       fireEvent.press(screen.getByTestId('photo-add-tile'));
@@ -180,6 +196,7 @@ describe('MuklogEditor', () => {
       />,
     );
     fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+    fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요'); // 메모 필수 ≥5자(저장 게이팅 충족)
 
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
@@ -289,6 +306,7 @@ describe('MuklogEditor — 장소 자동채움 payload 합류 (muklog-place, T10
     renderWithTheme(
       <MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} selectedPlace={fullSelection} />,
     );
+    fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요'); // 메모 필수 ≥5자
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
@@ -317,6 +335,7 @@ describe('MuklogEditor — 장소 자동채움 payload 합류 (muklog-place, T10
       />,
     );
     fireEvent.press(screen.getByLabelText('카테고리 카페·디저트'));
+    fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요'); // 메모 필수 ≥5자
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
@@ -345,6 +364,7 @@ describe('MuklogEditor — 장소 자동채움 payload 합류 (muklog-place, T10
     expect(screen.getByTestId('place-search-empty')).toBeTruthy();
     // §4.2 직접 입력 → 검색어('없는가게')를 장소명으로 채택, 폼 복귀.
     fireEvent.press(screen.getByLabelText('직접 입력'));
+    fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요'); // 메모 필수 ≥5자
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
@@ -665,6 +685,7 @@ describe('MuklogEditor — 방문일 캘린더 시트 배선 (date-picker T4)', 
     const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     renderEditor();
     fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+    fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요'); // 메모 필수 ≥5자(저장 게이팅 충족)
     fireEvent.press(screen.getByLabelText(`방문일 ${formatVisitedDate({ visitedAt: todayLocalDate(), withDow: true })}, 선택`));
     fireEvent.press(screen.getByTestId('date-cell-1')); // 이번 달 1일(과거/오늘)
 

@@ -10,7 +10,7 @@ const baseInput = {
   category: 'pasta',
   area: '연남동',
   rating: 5,
-  memo: '맛있었다',
+  memo: '맛있었어요',
   visitedAt: '2026-02-14',
 };
 
@@ -53,13 +53,29 @@ describe('normalizeMuklogInput', () => {
     expect(result.visitedAt).toBe(todayLocalDate());
   });
 
-  it('빈/공백 메모·카테고리·area는 null로 정규화한다(데이터 결측)', () => {
+  it('빈/공백 카테고리·area는 null로 정규화한다(데이터 결측)', () => {
     const result = normalizeMuklogInput({
-      input: { ...baseInput, memo: '   ', category: null, area: '' },
+      input: { ...baseInput, category: null, area: '' },
     });
-    expect(result.memo).toBeNull();
     expect(result.category).toBeNull();
     expect(result.area).toBeNull();
+  });
+
+  it('메모가 없거나 공백/5자 미만이면 MEMO_TOO_SHORT를 throw한다(메모 필수·최소 5자)', () => {
+    expect(() => normalizeMuklogInput({ input: { ...baseInput, memo: '   ' } })).toThrow(
+      MuklogErrorToken.MemoTooShort,
+    );
+    expect(() => normalizeMuklogInput({ input: { ...baseInput, memo: '맛' } })).toThrow(
+      MuklogErrorToken.MemoTooShort,
+    );
+    expect(() => normalizeMuklogInput({ input: { ...baseInput, memo: null } })).toThrow(
+      MuklogErrorToken.MemoTooShort,
+    );
+  });
+
+  it('메모 5자 이상이면 trim해서 통과한다', () => {
+    const result = normalizeMuklogInput({ input: { ...baseInput, memo: '  맛있었어요  ' } });
+    expect(result.memo).toBe('맛있었어요');
   });
 
   // 장소검색(muklog-place) — place 필드 통과/정규화 (plan §3.8 / T8·T9).
@@ -119,7 +135,7 @@ describe('toMuklogRow', () => {
       place_name: '트라토리아 보나',
       category: 'pasta',
       area: '연남동',
-      memo: '맛있었다',
+      memo: '맛있었어요',
       rating: 5,
       visited_at: '2026-02-14',
       created_by: 'u9',

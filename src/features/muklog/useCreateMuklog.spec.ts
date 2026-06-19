@@ -41,7 +41,7 @@ const validInput = {
   category: 'pasta',
   area: '연남동',
   rating: 5,
-  memo: '맛있었다',
+  memo: '맛있었어요',
   visitedAt: '2026-02-14',
 };
 

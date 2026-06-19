@@ -11,6 +11,8 @@ export const MuklogErrorToken = {
   PlaceNameRequired: 'PLACE_NAME_REQUIRED',
   RatingOutOfRange: 'RATING_OUT_OF_RANGE',
   VisitedAtInFuture: 'VISITED_AT_IN_FUTURE',
+  MemoTooShort: 'MEMO_TOO_SHORT', // 메모 필수·최소 5자(클라 검증, 사용자 요청)
+
   // 사진 슬라이스(muklog-photos) — 트리거(enforce_muklog_photo_fields)·권한·업로드.
   PhotoOrderOutOfRange: 'PHOTO_ORDER_OUT_OF_RANGE', // 트리거: order_index 0~4 범위 밖
   PhotoLimitExceeded: 'PHOTO_LIMIT_EXCEEDED', // 트리거: 먹로그당 5장 초과
@@ -35,6 +37,7 @@ export const MUKLOG_ERROR_MESSAGES: Record<string, string> = {
   [MuklogErrorToken.PlaceNameRequired]: '장소 이름을 입력해 주세요.',
   [MuklogErrorToken.RatingOutOfRange]: '별점은 1~5 사이로 선택해 주세요.',
   [MuklogErrorToken.VisitedAtInFuture]: '방문일은 오늘까지만 선택할 수 있어요.',
+  [MuklogErrorToken.MemoTooShort]: '메모를 최소 5자 이상 입력해 주세요.',
   [MuklogErrorToken.PhotoOrderOutOfRange]: '사진은 최대 5장까지 첨부할 수 있어요.',
   [MuklogErrorToken.PhotoLimitExceeded]: '사진은 최대 5장까지 첨부할 수 있어요.',
   [MuklogErrorToken.PermissionDenied]: '사진 접근 권한이 필요해요. 설정에서 허용해 주세요.',

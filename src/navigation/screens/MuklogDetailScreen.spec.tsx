@@ -12,10 +12,14 @@ import { renderWithTheme } from '@/test/renderWithTheme';
 // MuklogMiniMap이 @/lib/env(모듈 로드 시 SUPABASE_URL 필수 throw)·react-native-webview를 전이 import → 스텁.
 //   KAKAO_JS_KEY '' → 미니맵 폴백(텍스트 박스) 경로(이 스펙은 위치 섹션 폴백 동작을 검증).
 jest.mock('@/lib/env', () => ({ env: { KAKAO_JS_KEY: '' } }));
-jest.mock('react-native-webview', () => {
-  const { View } = require('react-native');
-  return { WebView: (props: Record<string, unknown>) => <View testID="webview" {...props} /> };
-});
+jest.mock(
+  'react-native-webview',
+  () => {
+    const Rn = require('react-native');
+    return { WebView: (props: Record<string, unknown>) => <Rn.View testID="webview" {...props} /> };
+  },
+  { virtual: true },
+);
 
 import {
   MuklogDetailScreen,

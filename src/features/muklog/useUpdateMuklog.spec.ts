@@ -79,7 +79,7 @@ const baseInput = {
   category: 'cafe' as string | null,
   area: null as string | null,
   rating: 4 as number | null,
-  memo: '좋았다' as string | null,
+  memo: '좋았습니다' as string | null,
   visitedAt: '2026-02-14' as string | null,
 };
 
@@ -122,7 +122,7 @@ describe('useUpdateMuklog', () => {
       category: 'cafe',
       area: null,
       rating: 4,
-      memo: '좋았다',
+      memo: '좋았습니다',
       visited_at: '2026-02-14',
       // place 필드(muklog-place §3.8) — baseInput에 좌표 없음 → 모두 null.
       kakao_place_id: null,

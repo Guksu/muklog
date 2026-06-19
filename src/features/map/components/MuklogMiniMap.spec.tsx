@@ -8,11 +8,15 @@ import { renderWithTheme } from '@/test/renderWithTheme';
 
 // env: 기본 키 있음(지도 경로). 키 없는 폴백은 테스트에서 오버라이드.
 jest.mock('@/lib/env', () => ({ env: { KAKAO_JS_KEY: 'test-js-key' } }));
-// react-native-webview: 실제 WebView 대신 testID 스텁(html prop 노출).
-jest.mock('react-native-webview', () => {
-  const { View } = require('react-native');
-  return { WebView: (props: Record<string, unknown>) => <View testID="webview" {...props} /> };
-});
+// react-native-webview: 실제 WebView(네이티브 모듈) 대신 testID 스텁. virtual:true — MapWebView.spec와 동일(네이티브 모듈 회피).
+jest.mock(
+  'react-native-webview',
+  () => {
+    const Rn = require('react-native');
+    return { WebView: (props: Record<string, unknown>) => <Rn.View testID="webview" {...props} /> };
+  },
+  { virtual: true },
+);
 
 import { env } from '@/lib/env';
 import { MuklogMiniMap } from './MuklogMiniMap';

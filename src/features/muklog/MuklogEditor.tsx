@@ -37,7 +37,7 @@ import {
 } from './types';
 import { useCreateMuklog } from './useCreateMuklog';
 import { useMuklogPhotoPicker } from './useMuklogPhotoPicker';
-import { todayLocalDate } from './validate';
+import { MEMO_MIN_LENGTH, todayLocalDate } from './validate';
 
 // 결과 항목 → 매핑 카테고리(커버/라벨) 기본 해석. 컨테이너가 resolveCategory 미주입 시 에디터가 자체 제공.
 const defaultResolveCategory = ({ item }: { item: PlaceSearchItem }): MuklogCategoryKey | null =>
@@ -306,7 +306,9 @@ export const MuklogEditor = ({
     picker.removePhoto({ index });
   };
 
-  const canSave = placeName.trim().length > 0 && !loading;
+  // 저장 가능: 장소명 + 메모 최소 5자(필수, 사용자 요청) + 저장 중 아님.
+  const memoLongEnough = memo.trim().length >= MEMO_MIN_LENGTH;
+  const canSave = placeName.trim().length > 0 && memoLongEnough && !loading;
 
   const handleSave = async () => {
     if (isEdit) {
@@ -559,6 +561,15 @@ export const MuklogEditor = ({
           placeholderTextColor={theme.color.fgMuted}
           style={[styles.input, styles.memo, fieldInput]}
         />
+        {/* 메모 필수·최소 5자 안내(사용자 요청). 미달 시 강조 톤. */}
+        <Text
+          testID="memo-hint"
+          variant="caption"
+          color={memoLongEnough ? 'fgMuted' : 'accentStrong'}
+          style={{ marginTop: theme.spacing[6] }}
+        >
+          {`메모는 최소 ${MEMO_MIN_LENGTH}자 이상 입력해 주세요.`}
+        </Text>
 
         {/* 방문일 (기본 today, 미래 차단은 검증이 최종 방어) — 탭형 행→DatePickerSheet(킷 mk-log:416-420). */}
         <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
