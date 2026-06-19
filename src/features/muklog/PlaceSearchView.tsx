@@ -66,7 +66,8 @@ export const PlaceSearchView = ({
     ((status === 'ready' && results.length === 0) || status === 'error');
 
   return (
-    <Screen edges={['left', 'right', 'bottom']} style={styles.screen}>
+    // 'bottom' 제외: 비-GNB 엣지투엣지 하단 빈 띠 방지 — 결과 리스트 paddingBottom+insets.bottom으로 인디케이터 클리어.
+    <Screen edges={['left', 'right']} style={styles.screen}>
       {/* 헤더 — 킷 mk-log:388: 뒤로(chevron-left 24) + 검색 pill(flex 1). paddingTop SP→inset. */}
       <View
         style={[
@@ -177,8 +178,8 @@ export const PlaceSearchView = ({
         ) : null}
 
         {status === 'ready' && results.length > 0 ? (
-          // 킷 mk-log:400 결과 리스트 padding 0/12/24.
-          <View style={{ paddingHorizontal: theme.spacing[12], paddingBottom: theme.spacing[24] }}>
+          // 킷 mk-log:400 결과 리스트 padding 0/12/24(+insets.bottom 인디케이터 클리어).
+          <View style={{ paddingHorizontal: theme.spacing[12], paddingBottom: theme.spacing[24] + insets.bottom }}>
             {results.map((resultItem, index) => (
               <PlaceResultRow
                 key={resultItem.kakaoPlaceId || `${resultItem.placeName}-${index}`}

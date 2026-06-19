@@ -16,6 +16,7 @@
 //     저장버튼(mk-log:296, 적용완료). 본 패스는 구조/배선(상태머신)만 — accessibilityLabel/계약은 테스트 의존.
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DatePickerSheet, Icon, IconName, Screen, Stars, SubBar, Text } from '@/components';
 import { useTheme } from '@/theme';
@@ -164,6 +165,7 @@ export const MuklogEditor = ({
   onClearPlace,
 }: MuklogEditorProps) => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   // 킷 isEdit = !!initial. 편집 모드 = 저장이 onSubmit(외부 훅), 작성 모드 = 내부 useCreateMuklog.
   const isEdit = initial !== undefined;
 
@@ -417,8 +419,9 @@ export const MuklogEditor = ({
   }
 
   return (
-    <Screen edges={['left', 'right', 'bottom']} style={styles.screen}>
-      {/* 'top' 제외: SubBar가 insets.top을 직접 처리(LogScreen/Join/Profile/RoomCreated 동일 패턴). 포함 시 top inset 이중 적용. */}
+    <Screen edges={['left', 'right']} style={styles.screen}>
+      {/* 'top' 제외: SubBar가 insets.top을 직접 처리(LogScreen/Join/Profile/RoomCreated 동일 패턴). 포함 시 top inset 이중 적용.
+          'bottom' 제외: 비-GNB 엣지투엣지에서 하단 빈 띠 방지 — 배경은 화면 끝까지, 콘텐츠는 contentContainer paddingBottom+insets.bottom으로 인디케이터 클리어. */}
       <SubBar title={isEdit ? '먹로그 편집' : '새 먹로그'} onBack={onBack} right={saveAction} />
       <ScrollView
         keyboardShouldPersistTaps="handled"
@@ -426,7 +429,7 @@ export const MuklogEditor = ({
         contentContainerStyle={{
           paddingHorizontal: theme.spacing[20],
           paddingTop: theme.spacing[8],
-          paddingBottom: theme.spacing[28],
+          paddingBottom: theme.spacing[28] + insets.bottom,
         }}
       >
         {/* 장소 (필수) — 킷 mk-log MuklogEditor place 필드. 선택됨이면 요약카드, 아니면 검색+수동입력(ui-spec §5.1). */}

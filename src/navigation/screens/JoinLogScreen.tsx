@@ -7,6 +7,7 @@
 // 생산자(소비): useJoinRoom(join_room RPC) + useMyLogsContext(refresh) + useNavigation(replace).
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -21,6 +22,7 @@ const HEART_EMOJI = '💌';
 
 export const JoinLogScreen = () => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { joinRoom, loading, error } = useJoinRoom();
   const myLogs = useMyLogsContext();
@@ -40,17 +42,18 @@ export const JoinLogScreen = () => {
   };
 
   return (
-    <Screen edges={['left', 'right', 'bottom']} style={styles.screen}>
-      {/* 킷 mk-home:150 SubBar "초대코드 입장"(좌측정렬). 네이티브 헤더는 AppNavigator에서 headerShown:false. */}
+    <Screen edges={['left', 'right']} style={styles.screen}>
+      {/* 킷 mk-home:150 SubBar "초대코드 입장"(좌측정렬). 네이티브 헤더는 AppNavigator에서 headerShown:false.
+          'bottom' 제외: 비-GNB 엣지투엣지 하단 빈 띠 방지 — 콘텐츠 paddingBottom+insets.bottom으로 인디케이터 클리어. */}
       <SubBar title="초대코드 입장" onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          // 킷 JoinScreen 상단 padding 12(plan B5), 좌우/하단 24 유지.
+          // 킷 JoinScreen 상단 padding 12(plan B5), 좌우/하단 24 유지(+insets.bottom 인디케이터 클리어).
           {
             paddingTop: theme.spacing[12],
             paddingHorizontal: theme.spacing[24],
-            paddingBottom: theme.spacing[24],
+            paddingBottom: theme.spacing[24] + insets.bottom,
           },
         ]}
       >

@@ -491,7 +491,9 @@ export const LogScreen = () => {
   );
 
   return (
-    <Screen edges={['left', 'right', 'bottom']} style={styles.screen}>
+    <Screen edges={['left', 'right']} style={styles.screen}>
+      {/* 'bottom' 제외: 비-GNB 엣지투엣지 하단 빈 띠 방지 — 최하단 리스트(MuklogList/WishlistView) 스크롤
+          paddingBottom에 insets.bottom을 반영해 인디케이터 클리어(배경은 화면 끝까지). */}
       {/* 상단 헤더 — 뒤로가기 + 아바타 겹침 + 로그명(킷 mk-log:18-29). 킷 헤더엔 멤버 배지 없음(커플 여부는 아바타 겹침으로 표현).
           네이티브 헤더는 숨김(AppNavigator) — 이 자체 헤더가 단일 헤더(이중 헤더 방지).
           ⚠️ 네이티브 헤더 OFF로 사라진 top inset을 여기서 보전 — 킷 MK_STATUS_PAD=56(시뮬 근사 고정) 대신

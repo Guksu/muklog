@@ -7,6 +7,7 @@
 // 생산자: useProfile(조회)/useUpdateProfile(저장·업로드)/useMyLogs(통계). 소비자: 상태별 UX. 스타일=토큰만(raw hex 0).
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -55,6 +56,7 @@ export const ProfileScreen = () => {
 
 const ProfileContent = ({ userId }: { userId: string }) => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { signOut } = useAuth();
   const { state, refresh } = useProfile({ userId });
@@ -151,10 +153,11 @@ const ProfileContent = ({ userId }: { userId: string }) => {
   };
 
   return (
-    <Screen edges={['bottom', 'left', 'right']} style={styles.flush}>
-      {/* 킷 mk-log:428 SubBar "프로필"(좌측정렬). 네이티브 헤더는 AppNavigator에서 headerShown:false. */}
+    <Screen edges={['left', 'right']} style={styles.flush}>
+      {/* 킷 mk-log:428 SubBar "프로필"(좌측정렬). 네이티브 헤더는 AppNavigator에서 headerShown:false.
+          'bottom' 제외: 비-GNB 엣지투엣지 하단 빈 띠 방지 — scrollContent paddingBottom+insets.bottom으로 인디케이터 클리어. */}
       <SubBar title="프로필" onBack={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: 28 + insets.bottom }]}>
         {/* 아바타 + 카메라 배지 + 닉네임 */}
         <View style={styles.avatarSection}>
           <Pressable

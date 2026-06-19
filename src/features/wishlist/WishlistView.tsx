@@ -6,6 +6,7 @@
 //   "짝꿍" 익명 라벨은 킷 정합 표시 카피(파트너 실프로필 RLS 비노출 — MuklogCard "짝꿍이 기록"과 동일 선례).
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar, Button, FoodCover, Icon, IconName, Text } from '@/components';
 import { useTheme } from '@/theme';
@@ -43,11 +44,14 @@ export const WishlistView = ({
   onRemove,
 }: WishlistViewProps) => {
   const theme = useTheme();
+  // LogScreen이 'bottom' edge를 떼면서(엣지투엣지 하단 빈 띠 제거) 이 뷰가 화면 끝까지 차므로,
+  //   스크롤 tail paddingBottom에 insets.bottom을 더해 home indicator 클리어런스를 보존한다.
+  const insets = useSafeAreaInsets();
 
   // 빈 상태 — 킷 mk-extra:179-189. 📍 + 제목 + 안내문(2줄) + soft 추가 버튼.
   if (items.length === 0) {
     return (
-      <ScrollView contentContainerStyle={styles.emptyContainer}>
+      <ScrollView contentContainerStyle={[styles.emptyContainer, { paddingBottom: 48 + insets.bottom }]}>
         <Text style={styles.emptyEmoji}>📍</Text>
         <Text
           variant="sheetTitle"
@@ -75,7 +79,7 @@ export const WishlistView = ({
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.listContainer}>
+    <ScrollView contentContainerStyle={[styles.listContainer, { paddingBottom: 24 + insets.bottom }]}>
       {/* 상단 점선 추가 버튼 — 킷 ex.addWish(231): 2px dashed accent-line, radius 16, plus + accent-strong. */}
       <Pressable
         accessibilityRole="button"

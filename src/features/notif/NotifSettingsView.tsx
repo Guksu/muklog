@@ -7,6 +7,7 @@
 //   스타일은 토큰만(raw hex/숫자 색 0). 이모지 허용(킷 기준 🔔).
 import React from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar, MkSwitch, Screen, SubBar, Text } from '@/components';
 import { useTheme } from '@/theme';
@@ -62,6 +63,7 @@ export const NotifSettingsView = ({
   onBack,
 }: NotifSettingsViewProps) => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   // 킷 ex.card(mk-extra:229): surface + radius 20(sheet) + 소프트 섀도우 + overflow hidden(행 구분선 클립).
   const cardStyle: ViewStyle = {
@@ -74,15 +76,16 @@ export const NotifSettingsView = ({
   const logsCardStyle: ViewStyle = { ...cardStyle, opacity: master ? 1 : DIM_OPACITY };
 
   return (
-    <Screen edges={['left', 'right', 'bottom']} style={styles.screen}>
-      {/* 'top' 제외: SubBar가 insets.top을 직접 처리(기존 SubBar 화면 동일 패턴). */}
+    <Screen edges={['left', 'right']} style={styles.screen}>
+      {/* 'top' 제외: SubBar가 insets.top을 직접 처리(기존 SubBar 화면 동일 패턴).
+          'bottom' 제외: 비-GNB 엣지투엣지 하단 빈 띠 방지 — 콘텐츠 paddingBottom+insets.bottom으로 인디케이터 클리어. */}
       <SubBar title="알림 설정" onBack={onBack} />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={{
           paddingHorizontal: theme.spacing[20],
           paddingTop: theme.spacing[12],
-          paddingBottom: theme.spacing[28],
+          paddingBottom: theme.spacing[28] + insets.bottom,
         }}
       >
         {/* 마스터 토글 카드(킷 mk-extra:139-148) */}

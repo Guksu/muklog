@@ -8,6 +8,18 @@ import { supabase } from '@/lib/supabase';
 import { MuklogErrorToken } from './errors';
 import { type PlaceSearchItem } from './types';
 
+// 음식 카테고리(Kakao category_group_code) — FD6=음식점, CE7=카페. 그 외(병원·마트·학원 등)는 결과에서 제외(사용자 요청).
+//   muklog는 맛집·카페 기록이므로 이 둘만 노출. categoryGroupCode가 ''(미분류)인 항목도 제외.
+export const FOOD_CATEGORY_GROUP_CODES: readonly string[] = ['FD6', 'CE7'];
+
+/**
+ * 검색 결과를 음식 카테고리(음식점·카페)만 남긴다. 비음식(병원·마트 등) 결과 제거.
+ * @param items place-search가 반환한 결과 배열
+ * @returns categoryGroupCode가 FD6/CE7인 항목만
+ */
+export const filterFoodPlaces = ({ items }: { items: PlaceSearchItem[] }): PlaceSearchItem[] =>
+  items.filter((item) => FOOD_CATEGORY_GROUP_CODES.includes(item.categoryGroupCode));
+
 // searchPlaces가 식별하는 검색 실패 토큰(나머지는 PLACE_SEARCH_FAILED로 흡수).
 const PLACE_SEARCH_TOKENS: string[] = [
   MuklogErrorToken.QueryRequired,
@@ -86,5 +98,6 @@ export const searchPlaces = async ({ query }: { query: string }): Promise<PlaceS
   if (typeof body.error === 'string') {
     throw new Error(tokenFromText({ value: body.error }) ?? MuklogErrorToken.PlaceSearchFailed);
   }
-  return body.results ?? [];
+  // 음식점·카페만 노출(비음식 결과 제외, 사용자 요청).
+  return filterFoodPlaces({ items: body.results ?? [] });
 };

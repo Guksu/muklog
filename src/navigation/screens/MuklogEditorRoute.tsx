@@ -120,7 +120,7 @@ const EditEditorRoute = ({ roomId, muklogId }: { roomId: string; muklogId: strin
   // 프리필 조회 loading/error/notFound — 에디터는 muklog ready일 때만 마운트. SubBar는 동일 골격 유지.
   if (state.status === 'loading') {
     return (
-      <Screen edges={['top', 'left', 'right', 'bottom']} style={styles.screen}>
+      <Screen edges={['top', 'left', 'right']} style={styles.screen}>
         <SubBar title="먹로그 편집" onBack={handleBack} />
         <View style={styles.center}>
           <ActivityIndicator testID="editor-prefill-loading" />
@@ -130,7 +130,7 @@ const EditEditorRoute = ({ roomId, muklogId }: { roomId: string; muklogId: strin
   }
   if (!muklog) {
     return (
-      <Screen edges={['top', 'left', 'right', 'bottom']} style={styles.screen}>
+      <Screen edges={['top', 'left', 'right']} style={styles.screen}>
         <SubBar title="먹로그 편집" onBack={handleBack} />
         <View style={styles.center}>
           <Text variant="body" color="error" style={styles.centerText}>

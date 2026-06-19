@@ -40,6 +40,19 @@ describe('searchPlaces', () => {
     expect(await searchPlaces({ query: '보나' })).toEqual([]);
   });
 
+  it('음식점(FD6)·카페(CE7)만 남기고 비음식(병원/마트/미분류)은 제외한다 (사용자 요청)', async () => {
+    const cafe = { ...item, kakaoPlaceId: 'c1', categoryGroupCode: 'CE7' };
+    const hospital = { ...item, kakaoPlaceId: 'h1', categoryGroupCode: 'HP8' };
+    const mart = { ...item, kakaoPlaceId: 'm1', categoryGroupCode: 'MT1' };
+    const uncategorized = { ...item, kakaoPlaceId: 'u1', categoryGroupCode: '' };
+    invokeMock.mockResolvedValueOnce({
+      data: { results: [item, cafe, hospital, mart, uncategorized] },
+      error: null,
+    });
+    const results = await searchPlaces({ query: '보나' });
+    expect(results.map((r) => r.kakaoPlaceId)).toEqual(['26338954', 'c1']);
+  });
+
   it("data.error 토큰(KAKAO_KEY_MISSING)을 그대로 throw한다", async () => {
     invokeMock.mockResolvedValueOnce({ data: { error: 'KAKAO_KEY_MISSING' }, error: null });
     await expect(searchPlaces({ query: '보나' })).rejects.toThrow('KAKAO_KEY_MISSING');

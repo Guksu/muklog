@@ -5,6 +5,7 @@
 //   이모지 허용(킷 정책). 스타일은 토큰만(raw hex 0).
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, InviteCodeCard, Screen, SubBar, Text } from '@/components';
 import { useTheme } from '@/theme';
@@ -22,14 +23,16 @@ export type RoomCreatedScreenProps = {
 
 export const RoomCreatedScreen = ({ inviteCode, onEnter, onLater }: RoomCreatedScreenProps) => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   return (
-    <Screen edges={['left', 'right', 'bottom']} style={styles.screen}>
+    // 'bottom' 제외: 비-GNB 엣지투엣지 하단 빈 띠 방지 — 콘텐츠 paddingBottom+insets.bottom으로 인디케이터 클리어.
+    <Screen edges={['left', 'right']} style={styles.screen}>
       <SubBar title="로그 만들기" onBack={onLater} />
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          // 킷 mk-home:200 본문 padding 12 / 24.
-          { paddingTop: theme.spacing[12], paddingHorizontal: theme.spacing[24], paddingBottom: theme.spacing[24] },
+          // 킷 mk-home:200 본문 padding 12 / 24(+insets.bottom 인디케이터 클리어).
+          { paddingTop: theme.spacing[12], paddingHorizontal: theme.spacing[24], paddingBottom: theme.spacing[24] + insets.bottom },
         ]}
       >
         {/* 킷 mk-home:201 🎉 fontSize 56, center. */}

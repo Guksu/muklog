@@ -11,6 +11,7 @@
 // 소비: LogScreen 'log' 세그에서 <MuklogList roomId meId state refresh /> 마운트(state=useMuklogs, meId=auth uid).
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, type NavigationProp } from '@react-navigation/native';
 
 import { Button, Chip, Icon, IconName, Text } from '@/components';
@@ -35,6 +36,9 @@ export type MuklogListProps = {
 
 export const MuklogList = ({ roomId, meId, state, refresh }: MuklogListProps) => {
   const theme = useTheme();
+  // LogScreen이 'bottom' edge를 떼면서(엣지투엣지 하단 빈 띠 제거) 이 리스트가 화면 끝까지 차므로,
+  //   스크롤 tail·FAB 위치에 insets.bottom을 더해 home indicator 클리어런스를 보존한다.
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp<AppStackParamList>>();
   // 카테고리 필터(B2) — null="전체". 선택 상태만 화면 보유, 도출/필터는 순수 유틸(filterByCategory).
   const [category, setCategory] = useState<string | null>(null);
@@ -48,7 +52,7 @@ export const MuklogList = ({ roomId, meId, state, refresh }: MuklogListProps) =>
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={{ padding: theme.spacing[20], paddingBottom: theme.spacing[80] }}
+        contentContainerStyle={{ padding: theme.spacing[20], paddingBottom: theme.spacing[80] + insets.bottom }}
       >
         {/* 섹션 헤더 */}
         <View style={[styles.headerRow, { marginBottom: theme.spacing[10] }]}>
@@ -152,7 +156,7 @@ export const MuklogList = ({ roomId, meId, state, refresh }: MuklogListProps) =>
           {
             backgroundColor: theme.color.primary,
             borderRadius: theme.radius.full,
-            bottom: theme.spacing[26],
+            bottom: theme.spacing[26] + insets.bottom,
             right: theme.spacing[18],
             // 킷 mk-log:495 FAB 글로우 0 8px 22px var(--mk-accent-shadow) — 컬러(블루) 그림자. shadow.md(검정) 대신 accent 틴트.
             shadowColor: theme.color.accentShadow,
