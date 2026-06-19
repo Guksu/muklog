@@ -23,6 +23,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar, Button, FoodCover, Icon, IconButton, IconName, Sheet, Stars, Text } from '@/components';
+// 직접 경로 import — 배럴(@/features/map/components)은 다른 지도 컴포넌트(expo-location 등) 의존을 함께 끌어옴.
+import { MuklogMiniMap } from '@/features/map/components/MuklogMiniMap';
 import { categoryEmoji, categoryLabel } from '@/features/muklog/categories';
 import { formatVisitedDate } from '@/features/muklog/formatVisitedDate';
 import { useTheme } from '@/theme';
@@ -41,8 +43,10 @@ export type MuklogDetailViewData = {
   memo: string | null; // null/빈문자 → "메모가 없어요"
   rating: number | null; // 1~5, null → "미평가"
   visitedAt: string | null; // 'YYYY-MM-DD'
-  roadAddress: string | null; // null → "위치 정보 없음"(현재 항상 null, muklog-place 전)
-  hasCoords: boolean; // false → 미니맵 stub(현재 항상 false)
+  roadAddress: string | null; // null → "위치 정보 없음" 폴백
+  hasCoords: boolean; // lat/lng 보유 여부(파생)
+  lat: number | null; // 미니맵 핀 좌표(muklog-place). null → 지도 대신 텍스트 폴백
+  lng: number | null;
   createdBy: string; // uuid → meId 비교로 작성자 라벨/아바타 파생
   photos: MuklogDetailPhoto[]; // order_index 오름차순. [] → FoodCover 폴백 1칸
 };
@@ -424,19 +428,12 @@ export const MuklogDetailScreen = ({
           <Text variant="sectionLabel" color="fg" style={[styles.sectionTitle, { marginTop: theme.spacing[24], marginBottom: theme.spacing[10] }]}>
             위치
           </Text>
-          <View
-            testID="muklog-detail-map-stub"
-            style={[
-              styles.mapStub,
-              card,
-              { backgroundColor: theme.color.surfaceAlt, gap: theme.spacing[6] },
-            ]}
-          >
-            <Icon name={IconName.Location} size={26} color={addressText.length > 0 ? 'primary' : 'fgAssistive'} />
-            <Text variant="bodySm" color="fgMuted" style={styles.roadText}>
-              {locationBoxText}
-            </Text>
-          </View>
+          <MuklogMiniMap
+            lat={muklog.lat}
+            lng={muklog.lng}
+            fallbackText={locationBoxText}
+            fallbackHasInfo={addressText.length > 0}
+          />
         </View>
       </ScrollView>
 

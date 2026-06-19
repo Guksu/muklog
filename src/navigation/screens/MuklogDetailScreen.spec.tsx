@@ -9,6 +9,14 @@ import { fireEvent, screen, within } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
+// MuklogMiniMap이 @/lib/env(모듈 로드 시 SUPABASE_URL 필수 throw)·react-native-webview를 전이 import → 스텁.
+//   KAKAO_JS_KEY '' → 미니맵 폴백(텍스트 박스) 경로(이 스펙은 위치 섹션 폴백 동작을 검증).
+jest.mock('@/lib/env', () => ({ env: { KAKAO_JS_KEY: '' } }));
+jest.mock('react-native-webview', () => {
+  const { View } = require('react-native');
+  return { WebView: (props: Record<string, unknown>) => <View testID="webview" {...props} /> };
+});
+
 import {
   MuklogDetailScreen,
   type MuklogDetailPhoto,
@@ -31,6 +39,8 @@ const data = (over?: Partial<MuklogDetailViewData>): MuklogDetailViewData => ({
   visitedAt: '2026-02-14',
   roadAddress: '서울 마포구 연남로 1',
   hasCoords: false,
+  lat: null,
+  lng: null,
   createdBy: 'me-uid',
   photos: [photo()],
   ...over,
