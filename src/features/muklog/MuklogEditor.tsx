@@ -236,13 +236,6 @@ export const MuklogEditor = ({
     ],
   );
 
-  // 선택 해제(plan D2) — 컨테이너에 알리고(selectedPlace=null), 에디터의 placeData 좌표/주소/kakaoPlaceId NULL 리셋(area 유지).
-  //   장소명은 유지(D2) → selectedPlace=null이 되면 manual-chosen 카드로 전환(이름 보존, 좌표만 NULL).
-  const handleClearPlace = () => {
-    onClearPlace?.();
-    setPlaceData((prev) => ({ ...EMPTY_PLACE_DATA, area: prev.area }));
-  };
-
   // ── 장소검색 풀스크린 스왑(FLAG-1b) ──────────────────────────────────────────────────
   const openSearch = () => setSearching(true);
 
@@ -250,13 +243,6 @@ export const MuklogEditor = ({
   const handlePickInSearch = ({ item }: { item: PlaceSearchItem }) => {
     onSelectPlace?.({ item });
     setSearching(false);
-  };
-
-  // manual-chosen 카드 해제 — 좌표·장소명 전부 리셋(searchBtn으로 복귀). selectedPlace 해제(D2)와 달리 이름까지 비움.
-  const handleClearChosen = () => {
-    onClearPlace?.();
-    setPlaceName('');
-    setPlaceData({ ...EMPTY_PLACE_DATA });
   };
 
   // 검색 0건/실패 시 "직접 입력"(§4.2 폴백) — 검색어를 장소명으로 채택(좌표 없음) 후 폼 복귀.
@@ -447,52 +433,24 @@ export const MuklogEditor = ({
           어디서 먹었나요? <Text variant="fieldLabel" color="primary">*</Text>
         </Text>
         {selectedPlace ? (
-          // 선택됨(검색 결과) — 킷 placeChosen 요약카드 + "변경"(재검색). onClear=좌표 해제(이름 유지, D2).
-          <>
-            <PlaceSelectedSummary
-              placeName={selectedPlace.placeName}
-              category={selectedPlace.category}
-              roadAddress={selectedPlace.roadAddress}
-              area={selectedPlace.area}
-              onClear={handleClearPlace}
-            />
-            {placeSearch ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="장소 변경"
-                onPress={openSearch}
-                hitSlop={theme.spacing[8]}
-                style={[styles.changeBtn, { marginTop: theme.spacing[8] }]}
-              >
-                <Text variant="badge" color="accentStrong">
-                  변경
-                </Text>
-              </Pressable>
-            ) : null}
-          </>
+          // 선택됨(검색 결과) — 킷 placeChosen 요약카드. 우상단 "변경"=재검색 진입(단일 액션, 사용자 요청).
+          <PlaceSelectedSummary
+            placeName={selectedPlace.placeName}
+            category={selectedPlace.category}
+            roadAddress={selectedPlace.roadAddress}
+            area={selectedPlace.area}
+            onChange={openSearch}
+          />
         ) : placeSearch ? (
           placeName.trim().length > 0 ? (
-            // 장소명만 있음(편집 프리필 / 직접입력 / 좌표해제 후) — manual-chosen 카드 + "변경".
-            <>
-              <PlaceSelectedSummary
-                placeName={placeName}
-                category={category}
-                roadAddress={placeData.roadAddress}
-                area={placeData.area}
-                onClear={handleClearChosen}
-              />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="장소 변경"
-                onPress={openSearch}
-                hitSlop={theme.spacing[8]}
-                style={[styles.changeBtn, { marginTop: theme.spacing[8] }]}
-              >
-                <Text variant="badge" color="accentStrong">
-                  변경
-                </Text>
-              </Pressable>
-            </>
+            // 장소명만 있음(편집 프리필 / 직접입력) — manual-chosen 카드. 우상단 "변경"=재검색 진입.
+            <PlaceSelectedSummary
+              placeName={placeName}
+              category={category}
+              roadAddress={placeData.roadAddress}
+              area={placeData.area}
+              onChange={openSearch}
+            />
           ) : (
             // 미선택 — 킷 searchBtn(돋보기 + "장소 검색 (카카오)") → 풀스크린 검색뷰 진입.
             <Pressable
@@ -647,9 +605,8 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderWidth: StyleSheet.hairlineWidth },
   saveAction: { paddingVertical: 8, paddingHorizontal: 6, minWidth: 44, alignItems: 'flex-end' },
-  // FLAG-1b: 장소 검색 진입 버튼(킷 searchBtn mk-log:497, border 1.5) / "변경" 링크(킷 mk-log:309 우측 정렬). 검색뷰=PlaceSearchView.
+  // FLAG-1b: 장소 검색 진입 버튼(킷 searchBtn mk-log:497, border 1.5). 검색뷰=PlaceSearchView. "변경"은 요약카드 내부 액션으로 일원화.
   searchBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5 },
-  changeBtn: { alignSelf: 'flex-end' },
   // 방문일 진입 행(킷 lk.dateRow mk-log:602) — gap 10·padding 14/16·radius 16·border 1.5 line.
   dateRow: {
     flexDirection: 'row',

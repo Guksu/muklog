@@ -257,19 +257,19 @@ describe('MuklogEditor — 장소검색 controlled 골격 (muklog-place, ui-spec
     expect(screen.queryByLabelText('장소 이름')).toBeNull();
   });
 
-  it('요약카드 "선택 해제" 탭 시 onClearPlace를 호출한다(plan D2)', () => {
-    const onClearPlace = jest.fn();
+  it('요약카드엔 "선택 해제"가 없고 "변경"만 있다(단일 액션·사용자 요청)', () => {
     renderWithTheme(
       <MuklogEditor
         roomId="r1"
         onBack={onBack}
         onSaved={onSaved}
         selectedPlace={{ placeName: '보나' }}
-        onClearPlace={onClearPlace}
+        onClearPlace={jest.fn()}
       />,
     );
-    fireEvent.press(screen.getByLabelText('장소 선택 해제'));
-    expect(onClearPlace).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('선택 해제')).toBeNull();
+    expect(screen.queryByLabelText('장소 선택 해제')).toBeNull();
+    expect(screen.getByLabelText('장소 변경')).toBeTruthy();
   });
 });
 

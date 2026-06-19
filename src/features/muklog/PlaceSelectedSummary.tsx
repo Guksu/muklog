@@ -23,8 +23,8 @@ export type PlaceSelectedSummaryProps = {
   roadAddress?: string | null;
   /** 동네(area) — roadAddress 폴백. */
   area?: string | null;
-  /** "선택 해제"(수동 전환) — 소비처가 좌표 NULL 리셋(plan D2). 장소명은 유지. */
-  onClear: () => void;
+  /** "변경" — 장소 재검색(검색뷰 재진입). 카드 우상단 단일 액션(구 "선택 해제" 대체, 사용자 요청). */
+  onChange: () => void;
   /** 테스트/식별자. */
   testID?: string;
 };
@@ -40,7 +40,7 @@ export const PlaceSelectedSummary = ({
   category = null,
   roadAddress,
   area,
-  onClear,
+  onChange,
   testID = 'place-selected-summary',
 }: PlaceSelectedSummaryProps) => {
   const theme = useTheme();
@@ -76,14 +76,14 @@ export const PlaceSelectedSummary = ({
       </View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="장소 선택 해제"
-        onPress={onClear}
+        accessibilityLabel="장소 변경"
+        onPress={onChange}
         hitSlop={8}
         style={({ pressed }) => (pressed ? styles.pressed : null)}
       >
-        {/* 킷 "변경"(700/13, accent-strong) 위치 — plan D2 의미 "선택 해제". */}
+        {/* 킷 "변경"(700/13, accent-strong) — 장소 재검색 진입(단일 액션). */}
         <Text variant="caption" color="accentStrong" style={styles.action}>
-          선택 해제
+          변경
         </Text>
       </Pressable>
     </View>
@@ -93,7 +93,9 @@ export const PlaceSelectedSummary = ({
 const styles = StyleSheet.create({
   card: { flexDirection: 'row', alignItems: 'center', borderWidth: BORDER_WIDTH },
   body: { flex: 1, minWidth: 0 },
-  sub: { fontSize: 12.5, marginTop: 3 },
+  // fontSize 12.5로 줄이며 lineHeight도 함께 준다 — meta 변종 lineHeight(13)<= 줄높이가 빠듯해
+  //   📍 이모지+한글 상단이 클립되던 문제(흰 여백처럼 보임). lineHeight 17로 여유 확보.
+  sub: { fontSize: 12.5, lineHeight: 17, marginTop: 3 },
   pressed: { opacity: 0.6 },
   action: { fontSize: 13 },
 });
