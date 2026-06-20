@@ -42,6 +42,14 @@ jest.mock('./AppNavigator', () => ({
   },
 }));
 
+// MapPrewarm: 마커로 대체(WebView 부팅은 MapPrewarm 자체 책임 → 여기선 존재/부재만 검증, map-prewarm T7).
+jest.mock('@/features/map/MapPrewarm', () => ({
+  MapPrewarm: () => {
+    const RN = require('react-native');
+    return <RN.Text>MAP_PREWARM</RN.Text>;
+  },
+}));
+
 import { useAuth } from '@/features/auth';
 import { AuthGate } from './AuthGate';
 
@@ -105,6 +113,27 @@ describe('AuthGate', () => {
     expect(mockLoginScreen).toHaveBeenCalledWith(
       expect.objectContaining({ authenticating: 'google', loginError: null }),
     );
+  });
+
+  it('authenticated에서만 MapPrewarm(지도 WebView 프리워머)을 마운트한다 (map-prewarm T7)', () => {
+    useAuthMock.mockReturnValue(authValue({ status: 'authenticated', userId: 'u1' }));
+    renderWithTheme(<AuthGate />);
+    expect(screen.getByText('MAP_PREWARM')).toBeTruthy();
+  });
+
+  it('unauthenticated/loading/error 상태에선 MapPrewarm을 마운트하지 않는다 (map-prewarm T7)', () => {
+    const states = [
+      { status: 'unauthenticated' },
+      { status: 'loading' },
+      { status: 'error', message: 'x' },
+      { status: 'authenticating', provider: 'google' },
+    ];
+    states.forEach((state) => {
+      useAuthMock.mockReturnValue(authValue(state));
+      const { unmount } = renderWithTheme(<AuthGate />);
+      expect(screen.queryByText('MAP_PREWARM')).toBeNull();
+      unmount();
+    });
   });
 
   it('LoginScreen에 onGoogle=signInWithGoogle / onApple=signInWithApple을 배선한다', () => {

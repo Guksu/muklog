@@ -8,6 +8,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 
 import { useAuth } from '@/features/auth';
+import { MapPrewarm } from '@/features/map/MapPrewarm';
 import { MyLogsProvider } from '@/features/room';
 
 import { AppNavigator } from './AppNavigator';
@@ -40,6 +41,9 @@ export const AuthGate = () => {
           <NavigationContainer>
             <AppNavigator />
           </NavigationContainer>
+          {/* 지도 WebView 프리워머(map-prewarm) — 인증 사용자에서만 마운트. 숨김 1×1, 권한·RPC 미보유.
+              유휴 시점에 SDK를 미리 부팅해 지도탭 첫 진입 체감 지연을 줄인다(인스턴스 비공유). */}
+          <MapPrewarm />
         </MyLogsProvider>
       );
     default: {
