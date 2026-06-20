@@ -253,7 +253,24 @@ describe('MapTabScreen', () => {
     emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k7', saved: false }) });
     expect(screen.getByTestId('nearby-spot-card')).toBeTruthy();
     expect(screen.getByText('연남 칼국수')).toBeTruthy();
-    expect(screen.getByText(/320m/)).toBeTruthy();
+    // 메타 = 마지막 세그먼트 + 거리(raw 브레드크럼 아님), 커버 = 종목 이모지(☕ 일괄 폴백 아님).
+    expect(screen.getByText('칼국수 · 320m')).toBeTruthy();
+    expect(screen.getByText('🍜')).toBeTruthy();
+    expect(screen.queryByText('☕')).toBeNull();
+  });
+
+  it('MARKER_TAP(saved:false) 시 종목별 coverEmoji를 카드에 표시한다(한식>고기→🍖, ☕ 아님)', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setNearby({
+      status: 'ready',
+      markers: [{ id: 'k7', lat: 37.5, lng: 127.0, emoji: '🍖', saved: false }],
+      items: [nearbyItem({ placeName: '연남 고깃집', categoryName: '음식점 > 한식 > 고기' })],
+    });
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k7', saved: false }) });
+    expect(screen.getByText('🍖')).toBeTruthy();
+    expect(screen.getByText('고기 · 320m')).toBeTruthy();
+    expect(screen.queryByText('☕')).toBeNull();
   });
 
   it('nearby 에러여도 slice1 오버레이/saved 카드를 깨뜨리지 않는다(회귀 0)', () => {

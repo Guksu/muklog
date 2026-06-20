@@ -9,7 +9,9 @@
 //     - heart(우리 맛집 표식) 없음 — 내 맛집이 아님.
 //   셸 정합(SelectedSpotCard와 비주얼 일관): surface 배경·상단 radius.card·상향 그림자 shadow.md 근사·
 //     FoodCover 54×54/radius14/emojiSize26·동일 padding(14/20/16)·동일 row gap.
-//   FoodCover category=Kakao categoryName(자유 text) → categories.ts에서 cafe 그라데이션 폴백(킷 CAT[cat]||CAT.cafe 정합).
+//   FoodCover = cafe 중립 그라데이션 배경(category=null) + 종목 이모지(coverEmoji 오버라이드).
+//     raw 브레드크럼을 FoodCover에 넘기던 ☕ 일괄 폴백 버그 제거 — 종목 이모지는 부모가 nearbyCategoryEmoji로 산출·주입(developer).
+//   categoryName(메타 텍스트)도 부모가 lastCategorySegment로 가공한 마지막 세그먼트(예 "칼국수")를 주입(developer).
 //   거리(distanceText)는 developer가 formatDistance로 만들어 주입(거리 결측이면 미전달 → 거리 조각 생략).
 //   데이터는 props로만 주입. 비즈니스 로직 없음.
 import React from 'react';
@@ -21,8 +23,16 @@ import { useTheme } from '@/theme';
 export type NearbySpotCardProps = {
   /** 가게명(Kakao placeName). */
   placeName: string;
-  /** Kakao 카테고리명(브레드크럼, 예 "음식점 > 한식 > 칼국수"). */
+  /**
+   * 메타줄에 표시할 카테고리 텍스트(마지막 세그먼트, 예 "칼국수").
+   * 부모(MapTabScreen)가 lastCategorySegment로 브레드크럼을 가공해 주입. 빈 문자열이면 메타에서 생략.
+   */
   categoryName: string;
+  /**
+   * 종목 이모지(주변 전용 매핑 결과). 부모(MapTabScreen)가 nearbyCategoryEmoji로 산출·주입.
+   * FoodCover에 emoji 오버라이드로 넘겨 종목별 이모지를 렌더(raw 브레드크럼을 더 이상 FoodCover에 넘기지 않음).
+   */
+  coverEmoji: string;
   /** 거리 표기 문자열(예 "320m"/"1.5km"). developer가 formatDistance로 생성·주입. 결측이면 미전달 → 거리 생략. */
   distanceText?: string;
 };
@@ -46,7 +56,12 @@ const buildMeta = ({
   return parts.join(' · ');
 };
 
-export const NearbySpotCard = ({ placeName, categoryName, distanceText }: NearbySpotCardProps) => {
+export const NearbySpotCard = ({
+  placeName,
+  categoryName,
+  coverEmoji,
+  distanceText,
+}: NearbySpotCardProps) => {
   const theme = useTheme();
   const meta = buildMeta({ categoryName, distanceText });
 
@@ -68,7 +83,8 @@ export const NearbySpotCard = ({ placeName, categoryName, distanceText }: Nearby
     >
       <View style={[styles.row, { gap: theme.spacing[12] }]}>
         <FoodCover
-          category={categoryName}
+          category={null}
+          emoji={coverEmoji}
           size={COVER_SIZE}
           radius={COVER_RADIUS}
           emojiSize={COVER_EMOJI_SIZE}

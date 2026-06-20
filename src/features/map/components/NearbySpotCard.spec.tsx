@@ -13,36 +13,40 @@ import { NearbySpotCard } from './NearbySpotCard';
 describe('NearbySpotCard', () => {
   it('가게명을 표시한다', () => {
     renderWithTheme(
-      <NearbySpotCard placeName="연남 칼국수" categoryName="음식점 > 한식 > 칼국수" distanceText="320m" />,
+      <NearbySpotCard placeName="연남 칼국수" categoryName="칼국수" coverEmoji="🍜" distanceText="320m" />,
     );
     expect(screen.getByText('연남 칼국수')).toBeTruthy();
   });
 
-  it('카테고리명과 거리를 메타줄에 표시한다("카테고리 · 거리")', () => {
+  it('카테고리(마지막 세그먼트)와 거리를 메타줄에 표시한다("카테고리 · 거리")', () => {
+    // categoryName은 부모(MapTabScreen)가 lastCategorySegment로 가공해 넘긴 마지막 세그먼트 텍스트.
     renderWithTheme(
-      <NearbySpotCard placeName="연남 칼국수" categoryName="음식점 > 한식 > 칼국수" distanceText="320m" />,
+      <NearbySpotCard placeName="연남 칼국수" categoryName="칼국수" coverEmoji="🍜" distanceText="320m" />,
     );
-    expect(screen.getByText('음식점 > 한식 > 칼국수 · 320m')).toBeTruthy();
+    expect(screen.getByText('칼국수 · 320m')).toBeTruthy();
   });
 
   it('거리(distanceText)가 없으면 카테고리명만 표시한다(거리 조각 생략)', () => {
     renderWithTheme(
-      <NearbySpotCard placeName="연남 칼국수" categoryName="음식점 > 한식 > 칼국수" />,
+      <NearbySpotCard placeName="연남 칼국수" categoryName="칼국수" coverEmoji="🍜" />,
     );
-    expect(screen.getByText('음식점 > 한식 > 칼국수')).toBeTruthy();
+    expect(screen.getByText('칼국수')).toBeTruthy();
     expect(screen.queryByText(/·/)).toBeNull();
   });
 
-  it('카테고리 커버(FoodCover) 그라데이션을 렌더한다', () => {
+  it('coverEmoji로 받은 종목 이모지를 커버에 렌더한다(☕ 일괄 폴백 버그 제거)', () => {
     renderWithTheme(
-      <NearbySpotCard placeName="연남 칼국수" categoryName="음식점 > 한식 > 칼국수" distanceText="320m" />,
+      <NearbySpotCard placeName="연남 고깃집" categoryName="고기" coverEmoji="🍖" distanceText="120m" />,
     );
     expect(screen.getByTestId('food-cover-gradient')).toBeTruthy();
+    expect(screen.getByText('🍖')).toBeTruthy();
+    // raw 브레드크럼을 FoodCover에 넘기지 않으므로 더 이상 ☕로 폴백되지 않는다.
+    expect(screen.queryByText('☕')).toBeNull();
   });
 
   it('별점(Stars)·heart를 렌더하지 않는다(주변 음식점은 그 데이터가 없음)', () => {
     renderWithTheme(
-      <NearbySpotCard placeName="연남 칼국수" categoryName="음식점 > 한식 > 칼국수" distanceText="320m" />,
+      <NearbySpotCard placeName="연남 칼국수" categoryName="칼국수" coverEmoji="🍜" distanceText="320m" />,
     );
     expect(screen.queryByTestId('star-filled')).toBeNull();
     expect(screen.queryByTestId('star-empty')).toBeNull();

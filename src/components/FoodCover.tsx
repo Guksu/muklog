@@ -18,6 +18,11 @@ import {
 export type FoodCoverProps = {
   /** 카테고리 key(또는 null/자유 text). 미지/null은 cafe 그라데이션·이모지로 폴백. */
   category: MuklogCategoryKey | string | null;
+  /**
+   * 이모지 직접 지정(주변 음식점 카드 등 8종 key 밖 종목). 주면 category→이모지 폴백을 건너뛴다.
+   * 그라데이션 배경은 영향받지 않고 여전히 category 기준(주변 카드는 category=null → cafe 중립 배경 유지).
+   */
+  emoji?: string;
   /** 정사각 커버 한 변(px). 미지정 시 소비처가 style(aspectRatio 등)로 크기를 잡는다. */
   size?: number;
   /** 모서리 반경(px). 킷 기본 20. */
@@ -38,6 +43,7 @@ const GRADIENT_END = { x: 0.92, y: 1 } as const;
 
 export const FoodCover = ({
   category,
+  emoji: emojiOverride,
   size,
   radius = 20,
   emojiSize = 40,
@@ -46,7 +52,8 @@ export const FoodCover = ({
   children,
 }: FoodCoverProps) => {
   // 킷 CAT[cat]||CAT.cafe 정합 — 미지 key는 cafe 이모지로 폴백(categoryEmoji는 빈 문자열 반환하므로 보강).
-  const emoji = categoryEmoji({ key: category }) || MUKLOG_CATEGORIES.cafe.emoji;
+  // emojiOverride가 truthy면 category 폴백 경로를 건너뛰고 주어진 이모지를 그대로 렌더(주변 음식점 종목 이모지).
+  const emoji = emojiOverride || categoryEmoji({ key: category }) || MUKLOG_CATEGORIES.cafe.emoji;
   const colors = categoryColors({ key: category });
   const sizeStyle: ViewStyle = size ? { width: size, height: size } : {};
 

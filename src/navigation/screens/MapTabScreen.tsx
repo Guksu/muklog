@@ -30,8 +30,10 @@ import {
 } from '@/features/map/mapMessages';
 import { formatDistance } from '@/features/map/formatDistance';
 import { initialRegion } from '@/features/map/initialRegion';
+import { lastCategorySegment } from '@/features/map/lastCategorySegment';
 import { mapHtml } from '@/features/map/mapHtml';
 import { mergeMapMarkers } from '@/features/map/mergeMapMarkers';
+import { nearbyCategoryEmoji } from '@/features/map/nearbyCategoryEmoji';
 import { parseMapMessage } from '@/features/map/parseMapMessage';
 import { pinsToMapMarkers } from '@/features/map/pinsToMapMarkers';
 import { LocationPermissionStatus, MapInboundType, type MuklogPin } from '@/features/map/types';
@@ -228,7 +230,11 @@ export const MapTabScreen = () => {
       {selectedNearby ? (
         <NearbySpotCard
           placeName={selectedNearby.placeName}
-          categoryName={selectedNearby.categoryName}
+          categoryName={lastCategorySegment({ categoryName: selectedNearby.categoryName })}
+          coverEmoji={nearbyCategoryEmoji({
+            categoryName: selectedNearby.categoryName,
+            categoryGroupCode: selectedNearby.categoryGroupCode,
+          })}
           distanceText={formatDistance({ distance: selectedNearby.distance })}
         />
       ) : null}
