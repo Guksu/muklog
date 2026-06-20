@@ -21,6 +21,11 @@ import {
 
 /** 디바운스 지연(ms) — idle 다발/연속 이동을 1회로 수렴(타이핑보다 느린 제스처라 350보다 길게). */
 export const NEARBY_DEBOUNCE_MS = 500;
+/**
+ * 첫 조회(직전 조회 없음) leading-edge 지연(ms) — 0틱(다음 매크로태스크)에 즉시 발사.
+ * 0이라도 setTimeout이므로 cleanup의 clearTimeout 대상 → 초기 idle 다발이 마지막 1건으로 수렴(invoke ≤1).
+ */
+export const NEARBY_FIRST_DELAY_MS = 0;
 /** 양자화 자리수 — 소수 4자리(≈11m) 반올림 키로 캐시 정규화. */
 const NEARBY_QUANTIZE_DECIMALS = 4;
 /** 최소 이동 임계(도 단위) — 직전 조회 bbox의 중심에서 이 거리 미만 이동·폭 변화는 미호출(쿼터 보호). */
@@ -103,6 +108,9 @@ export const useNearbyPlaces = (): UseNearbyPlacesResult => {
       // 최소 이동 임계 미만 → 미호출(미세 흔들림/관성 흡수). 직전 결과 유지.
       if (last && isBelowMinMove({ prev: last.bounds, next: bounds })) return;
 
+      // 첫 조회(직전 조회 없음)만 0틱 leading-edge로 즉시 발사, 2회차+는 500ms 트레일링.
+      const delay = last === null ? NEARBY_FIRST_DELAY_MS : NEARBY_DEBOUNCE_MS;
+
       const seq = (requestSeqRef.current += 1); // 이전 요청 무효화.
       const timer = setTimeout(function runNearbySearch() {
         setStatus('loading');
@@ -119,7 +127,7 @@ export const useNearbyPlaces = (): UseNearbyPlacesResult => {
             setItems([]); // 핀/카드 데이터만 비움(지도/saved 불변).
             setStatus('error');
           });
-      }, NEARBY_DEBOUNCE_MS);
+      }, delay);
 
       return function cancelDebounce() {
         clearTimeout(timer);

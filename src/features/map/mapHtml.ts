@@ -109,16 +109,25 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
         }
         renderMarkers(payload.markers);
         // slice2: 드래그·줌 종료(idle)마다 현재 bbox 통지 → RN이 nearby 조회(디바운스/캐시/임계는 RN).
-        //   ⚠️ setCenter/relayout이 유발하는 idle도 발화하지만 RN 가드레일이 과호출을 흡수(단일 지점).
+        //   이후 사용자 이동 전용 — INIT 직후 같은 센터 relayout/setCenter는 idle을 발화하지 않아
+        //   첫 nearby 트리거를 여기에 의존하면 안 됨(nearby-first-load 버그). 첫 emit은 아래 명시 호출이 담당.
         kakao.maps.event.addListener(mkMap, 'idle', emitBounds);
         // 컨테이너 사이즈 확정 전 생성 시 빈 타일 방지 — 다음 틱에 relayout + 센터 재설정.
-        //   이때 발생하는 idle이 첫 viewport nearby 로딩을 트리거(INIT 직후 1회).
-        setTimeout(function () {
-          if (mkMap) {
-            mkMap.relayout();
-            mkMap.setCenter(center);
-          }
+        //   relayout로 컨테이너 사이즈가 확정된 뒤라야 getBounds()가 유효한 bbox를 반환.
+        //   ⚠️ 같은 센터 relayout/setCenter는 idle을 발화하지 않으므로, 첫 BOUNDS_CHANGED를
+        //   사용자 동작 없이 보장하려면 idle 의존이 아니라 여기서 emitBounds()를 명시 호출해야 한다.
+        setTimeout(function initEmitFirstBounds() {
+          if (!mkMap) return;
+          mkMap.relayout();
+          mkMap.setCenter(center);
+          emitBounds(); // 첫 viewport nearby 로딩 트리거(사용자 idle 불필요).
         }, 0);
+        // belt-and-suspenders: 초기 레이아웃이 늦게 안정화되는 기기 대비 한 번 더 약간 지연 emit.
+        //   중복 emit이 와도 RN(useNearbyPlaces) 양자화 키 dedup + 첫조회 0틱 cleanup으로 invoke ≤1 보장(비용 안전).
+        setTimeout(function initEmitFirstBoundsRetry() {
+          if (!mkMap) return;
+          emitBounds();
+        }, 60);
       } catch (e) {
         post({ type: 'ERROR', reason: String(e) });
       }
