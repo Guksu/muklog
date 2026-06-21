@@ -1,8 +1,10 @@
 // App.tsx — 앱 루트.
-// 책임: (1) Pretendard 폰트 로드 + SplashScreen 제어, (2) 프로바이더 트리 구성, (3) AuthGate 마운트.
+// 책임: (1) SUIT 폰트 로드 + SplashScreen 제어, (2) 프로바이더 트리 구성, (3) AuthGate 마운트.
 //
-// 프로바이더 순서(바깥→안): GestureHandlerRootView → SafeAreaProvider → ThemeProvider → AuthProvider → AuthGate.
+// 프로바이더 순서(바깥→안): GestureHandlerRootView → SafeAreaProvider → ThemeProvider → ToastProvider → AuthProvider → AuthGate.
 //   - ThemeProvider가 AuthProvider보다 바깥: AuthGate의 Splash/Error 화면도 테마 토큰을 쓴다.
+//   - ToastProvider가 AuthProvider/AuthGate(=네비게이터) 바깥: 화면 전환·언마운트와 무관히 루트 단일 <Toast>를 유지(언마운트 레이스 해소).
+//     SafeArea/Theme 안: 토큰·하단 inset 사용.
 import React, { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -12,6 +14,7 @@ import * as SplashScreen from 'expo-splash-screen';
 
 import { AuthProvider } from '@/features/auth';
 import { AuthGate } from '@/navigation';
+import { ToastProvider } from '@/components';
 import { ThemeProvider } from '@/theme';
 import { fontMap } from '@/theme/fonts';
 
@@ -71,10 +74,12 @@ const App = () => {
     <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>
       <SafeAreaProvider>
         <ThemeProvider scheme="light">
-          <AuthProvider>
-            <StatusBar style="dark" />
-            <AuthGate />
-          </AuthProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <StatusBar style="dark" />
+              <AuthGate />
+            </AuthProvider>
+          </ToastProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

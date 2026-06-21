@@ -19,6 +19,7 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 
+import { useToastController } from '@/components';
 import { useAuth } from '@/features/auth';
 import { useProfile } from '@/features/profile';
 import { useDeleteMuklog, useMuklog } from '@/features/muklog';
@@ -42,6 +43,8 @@ export const MuklogDetailRoute = () => {
   const meAvatarUrl = profileState.status === 'ready' ? profileState.profile.avatarUrl : null;
 
   const { deleteMuklog, loading: deleting, error: deleteError } = useDeleteMuklog();
+  // 삭제 성공 토스트 — 전역 컨트롤러(루트 단일 <Toast>). goBack 직전에 show → 복귀한 LogScreen 위에서 표시(킷 SPEC §5).
+  const { showToast } = useToastController();
 
   // 에디터에서 편집 저장 후 복귀(재포커스) 시 상세 재조회(폴링 아님, plan §4.3). 첫 포커스(마운트 로드)는 건너뜀.
   const refreshRef = useRef(refresh);
@@ -78,9 +81,11 @@ export const MuklogDetailRoute = () => {
         roomId: muklog.roomId,
         photoPaths: muklog.photoStoragePaths,
       });
+      // 성공 시에만 토스트(킷 SPEC §5 positive). 전역이라 goBack 직전 show → 복귀한 LogScreen 위에서 보인다.
+      showToast({ message: '먹로그를 삭제했어요', tone: 'positive' });
       navigation.goBack();
     } catch {
-      // 에러는 deleteError로 확인 시트에 인라인 표시(재시도 가능). 화면 유지.
+      // 에러는 deleteError로 확인 시트에 인라인 표시(재시도 가능). 화면 유지. 토스트 없음.
     }
   };
 

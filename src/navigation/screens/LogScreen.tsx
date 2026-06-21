@@ -35,8 +35,7 @@ import {
   Screen,
   SegmentControl,
   Text,
-  Toast,
-  useToast,
+  useToastController,
 } from '@/components';
 import { useAuth } from '@/features/auth';
 import { useProfile } from '@/features/profile';
@@ -247,8 +246,8 @@ export const LogScreen = () => {
   // 세그 상태(기본 'log') + 위시 추가 풀스크린 검색 스왑(MuklogEditor searching 패턴 동일).
   const [seg, setSeg] = React.useState<string>(LogSeg.Log);
   const [wishSearching, setWishSearching] = React.useState(false);
-  // 위시 추가 성공 토스트(공용 프리미티브) — show/hide만 트리거(비주얼·타이머는 Toast 소유).
-  const { toast, show: showToast, hide: hideToast } = useToast();
+  // 위시 추가 성공/예약취소 에러 토스트 — 전역 토스트 컨트롤러(루트 단일 <Toast>). 트리거만 호출(비주얼·타이머는 Toast 소유).
+  const { showToast } = useToastController();
 
   // 재포커스(에디터/상세 복귀) 시 두 목록을 함께 1회 refresh(첫 포커스=마운트 로드와 겹쳐 가드). 폴링 아님(plan §6·§10).
   //   다녀왔어요 플로우(먹로그+1·위시-1)·삭제·편집 반영을 단일 포커스 훅으로 처리.
@@ -448,20 +447,25 @@ export const LogScreen = () => {
   };
 
   // 나가기 확정 — 커플=24h 예약 후 확인 닫고 refresh(배너 표시·화면 유지) / 솔로=즉시 삭제 후 목록 복귀(goBack).
-  //   실패(throw)는 useLeaveRoom.error → LeaveLogSheets leaveError 인라인. 확인 시트 유지(재시도, plan §4).
+  //   성공 시 SPEC §4-1 토스트(전역, positive): 솔로 "로그를 삭제했어요" / 커플 "로그에서 나갔어요 · 24시간 뒤 삭제돼요".
+  //   전역 토스트라 솔로 goBack 후 홈에서도 표시 유지(언마운트 무관, S4). 실패(throw)는 토스트 없음 →
+  //   useLeaveRoom.error → LeaveLogSheets leaveError 인라인. 확인 시트 유지(재시도, plan §4).
   //   목록 refresh는 LogListScreen 포커스 정책이 담당(여기선 goBack만, 비용 §8).
   const handleLeave = async () => {
     try {
       const res = await leaveRoom({ roomId });
       setConfirmOpen(false);
       if (res.roomDeleted) {
+        // 솔로 즉시 삭제 → 홈 복귀 + 삭제 완료 토스트(전역이라 복귀 화면 위에서 표시).
+        showToast({ message: '로그를 삭제했어요', tone: 'positive' });
         navigation.goBack();
         return;
       }
-      // 커플 예약 → 예약 배너 표시 위해 1회 refresh(화면 유지).
+      // 커플 예약 → 예약 배너 표시 위해 1회 refresh(화면 유지) + 나가기 완료 토스트.
       await refresh();
+      showToast({ message: '로그에서 나갔어요 · 24시간 뒤 삭제돼요', tone: 'positive' });
     } catch {
-      // error는 useLeaveRoom.error로 노출 → 확인 시트 인라인. 시트 유지(닫지 않음).
+      // error는 useLeaveRoom.error로 노출 → 확인 시트 인라인. 시트 유지(닫지 않음). 토스트 없음.
     }
   };
 
@@ -624,8 +628,7 @@ export const LogScreen = () => {
         leaveError={leaveError}
       />
 
-      {/* 위시 추가 성공 토스트(하단 플로팅) — 킷 mk-log:33 "위시리스트에 담았어요 📍". 자동 사라짐은 Toast 소유. */}
-      <Toast {...toast} onHide={hideToast} />
+      {/* 위시 추가 성공/예약취소 에러 토스트는 전역(ToastProvider 루트 <Toast>)에서 렌더 — 화면별 <Toast> 없음(이관). */}
     </Screen>
   );
 };

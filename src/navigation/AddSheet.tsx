@@ -1,6 +1,6 @@
 // src/navigation/AddSheet.tsx
 // + 액션시트 — mk-home AddSheet/SheetAction 재현 (plan §6.3, AC6·AC7·AC8).
-//   공용 Sheet 위 2개 행: "새 로그 만들기"(🥢) / "초대코드로 입장"(💌). 이모지 허용(킷 정책).
+//   공용 Sheet 위 2개 행: "새 로그 만들기"(🥢) / "초대코드로 들어가기"(💌). 이모지 허용(킷 정책).
 //   순수 프리젠테이션 — createRoom/navigate 등 부수효과는 부모(PlusHeaderButton)가 주입(onCreate/onJoin).
 import React from 'react';
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
@@ -15,7 +15,7 @@ export type AddSheetProps = {
   onClose: () => void;
   /** "새 로그 만들기" 선택. */
   onCreate: () => void;
-  /** "초대코드로 입장" 선택. */
+  /** "초대코드로 들어가기" 선택. */
   onJoin: () => void;
   /** 생성 진행 중 — 생성 행 비활성(중복 생성 1차 방지). */
   creating: boolean;
@@ -77,19 +77,19 @@ const SheetAction = ({
 export const AddSheet = ({ visible, onClose, onCreate, onJoin, creating }: AddSheetProps) => {
   const theme = useTheme();
   return (
-    <Sheet visible={visible} onClose={onClose} title="무엇을 할까요?">
+    <Sheet visible={visible} onClose={onClose} title="어떻게 시작할까요?">
       <View style={{ gap: theme.spacing[10] }}>
         <SheetAction
           emoji="🥢"
           title="새 로그 만들기"
-          desc="혼자 시작하고, 나중에 초대해요"
+          desc="먼저 시작하고 연인을 초대해요"
           onPress={onCreate}
           disabled={creating}
         />
         <SheetAction
           emoji="💌"
-          title="초대코드로 입장"
-          desc="연인이 보낸 6자리 코드 입력"
+          title="초대코드로 들어가기"
+          desc="연인이 보낸 6자리 코드가 있어요"
           onPress={onJoin}
         />
       </View>

@@ -1,19 +1,22 @@
 // src/navigation/screens/LogListScreen.tsx
-// 먹로그 탭(탭1) — 내가 속한 로그 카드 목록 (plan §4.5 + ui-redesign 충실화: mk-home LogCard/EmptyLogs 재현).
-//   loading → 스피너 / error → 메시지+다시 시도(refresh) / ready+[] → 빈 상태(EmptyLogs) / ready+logs → 카드 리스트 + 하단 CTA.
+// 먹로그 탭(탭1) — 내가 속한 로그 카드 목록. 킷 mk-home.jsx LogListScreen/LogCard/EmptyLogs 충실 재현(home-fidelity).
+//   loading → 스피너 / error → 메시지+다시 시도(refresh) / ready+[] → 빈 상태(EmptyLogs 히어로+두 갈래) / ready+logs → 인사 헤드라인 + 카드 + 하단 CTA.
 //
-// 카드 골격(mk-home LogCard 재현, 데이터 없는 부분은 정직한 플레이스홀더):
-//   상단 = 아바타(본인 userId 디폴트; 커플이면 익명 아바타 겹침) + 이름("{닉}의 기록"/"{닉} ♥ 짝꿍") + MemberBadge + 날짜("YYYY.MM.DD 시작") + chevron
-//   중간 = 미리보기 사진 4슬롯(사진/집계 데이터 없음 → 빈 점선 슬롯, 가짜 이모지 미사용)
-//   하단 = location 아이콘 + count-free 중립 카피("맛집을 기록해보세요" — 거짓 카운트 단언 금지, QA Q9)
-//   탭 → LogScreen({roomId}) 유지.
-// 하단 CTA: 2px dashed 보더 "새 로그 시작하기"(PlusHeaderButton과 동일 — createRoom→refresh, 로딩 중 비활성).
+// LogCard 골격(킷 mk-home:28-104):
+//   헤더(40-60) = 아바타 겹침(본인 + 커플이면 익명 짝꿍) + 이름(displayLogName) + MemberBadge + "YYYY.MM.DD 시작" + chevron.
+//   본문 분기:
+//     spotCount===0 → 빈카드(63-71): 🍽️ 배지 + "아직 기록한 맛집이 없어요"/"이 로그를 열어 첫 맛집을 남겨보세요" + plus, 점선 박스.
+//     spotCount>0   → 사진 4칸 스트립(74-91, LogPhotoStrip) + 통계행(92-99): location아이콘 "맛집 N곳" / "마지막 기록 {상대시간}".
+//   사진 스트립은 previewPaths의 signed URL 썸네일(부족분 점선 빈 슬롯으로 항상 4칸). more=spotCount-4>0이면 4번째 슬롯 +N 딤.
+//
+// 인사 헤드라인(116-122) = "{닉}님, 오늘은\n어디 다녀왔어요?" + "지금까지 함께 {Σ spotCount}곳을 기록했어요"(합계 accentStrong 강조).
 //
 // 생산자(소비): useMyLogsContext(state/refresh) + useCreateRoom(생성) + useProfile(닉/아바타) + useNavigation.
-// ⚠️ 파트너 실데이터/사진/맛집 수는 백엔드 미존재 → UI 골격만 재현(플레이스홀더). 추가 페치/RPC 변경 없음(UI-only).
+//   ⚠️ 실데이터: spotCount/lastMuklogAt/previewPaths는 MyLog(developer 소유, useMyLogs.ts)에서 직접 읽는다. 추가 페치 0(UI-only).
 import React from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation, type NavigationProp } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { Avatar, Button, Card, Icon, IconName, MemberBadge, Screen, Text } from '@/components';
 import { useAuth } from '@/features/auth';
@@ -26,15 +29,20 @@ import {
   useMyLogsContext,
   type MyLog,
 } from '@/features/room';
-import { useTheme } from '@/theme';
+import { heroGradient, useTheme } from '@/theme';
 
 import { Routes, type AppStackParamList } from '../routes';
 import { formatLogDate } from './formatLogDate';
+import { relativeTimeLabel } from './relativeTimeLabel';
 
 const CARD_AVATAR_SIZE = 42;
-// 카드 최소 높이 — 하단 플레이스홀더(위치핀+카피) 제거 후에도 카드가 납작해지지 않게 보장(사용자 요청).
-//   콘텐츠는 상단 정렬 → 최소 높이만큼 하단 여백이 생겨 카드에 숨 쉴 공간 확보.
-const CARD_MIN_HEIGHT = 96;
+// 사진 스트립 칸 수(킷 mk-home:31 slice(0,4) / 88 4칸 채움). +N 임계도 이 값 기준(more=spotCount-PHOTO_STRIP_SLOTS).
+const PHOTO_STRIP_SLOTS = 4;
+// 빈 상태 히어로 박스 높이(킷 mk-home:151 height:172).
+const HERO_HEIGHT = 172;
+// 킷 mk-home:152 linear-gradient(150deg) ≈ 좌상→우하 대각(살구가 우하단으로). expo-linear-gradient 근사.
+const HERO_GRADIENT_START = { x: 0, y: 0 } as const;
+const HERO_GRADIENT_END = { x: 1, y: 1 } as const;
 
 // 본인 닉네임/아바타. userId가 있을 때만 useProfile을 마운트해야 하므로 상위에서 분기.
 //   userId도 함께 노출 → Avatar가 url 없을 때 결정적 디폴트(이모지+컬러)를 파생(plan §3.3).
@@ -46,6 +54,133 @@ const useSelfDisplay = ({ userId }: { userId: string }) => {
     nickname: profile?.nickname && profile.nickname.length > 0 ? profile.nickname : '나',
     avatarUrl: profile?.avatarUrl ?? null,
   };
+};
+
+// 사진 4칸 스트립(킷 mk-home:74-91). previewPaths 순서대로 signed URL 썸네일, 부족분 점선 빈 슬롯으로 항상 4칸.
+//   more = spotCount-4>0이면 4번째 슬롯에 rgba 딤 + "+{more}"(킷 77-83). 4번째가 사진이면 그 위 오버레이, 빈 슬롯이면 딤 박스.
+const LogPhotoStrip = ({
+  previewPaths,
+  previewUrls,
+  spotCount,
+}: {
+  previewPaths: string[];
+  previewUrls: Record<string, string>;
+  spotCount: number;
+}) => {
+  const theme = useTheme();
+  const more = Math.max(0, spotCount - PHOTO_STRIP_SLOTS);
+  // 발급된 signed URL만 채움 후보(미발급 path는 점선 빈 슬롯으로 강등 — 깨진 이미지 방지).
+  const uris = previewPaths
+    .map((path) => previewUrls[path])
+    .filter((uri): uri is string => Boolean(uri))
+    .slice(0, PHOTO_STRIP_SLOTS);
+
+  return (
+    <View testID="log-strip" style={[styles.strip, { marginTop: theme.spacing[14] }]}>
+      {Array.from({ length: PHOTO_STRIP_SLOTS }).map((_, index) => {
+        const uri = uris[index];
+        const isLast = index === PHOTO_STRIP_SLOTS - 1;
+        const showMore = isLast && more > 0;
+        // 슬롯 키 — 채워진 칸은 uri, 빈 칸은 위치 기반(stable).
+        const slotKey = uri ?? `empty-${index}`;
+        const slotStyle = { borderRadius: theme.radius.control };
+
+        if (uri) {
+          return (
+            <View key={slotKey} testID="log-strip-thumb" style={[styles.slot, slotStyle]}>
+              <Image source={{ uri }} resizeMode="cover" style={styles.slotImage} />
+              {showMore ? <MoreOverlay more={more} /> : null}
+            </View>
+          );
+        }
+        return (
+          <View
+            key={slotKey}
+            testID="log-strip-empty"
+            style={[
+              styles.slot,
+              slotStyle,
+              { backgroundColor: theme.color.fillAlt, borderColor: theme.color.hairline },
+              styles.slotEmpty,
+            ]}
+          >
+            {showMore ? <MoreOverlay more={more} /> : null}
+          </View>
+        );
+      })}
+    </View>
+  );
+};
+
+// +N 딤 오버레이(킷 mk-home:81-83) — rgba(20,12,8,.46) 위 흰색 800/17 "+{more}". scrimStrong 토큰 재사용.
+const MoreOverlay = ({ more }: { more: number }) => {
+  const theme = useTheme();
+  return (
+    <View style={[styles.moreOverlay, { backgroundColor: theme.color.scrimStrong }]}>
+      <Text variant="cardTitle" color="primaryFg" style={styles.moreText}>
+        {`+${more}`}
+      </Text>
+    </View>
+  );
+};
+
+// 빈카드(킷 mk-home:63-71) — spotCount===0. 점선 박스(fillAlt + accentLine dashed) + 🍽️ 배지 + 안내 + plus.
+const LogEmptyBody = () => {
+  const theme = useTheme();
+  return (
+    <View
+      style={[
+        styles.emptyBody,
+        {
+          marginTop: theme.spacing[14],
+          borderRadius: theme.radius.xl,
+          backgroundColor: theme.color.fillAlt,
+          borderColor: theme.color.accentLine,
+        },
+      ]}
+    >
+      <View style={[styles.emptyBadge, { borderRadius: theme.radius.lg, backgroundColor: theme.color.primaryWeak }]}>
+        <Text style={styles.emptyBadgeEmoji}>🍽️</Text>
+      </View>
+      <View style={styles.emptyBodyText}>
+        <Text variant="cardTitle" color="fg">
+          아직 기록한 맛집이 없어요
+        </Text>
+        <Text variant="meta" color="fgMuted" style={{ marginTop: theme.spacing[2] }}>
+          이 로그를 열어 첫 맛집을 남겨보세요
+        </Text>
+      </View>
+      <Icon name={IconName.Plus} size={18} color="accentStrong" />
+    </View>
+  );
+};
+
+// 통계행(킷 mk-home:92-99) — 상단 헤어라인 + 좌 location "맛집 N곳" / 우 "마지막 기록 {상대시간}"(null이면 "기록 없음").
+const LogStatsRow = ({ spotCount, lastMuklogAt }: { spotCount: number; lastMuklogAt: string | null }) => {
+  const theme = useTheme();
+  const ago = relativeTimeLabel({ iso: lastMuklogAt });
+  return (
+    <View
+      style={[
+        styles.statsRow,
+        {
+          marginTop: theme.spacing[14],
+          paddingTop: theme.spacing[14],
+          borderTopColor: theme.color.hairlineAlt,
+        },
+      ]}
+    >
+      <View style={styles.statsLeft}>
+        <Icon name={IconName.Location} size={15} color="primary" />
+        <Text variant="spotCount" color="fg">
+          {`맛집 ${spotCount}곳`}
+        </Text>
+      </View>
+      <Text variant="meta" color="fgMuted">
+        {ago.length > 0 ? `마지막 기록 ${ago}` : '기록 없음'}
+      </Text>
+    </View>
+  );
 };
 
 const LogCard = ({
@@ -61,11 +196,9 @@ const LogCard = ({
 }) => {
   const theme = useTheme();
   const isCouple = log.memberCount >= 2;
-  // 대표 사진 1장(첫 사진) signed URL. 없으면 카드에 이미지 미노출(사용자 결정).
-  const coverPath = log.previewPaths[0];
-  const coverUri = coverPath ? previewUrls[coverPath] : undefined;
+  const isEmpty = log.spotCount === 0;
   return (
-    <Card accessibilityLabel="로그 열기" onPress={onPress} style={{ minHeight: CARD_MIN_HEIGHT }}>
+    <Card accessibilityLabel="로그 열기" onPress={onPress}>
       {/* 상단: 아바타 + 이름/배지/날짜 + chevron */}
       <View style={styles.cardHeader}>
         <View style={styles.avatarStack}>
@@ -84,7 +217,6 @@ const LogCard = ({
         </View>
         <View style={styles.cardHeaderBody}>
           <Text variant="cardTitle" color="fg" numberOfLines={1}>
-            {/* log-name: 이름 있으면 name, 없으면 본인 닉 기반 폴백(displayLogName, 결정2 B'). */}
             {displayLogName({
               name: log.name,
               memberCount: log.memberCount,
@@ -98,42 +230,161 @@ const LogCard = ({
             </Text>
           </View>
         </View>
-        {/* 킷 mk-home:57 chevron 18 / text-assistive(fgAssistive). */}
+        {/* 킷 mk-home:59 chevron 18 / text-assistive(fgAssistive). */}
         <Icon name={IconName.ChevronRight} size={18} color="fgAssistive" />
       </View>
 
-      {/* 중간: 대표 사진 1장(커버) — signed URL 있을 때만 노출. 사진 없으면 미렌더(빈 슬롯 없음, 사용자 결정). */}
-      {coverUri ? (
-        <Image
-          testID="log-preview-thumb"
-          source={{ uri: coverUri }}
-          resizeMode="cover"
-          style={[styles.previewCover, { borderRadius: theme.radius.control, marginTop: theme.spacing[14] }]}
-        />
-      ) : null}
+      {/* 본문 분기: 맛집 0개 → 빈카드 / 1개 이상 → 사진 스트립 + 통계행. */}
+      {isEmpty ? (
+        <LogEmptyBody />
+      ) : (
+        <React.Fragment>
+          <LogPhotoStrip previewPaths={log.previewPaths} previewUrls={previewUrls} spotCount={log.spotCount} />
+          <LogStatsRow spotCount={log.spotCount} lastMuklogAt={log.lastMuklogAt} />
+        </React.Fragment>
+      )}
     </Card>
   );
 };
 
-// 로그 리스트 헤더(서브카피) + 하단 CTA를 위한 분리된 빈 상태.
-const EmptyLogs = ({ onCreate, creating }: { onCreate: () => void; creating: boolean }) => {
+// 인사 헤드라인(킷 mk-home:116-122) — "{닉}님, 오늘은\n어디 다녀왔어요?" + 합계(accentStrong 강조).
+const GreetingHeader = ({ nickname, totalSpots }: { nickname: string; totalSpots: number }) => {
   const theme = useTheme();
   return (
-    <Screen center>
-      {/* 킷 빈상태 이모지 64px(plan B4). */}
-      <Text style={[styles.emptyEmoji, { marginBottom: theme.spacing[8] }]}>🍜</Text>
-      <Text variant="emptyTitle" color="fg" style={styles.center}>
-        아직 로그가 없어요
+    <View style={[styles.greeting, { marginTop: theme.spacing[6] }]}>
+      <Text variant="emptyTitle" color="fg">
+        {`${nickname}님, 오늘은\n어디 다녀왔어요?`}
       </Text>
-      <Text
-        variant="body"
-        color="fgWeak"
-        style={[styles.center, { marginTop: theme.spacing[8], marginBottom: theme.spacing[24] }]}
-      >
-        {'로그를 만들고 초대코드로 연인을 초대해\n함께 다닌 맛집을 기록해보세요.'}
+      <Text variant="sectionCaption" color="fgMuted" style={{ marginTop: theme.spacing[8] }}>
+        지금까지 함께{' '}
+        <Text variant="sectionCaption" color="accentStrong">
+          {`${totalSpots}곳`}
+        </Text>
+        을 기록했어요
       </Text>
-      <Button title="로그 만들기" loading={creating} onPress={onCreate} />
+    </View>
+  );
+};
+
+// 빈 상태 두 갈래 시작 카드(킷 SheetAction mk-home:203-218) — 이모지 배지 + 제목/설명 + chevron.
+const StartActionCard = ({
+  emoji,
+  title,
+  desc,
+  onPress,
+  loading,
+}: {
+  emoji: string;
+  title: string;
+  desc: string;
+  onPress: () => void;
+  loading?: boolean;
+}) => {
+  const theme = useTheme();
+  return (
+    <Card
+      accessibilityLabel={title}
+      onPress={loading ? undefined : onPress}
+      style={{
+        ...styles.startCard,
+        borderRadius: theme.radius.action,
+        borderColor: theme.color.hairline,
+        opacity: loading ? 0.6 : 1,
+      }}
+    >
+      <View style={[styles.startEmoji, { borderRadius: theme.radius.control, backgroundColor: theme.color.primaryWeak }]}>
+        <Text style={styles.startEmojiText}>{emoji}</Text>
+      </View>
+      <View style={styles.startBody}>
+        <Text variant="sheetTitle" color="fg">
+          {title}
+        </Text>
+        <Text variant="meta" color="fgMuted" style={{ marginTop: theme.spacing[2] }}>
+          {desc}
+        </Text>
+      </View>
+      <Icon name={IconName.ChevronRight} size={18} color="fgAssistive" />
+    </Card>
+  );
+};
+
+// 빈 상태(킷 mk-home:136-181) — 인사 + 히어로 비주얼(그라데이션 + 아바타+💕+🙂 + 음식 핀 4) + 두 갈래 카드.
+const EmptyLogs = ({
+  self,
+  onCreate,
+  onJoin,
+  creating,
+}: {
+  self: { userId: string; nickname: string; avatarUrl: string | null };
+  onCreate: () => void;
+  onJoin: () => void;
+  creating: boolean;
+}) => {
+  const theme = useTheme();
+  return (
+    <Screen edges={['left', 'right', 'bottom']} style={styles.emptyScreen}>
+      <ScrollView contentContainerStyle={styles.emptyScroll} showsVerticalScrollIndicator={false}>
+        {/* 인사 */}
+        <View style={styles.greeting}>
+          <Text variant="emptyTitle" color="fg">
+            {`${self.nickname}님,\n먹로그를 시작해볼까요?`}
+          </Text>
+          <Text variant="sectionCaption" color="fgMuted" style={{ marginTop: theme.spacing[10] }}>
+            {'둘이 다녀온 맛집을 사진·메모·위치로\n함께 기록하는 우리만의 지도예요.'}
+          </Text>
+        </View>
+
+        {/* 히어로 비주얼 — 그라데이션 박스 + 음식 이모지 핀 4 + 아바타+💕+🙂. */}
+        <LinearGradient
+          testID="empty-hero"
+          colors={heroGradient}
+          start={HERO_GRADIENT_START}
+          end={HERO_GRADIENT_END}
+          style={[styles.hero, { marginTop: theme.spacing[20], borderRadius: theme.radius.card }]}
+        >
+          <HeroPill emoji="🍝" position={styles.pillTopLeft} />
+          <HeroPill emoji="☕" position={styles.pillTopRight} />
+          <HeroPill emoji="🍣" position={styles.pillBottomLeft} />
+          <HeroPill emoji="🍰" position={styles.pillBottomRight} />
+          <View style={styles.heroCenter}>
+            <Avatar url={self.avatarUrl} userId={self.userId} nickname={self.nickname} size={62} />
+            <View style={[styles.heroHeart, { backgroundColor: theme.color.surface }]}>
+              <Text style={styles.heroHeartText}>💕</Text>
+            </View>
+            <View style={styles.heroPartner}>
+              <Text style={styles.heroPartnerText}>🙂</Text>
+            </View>
+          </View>
+        </LinearGradient>
+
+        {/* 두 갈래 시작 카드 */}
+        <View style={[styles.startCards, { marginTop: theme.spacing[18] }]}>
+          <StartActionCard
+            emoji="🥢"
+            title="새 로그 만들기"
+            desc="먼저 시작하고 연인을 초대해요"
+            onPress={onCreate}
+            loading={creating}
+          />
+          <StartActionCard
+            emoji="💌"
+            title="초대코드로 입장"
+            desc="연인이 보낸 6자리 코드가 있어요"
+            onPress={onJoin}
+          />
+        </View>
+      </ScrollView>
     </Screen>
+  );
+};
+
+// 히어로 음식 이모지 핀(킷 mk-home:182-190) — 흰 원형 칩 + 그림자.
+const HeroPill = ({ emoji, position }: { emoji: string; position: ViewStyleAtom }) => {
+  const theme = useTheme();
+  return (
+    <View style={[styles.heroPill, { backgroundColor: theme.color.surface }, theme.shadow.seg, position]}>
+      <Text style={styles.heroPillText}>{emoji}</Text>
+    </View>
   );
 };
 
@@ -167,7 +418,7 @@ export const LogListScreen = () => {
   const previewPaths = state.status === 'ready' ? state.logs.flatMap((item) => item.previewPaths) : [];
   const { urls: previewUrls } = useLogPreviewUrls({ paths: previewPaths });
 
-  // 생성 핸들러 — PlusHeaderButton과 동일(createRoom→refresh, 실패 시 Alert). 빈상태/하단 CTA 공용.
+  // 생성 핸들러 — createRoom→refresh, 실패 시 Alert. 빈상태/하단 CTA 공용.
   const handleCreate = async () => {
     try {
       await createRoom();
@@ -176,6 +427,9 @@ export const LogListScreen = () => {
       Alert.alert('로그를 만들지 못했어요', mapRoomError({ error: err }));
     }
   };
+
+  // 초대코드 입장(킷 EmptyLogs onJoin) — JoinLog 풀스크린 라우트로 이동.
+  const handleJoin = () => navigation.navigate(Routes.JoinLog);
 
   if (state.status === 'loading') {
     return (
@@ -201,10 +455,20 @@ export const LogListScreen = () => {
     );
   }
 
-  // ready & 빈 목록 = 빈 상태(정상, 에러 아님). mk-home EmptyLogs 재현(이모지 허용).
+  // ready & 빈 목록 = 빈 상태(정상, 에러 아님). 킷 EmptyLogs 재현(히어로 + 두 갈래).
   if (state.logs.length === 0) {
-    return <EmptyLogs onCreate={() => void handleCreate()} creating={creating} />;
+    return (
+      <EmptyLogs
+        self={self}
+        onCreate={() => void handleCreate()}
+        onJoin={handleJoin}
+        creating={creating}
+      />
+    );
   }
+
+  // 전 로그 spotCount 합 — 인사 헤드라인 합계 강조(킷 mk-home:121).
+  const totalSpots = state.logs.reduce((sum, item) => sum + item.spotCount, 0);
 
   return (
     <Screen edges={['left', 'right', 'bottom']} style={styles.listScreen}>
@@ -212,17 +476,13 @@ export const LogListScreen = () => {
         data={state.logs}
         keyExtractor={(item) => item.roomId}
         contentContainerStyle={{
-          // 킷 mk-home:87 리스트 패딩 4 / 20 / 24(비대칭).
+          // 킷 mk-home:115 리스트 패딩 4 / 20 / 24(비대칭).
           gap: theme.spacing[16],
           paddingTop: theme.spacing[4],
           paddingHorizontal: theme.spacing[20],
           paddingBottom: theme.spacing[24],
         }}
-        ListHeaderComponent={
-          <Text variant="sectionCaption" color="fgMuted" style={{ marginBottom: theme.spacing[4] }}>
-            둘만의 맛집 지도를 함께 채워가요.
-          </Text>
-        }
+        ListHeaderComponent={<GreetingHeader nickname={self.nickname} totalSpots={totalSpots} />}
         renderItem={({ item }) => (
           <LogCard
             log={item}
@@ -239,8 +499,7 @@ export const LogListScreen = () => {
   );
 };
 
-// 하단 "새 로그 시작하기" CTA — 2px dashed accentLine 보더 + accentStrong plus·라벨(mk.addRow 재현).
-//   카드 섀도우는 끄고(점선 CTA는 투명 표면) accentLine 보더만 노출.
+// 하단 "새 로그 시작하기" CTA — 2px dashed accentLine 보더 + accentStrong plus·라벨(킷 mk.addRow:450-452).
 const CreateLogCta = ({ onPress, disabled }: { onPress: () => void; disabled: boolean }) => {
   const theme = useTheme();
   return (
@@ -263,17 +522,119 @@ const CreateLogCta = ({ onPress, disabled }: { onPress: () => void; disabled: bo
   );
 };
 
+// HeroPill position prop 타입 — StyleSheet 절대배치 atom(top/left/right/bottom만).
+type ViewStyleAtom = { top?: number; left?: number; right?: number; bottom?: number };
+
 const styles = StyleSheet.create({
   center: { textAlign: 'center' },
-  emptyEmoji: { fontSize: 64, lineHeight: 72, textAlign: 'center' },
   listScreen: { padding: 0 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatarStack: { flexDirection: 'row', alignItems: 'center' },
   cardHeaderBody: { flex: 1, minWidth: 0 },
   cardMeta: { flexDirection: 'row', alignItems: 'center' },
-  // 대표 커버 사진 — 처음 설계(4슬롯 행)의 슬롯 1칸 크기 유지(약 1/4 폭 정사각). 풀폭 배너 아님(카드 크기 보존).
-  //   width 23% ≈ (100% - gap 3칸)/4. aspectRatio 1 → 원래 슬롯과 동일 높이. 사진 없으면 미렌더.
-  previewCover: { width: '23%', aspectRatio: 1, overflow: 'hidden' },
+
+  // 사진 스트립(킷 mk-home:75 gap:7) — 4칸 flex:1 aspectRatio:1.
+  strip: { flexDirection: 'row', gap: 7 },
+  slot: { flex: 1, aspectRatio: 1, overflow: 'hidden' },
+  slotImage: { width: '100%', height: '100%' },
+  // 빈 슬롯(킷 mk-home:89) — fillAlt 배경 + 1px dashed hairline.
+  slotEmpty: { borderWidth: 1, borderStyle: 'dashed' },
+  // +N 오버레이(킷 mk-home:81-83) — 슬롯 전체 덮는 딤 + 중앙 흰 텍스트.
+  moreOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  moreText: { lineHeight: undefined },
+
+  // 빈카드(킷 mk-home:64-71) — 점선 박스, 14/16 패딩, 아이콘 배지 + 텍스트 + plus.
+  emptyBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+  },
+  emptyBadge: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  emptyBadgeEmoji: { fontSize: 20, lineHeight: 24, textAlign: 'center' },
+  emptyBodyText: { flex: 1, minWidth: 0 },
+
+  // 통계행(킷 mk-home:93) — 상단 헤어라인, 좌우 정렬.
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  statsLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+
+  // 인사 헤드라인(킷 mk-home:116/140 — margin 2px 좌우는 화면 패딩으로 대체).
+  greeting: { marginHorizontal: 2 },
+
+  // 빈 상태 스크롤(킷 mk-home:138 padding 10/20/28).
+  emptyScreen: { padding: 0 },
+  emptyScroll: { paddingTop: 10, paddingHorizontal: 20, paddingBottom: 28 },
+
+  // 히어로 박스(킷 mk-home:150-172).
+  hero: { height: HERO_HEIGHT, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  heroCenter: { flexDirection: 'row', alignItems: 'center' },
+  // 💕 칩(킷 mk-home:162-166) — 두 아바타 사이 겹침, 흰 원형 + 그림자.
+  heroHeart: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    marginHorizontal: -8,
+    zIndex: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  heroHeartText: { fontSize: 22, lineHeight: 26, textAlign: 'center' },
+  // 익명 짝꿍 자리(킷 mk-home:167-170) — 반투명 흰 원 + inset ring + 🙂.
+  heroPartner: {
+    width: 62,
+    height: 62,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderWidth: 2,
+    borderColor: 'rgba(120,90,70,0.12)',
+  },
+  heroPartnerText: { fontSize: 30, lineHeight: 34, textAlign: 'center' },
+  // 음식 핀(킷 mk-home:182-190) — 36 원형 흰 칩.
+  heroPill: {
+    position: 'absolute',
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  heroPillText: { fontSize: 19, lineHeight: 23, textAlign: 'center' },
+  pillTopLeft: { top: 22, left: 24 },
+  pillTopRight: { top: 30, right: 28 },
+  pillBottomLeft: { bottom: 24, left: 34 },
+  pillBottomRight: { bottom: 30, right: 30 },
+
+  // 두 갈래 시작 카드(킷 SheetAction mk-home:203-218).
+  startCards: { gap: 10 },
+  startCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    // 시작 카드는 헤어라인 보더 surface — 카드 기본 웜 섀도우 끄고 보더만(킷 SheetAction은 1px line·그림자 없음).
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  startEmoji: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center' },
+  startEmojiText: { fontSize: 24, lineHeight: 28, textAlign: 'center' },
+  startBody: { flex: 1, minWidth: 0 },
+
   cta: {
     flexDirection: 'row',
     alignItems: 'center',

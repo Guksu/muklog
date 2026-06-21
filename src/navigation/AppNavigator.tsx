@@ -1,6 +1,6 @@
 // src/navigation/AppNavigator.tsx
 // 인증 완료 후 스택. 멀티 로그 전환(multi-log-home): 게이트 제거로 항상 HomeTabs로 직행한다.
-//   HomeTabs(탭, headerShown false) / Profile(헤더 표시) / JoinLog(헤더 "초대코드 입장").
+//   HomeTabs(탭, headerShown false) / Profile(헤더 표시) / JoinLog(헤더 "초대코드 입력").
 //   LogScreen은 네이티브 헤더를 숨긴다(headerShown false) — 킷 mk-log:18-29처럼 화면이 자체 헤더
 //     (chevron-left 뒤로가기 + 아바타 겹침 + 로그명)를 그린다. 네이티브 "로그" 헤더와 이중 헤더 방지.
 //   ⚠️ Onboarding 라우트 제거(게이트 삭제).

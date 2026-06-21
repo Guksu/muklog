@@ -57,12 +57,12 @@ describe('PlusHeaderButton — 액션시트 + 생성/입장 분기', () => {
     expect(screen.queryByText('+')).toBeNull();
   });
 
-  it('+ 탭 시 시트에 "새 로그 만들기"·"초대코드로 입장" 2개 액션이 보인다 (AC6)', () => {
+  it('+ 탭 시 시트에 "새 로그 만들기"·"초대코드로 들어가기" 2개 액션이 보인다 (AC6)', () => {
     renderWithTheme(<PlusHeaderButton />);
     expect(screen.queryByText('새 로그 만들기')).toBeNull();
     openSheet();
     expect(screen.getByText('새 로그 만들기')).toBeTruthy();
-    expect(screen.getByText('초대코드로 입장')).toBeTruthy();
+    expect(screen.getByText('초대코드로 들어가기')).toBeTruthy();
   });
 
   it('"새 로그 만들기" → createRoom() → 성공 시 RoomCreated 축하화면 navigate + refresh() (AC7, FLAG-3)', async () => {
@@ -97,11 +97,11 @@ describe('PlusHeaderButton — 액션시트 + 생성/입장 분기', () => {
     expect(lastCall?.[1]).toBe('코드 생성에 실패했어요. 잠시 후 다시 시도해 주세요.');
   });
 
-  it('"초대코드로 입장" → JoinLog 라우트로 navigate (AC8)', () => {
+  it('"초대코드로 들어가기" → JoinLog 라우트로 navigate (AC8)', () => {
     renderWithTheme(<PlusHeaderButton />);
 
     openSheet();
-    fireEvent.press(screen.getByText('초대코드로 입장'));
+    fireEvent.press(screen.getByText('초대코드로 들어가기'));
 
     expect(mockNavigate).toHaveBeenCalledWith('JoinLog');
     expect(createRoom).not.toHaveBeenCalled();

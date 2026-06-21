@@ -10,8 +10,8 @@ import { SubBar } from './SubBar';
 
 describe('SubBar', () => {
   it('타이틀을 렌더한다', () => {
-    renderWithTheme(<SubBar title="초대코드 입장" onBack={() => {}} />);
-    expect(screen.getByText('초대코드 입장')).toBeTruthy();
+    renderWithTheme(<SubBar title="초대코드 입력" onBack={() => {}} />);
+    expect(screen.getByText('초대코드 입력')).toBeTruthy();
   });
 
   it('뒤로 버튼 탭 시 onBack을 호출한다', () => {

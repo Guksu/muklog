@@ -18,7 +18,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DatePickerSheet, Icon, IconName, Screen, Stars, SubBar, Text } from '@/components';
+import { DatePickerSheet, Icon, IconName, Screen, Stars, SubBar, Text, useToastController } from '@/components';
 import { useTheme } from '@/theme';
 
 import { MUKLOG_CATEGORIES, MUKLOG_CATEGORY_KEYS, type MuklogCategoryKey } from './categories';
@@ -65,6 +65,10 @@ const EMPTY_PLACE_DATA: SheetPlaceData = {
 const PLACE_NAME_MAX = 60;
 const MEMO_MAX = 500;
 const PHOTO_MAX = 5;
+
+// 저장 성공 토스트 카피(킷 mk-log:400) — 신규(create) / 편집(edit) 분기, positive 톤.
+const SAVE_TOAST_CREATE = '맛집을 기록했어요! 🍽️';
+const SAVE_TOAST_EDIT = '기록을 수정했어요';
 
 // 편집 모드 submit 결과(developer useUpdateMuklog 반환과 정합). 성공 판정만 쓰므로 최소형.
 //   place 필드(muklog-place §3.8·§6): 편집 진입 프리필 좌표를 그대로 싣어 재검색 없이 저장해도 손실 0.
@@ -171,6 +175,9 @@ export const MuklogEditor = ({
 
   const { createMuklog, loading: createLoading, error: createError } = useCreateMuklog();
   const picker = useMuklogPhotoPicker();
+  // 저장 성공 토스트 — 전역 토스트 컨트롤러(루트 단일 <Toast>). 성공 콜백에서만 show, 실패 시 미표시(기존 에러는 인라인 유지).
+  //   전역이라 showToast 직후 onSaved(goBack)로 에디터가 언마운트돼도 복귀 화면 위에서 토스트가 유지된다(언마운트 레이스 해소). 킷 mk-log:400.
+  const { showToast } = useToastController();
 
   // 필드 초기값 — 편집이면 initial 프리필, 작성이면 빈값(킷 mk-log:283-288).
   const [placeName, setPlaceName] = useState(initial?.placeName ?? '');
@@ -336,6 +343,8 @@ export const MuklogEditor = ({
             lng: placeData.lng,
           },
         });
+        // 성공 시에만 토스트(킷 mk-log:400). onSaved(goBack)와 겹쳐도 직전 화면에서 보이도록 show 후 onSaved.
+        showToast({ message: SAVE_TOAST_EDIT, tone: 'positive' });
         onSaved();
       } catch {
         // 에러는 submitError(부모 useUpdateMuklog.error)로 인라인 표시. 화면 유지(입력 보존).
@@ -362,6 +371,8 @@ export const MuklogEditor = ({
         },
       });
       if (!controlled) picker.reset();
+      // 성공 시에만 토스트(킷 mk-log:400). 실패 경로(catch)엔 토스트 없음 — 기존 에러 인라인 유지.
+      showToast({ message: SAVE_TOAST_CREATE, tone: 'positive' });
       onSaved();
     } catch {
       // 에러는 useCreateMuklog가 error 상태로 노출 → 아래 인라인 표시. 화면 유지.
@@ -457,7 +468,7 @@ export const MuklogEditor = ({
               onChange={openSearch}
             />
           ) : (
-            // 미선택 — 킷 searchBtn(돋보기 + "장소 검색 (카카오)") → 풀스크린 검색뷰 진입.
+            // 미선택 — 킷 searchBtn(돋보기 + "맛집 이름을 검색해요", mk-log:418) → 풀스크린 검색뷰 진입.
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="장소 검색하기"
@@ -476,8 +487,9 @@ export const MuklogEditor = ({
               ]}
             >
               <Icon name={IconName.Search} size={20} color="fgMuted" />
-              <Text variant="body" color="fgMuted">
-                장소 검색 (카카오)
+              {/* 킷 mk-log:418 검색 버튼 라벨 500/15 → memoBody(500/15) 정합. */}
+              <Text variant="memoBody" color="fgMuted">
+                맛집 이름을 검색해요
               </Text>
             </Pressable>
           )
@@ -547,7 +559,13 @@ export const MuklogEditor = ({
         <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
           별점
         </Text>
-        <Stars value={rating} size={32} editable onChange={setRating} />
+        {/* 별점 + 보조 텍스트(킷 mk-log:449) — 선택 시 "n.0"(fg) / 미선택 시 "어땠어요?"(fgAssistive). 순수 표시. */}
+        <View style={styles.ratingRow}>
+          <Stars value={rating} size={32} editable onChange={setRating} />
+          <Text variant="ratingNum" color={rating > 0 ? 'fg' : 'fgAssistive'}>
+            {rating > 0 ? rating.toFixed(1) : '어땠어요?'}
+          </Text>
+        </View>
 
         {/* 메모 */}
         <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
@@ -606,6 +624,7 @@ export const MuklogEditor = ({
           </Text>
         ) : null}
       </ScrollView>
+      {/* 저장 성공 토스트는 전역(ToastProvider 루트 <Toast>)에서 렌더 — 화면별 <Toast> 없음(이관, 킷 mk-log:400). */}
     </Screen>
   );
 };
@@ -617,6 +636,8 @@ const styles = StyleSheet.create({
   input: { borderWidth: StyleSheet.hairlineWidth },
   memo: { minHeight: 96, textAlignVertical: 'top' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  // 별점 + 보조 텍스트 행(킷 mk-log:447 gap 12).
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   chip: { borderWidth: StyleSheet.hairlineWidth },
   saveAction: { paddingVertical: 8, paddingHorizontal: 6, minWidth: 44, alignItems: 'flex-end' },
   // FLAG-1b: 장소 검색 진입 버튼(킷 searchBtn mk-log:497, border 1.5). 검색뷰=PlaceSearchView. "변경"은 요약카드 내부 액션으로 일원화.

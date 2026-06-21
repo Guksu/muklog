@@ -1,7 +1,7 @@
 // src/navigation/routes.ts
 // 라우트 이름 단일 출처. 문자열 오타로 인한 이동 실패를 컴파일 타임에 차단한다.
 // 멀티 로그 전환(multi-log-home): RoomTabs→HomeTabs, MuklogTab→LogList. Onboarding 제거(게이트 삭제).
-//   LogScreen(로그 상세) 추가. log-invite: JoinLog(초대코드 입장) 등록.
+//   LogScreen(로그 상세) 추가. log-invite: JoinLog(초대코드 입력) 등록.
 //   ui-fidelity FLAG-1/3: MuklogEditor(에디터 풀스크린 — 시트→화면) · RoomCreated(생성완료 축하) 등록.
 export const Routes = {
   HomeTabs: 'HomeTabs', // 인증 후 첫 화면(탭 네비게이터)
@@ -9,7 +9,7 @@ export const Routes = {
   MapTab: 'MapTab', // 탭2 — 지도(stub)
   Profile: 'Profile', // 스택 — 프로필 편집(헤더 진입)
   LogScreen: 'LogScreen', // 스택 — 로그 상세(초대코드 표시·복사 + 솔로/커플 분기)
-  JoinLog: 'JoinLog', // 스택 — 초대코드 입장(6셀 코드 입력 → join_room)
+  JoinLog: 'JoinLog', // 스택 — 초대코드 입력(6셀 코드 입력 → join_room)
   MuklogDetail: 'MuklogDetail', // 스택 — 먹로그 상세(읽기 전용 · 사진 캐러셀). param { muklogId }
   // FLAG-1: 먹로그 작성/편집 에디터(풀스크린, SubBar+저장). muklogId 있으면 편집, 없으면 작성. param { roomId, muklogId? }
   MuklogEditor: 'MuklogEditor',

@@ -20,7 +20,7 @@ describe('LoginScreen', () => {
     renderWithTheme(<LoginScreen {...baseProps} showApple />);
     expect(screen.getByText('먹로그')).toBeTruthy();
     expect(
-      screen.getByText('데이트하며 다닌 맛집을\n사진·메모·위치로 둘이 함께 기록해요.'),
+      screen.getByText('둘이 다녀온 맛집을\n오래오래 함께 기억해요.'),
     ).toBeTruthy();
   });
 

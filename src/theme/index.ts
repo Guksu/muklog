@@ -8,6 +8,7 @@ export {
   typography,
   brandGradient,
   authVisualGradient,
+  heroGradient,
   type Theme,
   type ColorToken,
   type TypographyVariant,

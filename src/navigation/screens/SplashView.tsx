@@ -67,11 +67,11 @@ const styles = StyleSheet.create({
   root: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   center: { alignItems: 'center', gap: 22 },
   // 킷 워드마크 먹로그 단독 800/38(mk-auth:62) — 킷에 이모지 없음(AppMark가 플레이풀 요소 담당).
-  // HomeHeader 워드마크('먹로그' variant=wordmark, Pretendard-Bold) 미러: display 변형도 Pretendard-Bold(동일 weight)로 앱 전역 워드마크 일관성 확보.
+  // HomeHeader 워드마크('먹로그' variant=wordmark, SUIT-Bold) 미러: display 변형도 SUIT-Bold(동일 weight)로 앱 전역 워드마크 일관성 확보.
   // lineHeight=44(킷 /1=38이나 한글 글리프 클리핑 방지 위해 폰트>라인하이트 회피 — 38×1.15 근사). letterSpacing -1(킷 -0.03em×38≈-1.14, HomeHeader 밀착 미러).
   wordmark: { fontSize: 38, lineHeight: 44, letterSpacing: -1 },
   // 킷 태그라인 600/15(mk-auth:66) — SemiBold(bodySm 변형 Medium 보정), lineHeight 15×1.5≈23.
-  tagline: { fontSize: 15, lineHeight: 23, fontFamily: 'Pretendard-SemiBold' },
+  tagline: { fontSize: 15, lineHeight: 23, fontFamily: 'SUIT-SemiBold' },
   // 킷: bottom 54(mk-auth:69).
   spinner: { position: 'absolute', bottom: 54 },
 });

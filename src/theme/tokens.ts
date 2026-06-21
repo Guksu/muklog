@@ -37,6 +37,9 @@ const palette = {
   //   소셜 버튼: apple 검정 #000/흰 텍스트, google 흰 #FFF/잉크 #1F1F1F + --line-strong 보더(mk-auth:128-131).
   brandBlueTop:'#5B85FF', brandBlueBottom:'#2A55E6',
   authGradTop:'#EAF0FF', authGradBottom:'#FFFFFF',
+  // 홈 빈 상태 히어로 비주얼 그라데이션 — 킷 mk-home:152 linear-gradient(150deg,#EAF0FF 0%,#FFE7DD 100%) verbatim.
+  //   라이트블루(accentWeak 톤)→웜 살구. expo-linear-gradient로 150° ≈ start{0,0}→end로 근사(사용처에서 각도 지정).
+  heroGradTop:'#EAF0FF', heroGradBottom:'#FFE7DD',
   lineStrong:'rgba(112,115,124,0.52)',
   socialAppleFg:'#FFFFFF', socialGoogleFg:'#1F1F1F',
   // 사진 위 어두운 글래스 배지 베이스 — 킷 MuklogCard 사진수 배지 rgba(0,0,0,.32)+blur(mk-log:94).
@@ -66,6 +69,8 @@ const palette = {
 //   소비처: AppMark(브랜드 마크), SplashView·LoginScreen 상단 비주얼(expo-linear-gradient).
 export const brandGradient = [palette.brandBlueTop, palette.brandBlueBottom] as const;
 export const authVisualGradient = [palette.authGradTop, palette.authGradBottom] as const;
+// 홈 빈 상태 히어로 그라데이션 stops(킷 mk-home:152). 소비처: EmptyLogs 히어로 박스(expo-linear-gradient).
+export const heroGradient = [palette.heroGradTop, palette.heroGradBottom] as const;
 
 // 시맨틱 컬러 (라이트) [muklog 웜 변형 — 킷 templates/muklog]
 //   primary=포인트 #3366FF / accentStrong=#1F4FE0(배지·CTA 텍스트·강조) / brand=시그니처 #0066FF.
@@ -176,7 +181,7 @@ export const shadow = {
   knob: { shadowColor:'#000', shadowOpacity:0.22, shadowRadius:6, shadowOffset:{width:0,height:2}, elevation:3 },
 } as const;
 
-// 타이포 [프로젝트 정의 — Pretendard 기반]. RN: rem→px(×16), lineHeight는 절대값.
+// 타이포 [프로젝트 정의 — SUIT 기반(킷 SSOT --font-sans SUIT 우선)]. RN: rem→px(×16), lineHeight는 절대값.
 // named arguments(컨벤션): size/ratio가 같은 number 두 개라 순서 실수 방지를 위해 객체로 받는다.
 const makeTypography = ({ size, ratio, family }: { size: number; ratio: number; family: string }) => ({
   fontSize: size,
@@ -184,51 +189,51 @@ const makeTypography = ({ size, ratio, family }: { size: number; ratio: number; 
   fontFamily: family,
 });
 export const typography = {
-  display: makeTypography({ size: 40, ratio: 1.2, family: 'Pretendard-Bold' }),
-  h1:      makeTypography({ size: 32, ratio: 1.25, family: 'Pretendard-Bold' }),
-  h2:      makeTypography({ size: 24, ratio: 1.3, family: 'Pretendard-Bold' }),
-  h3:      makeTypography({ size: 20, ratio: 1.4, family: 'Pretendard-SemiBold' }),
+  display: makeTypography({ size: 40, ratio: 1.2, family: 'SUIT-Bold' }),
+  h1:      makeTypography({ size: 32, ratio: 1.25, family: 'SUIT-Bold' }),
+  h2:      makeTypography({ size: 24, ratio: 1.3, family: 'SUIT-Bold' }),
+  h3:      makeTypography({ size: 20, ratio: 1.4, family: 'SUIT-SemiBold' }),
   // body 계열 기본 weight = Medium (ui-design: "Medium is the default body weight, not Regular").
-  bodyLg:  makeTypography({ size: 18, ratio: 1.6, family: 'Pretendard-Medium' }),
-  body:    makeTypography({ size: 16, ratio: 1.6, family: 'Pretendard-Medium' }),
-  bodySm:  makeTypography({ size: 14, ratio: 1.55, family: 'Pretendard-Medium' }),
-  caption: makeTypography({ size: 12, ratio: 1.4, family: 'Pretendard-Medium' }),
+  bodyLg:  makeTypography({ size: 18, ratio: 1.6, family: 'SUIT-Medium' }),
+  body:    makeTypography({ size: 16, ratio: 1.6, family: 'SUIT-Medium' }),
+  bodySm:  makeTypography({ size: 14, ratio: 1.55, family: 'SUIT-Medium' }),
+  caption: makeTypography({ size: 12, ratio: 1.4, family: 'SUIT-Medium' }),
   // muklog 킷 실수치 역할 토큰 — 폰트 크기/두께를 킷 mk-home/mk-ui와 정확히 정합.
   //   RN은 weight를 family로 잡는다(fonts.ts): 800/700→Bold, 600→SemiBold, 500→Medium.
-  wordmark:   makeTypography({ size: 26, ratio: 1, family: 'Pretendard-Bold' }),      // 800/26 (헤더 워드마크)
-  cardTitle:  makeTypography({ size: 17, ratio: 1.3, family: 'Pretendard-Bold' }),    // 700/17 (카드 타이틀)
-  emptyTitle: makeTypography({ size: 21, ratio: 1.3, family: 'Pretendard-Bold' }),    // 800/21 (빈상태 제목)
-  sectionTitle: makeTypography({ size: 19, ratio: 1.2, family: 'Pretendard-Bold' }),  // 800/19 (LogScreen "우리 맛집 N" 섹션, 킷 mk-log:56)
-  navTitle:   makeTypography({ size: 16, ratio: 1.2, family: 'Pretendard-Bold' }),     // 700/16 (LogScreen 헤더 로그명, 킷 mk-log:25)
-  sectionCaption: makeTypography({ size: 14, ratio: 1.5, family: 'Pretendard-Medium' }), // 500/14 (섹션 캡션)
-  meta:       makeTypography({ size: 13, ratio: 1, family: 'Pretendard-Medium' }),     // 500/12.5 (카드 날짜 메타, 정수 근사)
-  spotCount:  makeTypography({ size: 14, ratio: 1, family: 'Pretendard-SemiBold' }),   // 600/13.5 "맛집 N곳"(정수 근사)
-  badge:      makeTypography({ size: 12, ratio: 1, family: 'Pretendard-Bold' }),       // 700/11.5 멤버배지(정수 근사)
-  button:     makeTypography({ size: 16, ratio: 1.2, family: 'Pretendard-Bold' }),     // 700/16 버튼(md)
+  wordmark:   makeTypography({ size: 26, ratio: 1, family: 'SUIT-Bold' }),      // 800/26 (헤더 워드마크)
+  cardTitle:  makeTypography({ size: 17, ratio: 1.3, family: 'SUIT-Bold' }),    // 700/17 (카드 타이틀)
+  emptyTitle: makeTypography({ size: 21, ratio: 1.3, family: 'SUIT-Bold' }),    // 800/21 (빈상태 제목)
+  sectionTitle: makeTypography({ size: 19, ratio: 1.2, family: 'SUIT-Bold' }),  // 800/19 (LogScreen "우리 맛집 N" 섹션, 킷 mk-log:56)
+  navTitle:   makeTypography({ size: 16, ratio: 1.2, family: 'SUIT-Bold' }),     // 700/16 (LogScreen 헤더 로그명, 킷 mk-log:25)
+  sectionCaption: makeTypography({ size: 14, ratio: 1.5, family: 'SUIT-Medium' }), // 500/14 (섹션 캡션)
+  meta:       makeTypography({ size: 13, ratio: 1, family: 'SUIT-Medium' }),     // 500/12.5 (카드 날짜 메타, 정수 근사)
+  spotCount:  makeTypography({ size: 14, ratio: 1, family: 'SUIT-SemiBold' }),   // 600/13.5 "맛집 N곳"(정수 근사)
+  badge:      makeTypography({ size: 12, ratio: 1, family: 'SUIT-Bold' }),       // 700/11.5 멤버배지(정수 근사)
+  button:     makeTypography({ size: 16, ratio: 1.2, family: 'SUIT-Bold' }),     // 700/16 버튼(md)
   // ── 본 감사(ui-fidelity-audit)로 추가한 킷 정합 역할 토큰 ──
-  sheetTitle:  makeTypography({ size: 18, ratio: 1.3, family: 'Pretendard-Bold' }),    // 700/18 시트 타이틀(킷 mk-ui:167)
-  sectionLabel:makeTypography({ size: 16, ratio: 1.2, family: 'Pretendard-Bold' }),    // 800/16 상세 섹션 제목 "메모"/"위치"(킷 mk-log:175,186)
-  fieldLabel:  makeTypography({ size: 15, ratio: 1.2, family: 'Pretendard-Bold' }),    // 800/15 입력 필드 라벨(킷 mk-log Field:373) · 솔로배너 제목(mk-log:39)
-  memoBody:    makeTypography({ size: 15, ratio: 1.7, family: 'Pretendard-Medium' }),  // 500/15 상세 메모 본문(킷 mk-log:177)
-  ratingNum:   makeTypography({ size: 15, ratio: 1, family: 'Pretendard-Bold' }),      // 700/15 상세 별점 숫자(킷 mk-log:165)
-  inviteCode:  makeTypography({ size: 26, ratio: 1, family: 'Pretendard-Bold' }),      // 800/26 초대코드(킷 mk-home:225) — letterSpacing은 사용처에서 .18em
-  profileName: makeTypography({ size: 22, ratio: 1.2, family: 'Pretendard-Bold' }),    // 800/22 프로필 닉네임(킷 mk-log:440)
+  sheetTitle:  makeTypography({ size: 18, ratio: 1.3, family: 'SUIT-Bold' }),    // 700/18 시트 타이틀(킷 mk-ui:167)
+  sectionLabel:makeTypography({ size: 16, ratio: 1.2, family: 'SUIT-Bold' }),    // 800/16 상세 섹션 제목 "메모"/"위치"(킷 mk-log:175,186)
+  fieldLabel:  makeTypography({ size: 15, ratio: 1.2, family: 'SUIT-Bold' }),    // 800/15 입력 필드 라벨(킷 mk-log Field:373) · 솔로배너 제목(mk-log:39)
+  memoBody:    makeTypography({ size: 15, ratio: 1.7, family: 'SUIT-Medium' }),  // 500/15 상세 메모 본문(킷 mk-log:177)
+  ratingNum:   makeTypography({ size: 15, ratio: 1, family: 'SUIT-Bold' }),      // 700/15 상세 별점 숫자(킷 mk-log:165)
+  inviteCode:  makeTypography({ size: 26, ratio: 1, family: 'SUIT-Bold' }),      // 800/26 초대코드(킷 mk-home:225) — letterSpacing은 사용처에서 .18em
+  profileName: makeTypography({ size: 22, ratio: 1.2, family: 'SUIT-Bold' }),    // 800/22 프로필 닉네임(킷 mk-log:440)
   // ── 이름변경 다이얼로그(rename-dialog)로 추가한 킷 정합 역할 토큰 (킷 mk-extra RenameDialog) ──
-  dialogTitle:   makeTypography({ size: 17.5, ratio: 1.3, family: 'Pretendard-Bold' }),   // 800/17.5 RenameDialog 제목(킷 mk-extra:40)
-  dialogSubtitle:makeTypography({ size: 12.5, ratio: 1.5, family: 'Pretendard-Medium' }), // 500/12.5 RenameDialog 보조문(킷 mk-extra:41, text-alternative)
-  dialogInput:   makeTypography({ size: 16, ratio: 1.2, family: 'Pretendard-SemiBold' }), // 600/16 RenameDialog 입력·취소(킷 mk-extra:46,57). 저장(800/16)은 button 토큰 재사용.
+  dialogTitle:   makeTypography({ size: 17.5, ratio: 1.3, family: 'SUIT-Bold' }),   // 800/17.5 RenameDialog 제목(킷 mk-extra:40)
+  dialogSubtitle:makeTypography({ size: 12.5, ratio: 1.5, family: 'SUIT-Medium' }), // 500/12.5 RenameDialog 보조문(킷 mk-extra:41, text-alternative)
+  dialogInput:   makeTypography({ size: 16, ratio: 1.2, family: 'SUIT-SemiBold' }), // 600/16 RenameDialog 입력·취소(킷 mk-extra:46,57). 저장(800/16)은 button 토큰 재사용.
   // ── 방문일 캘린더 시트(date-picker)로 추가한 킷 정합 역할 토큰 (킷 mk-extra DatePickerSheet 88-118, mk-log dateRow 418) ──
-  calendarMonth:    makeTypography({ size: 17, ratio: 1, family: 'Pretendard-Bold' }),       // 800/17 월 네비 라벨 "YYYY년 M월"(킷 mk-extra:93)
-  calendarDow:      makeTypography({ size: 12, ratio: 1, family: 'Pretendard-Bold' }),        // 700/12 요일 헤더 일~토(킷 mk-extra:99). badge(12/Bold)와 값 동일하나 의미 분리.
-  calendarDay:      makeTypography({ size: 14.5, ratio: 1, family: 'Pretendard-SemiBold' }),  // 600/14.5 날짜 셀 기본(킷 mk-extra:114)
-  calendarDayStrong:makeTypography({ size: 14.5, ratio: 1, family: 'Pretendard-Bold' }),      // 800/14.5 날짜 셀 선택/오늘(킷 mk-extra:114)
-  dateRowValue:     makeTypography({ size: 15, ratio: 1, family: 'Pretendard-SemiBold' }),    // 600/15 방문일 진입 행 날짜 텍스트(킷 mk-log:418)
+  calendarMonth:    makeTypography({ size: 17, ratio: 1, family: 'SUIT-Bold' }),       // 800/17 월 네비 라벨 "YYYY년 M월"(킷 mk-extra:93)
+  calendarDow:      makeTypography({ size: 12, ratio: 1, family: 'SUIT-Bold' }),        // 700/12 요일 헤더 일~토(킷 mk-extra:99). badge(12/Bold)와 값 동일하나 의미 분리.
+  calendarDay:      makeTypography({ size: 14.5, ratio: 1, family: 'SUIT-SemiBold' }),  // 600/14.5 날짜 셀 기본(킷 mk-extra:114)
+  calendarDayStrong:makeTypography({ size: 14.5, ratio: 1, family: 'SUIT-Bold' }),      // 800/14.5 날짜 셀 선택/오늘(킷 mk-extra:114)
+  dateRowValue:     makeTypography({ size: 15, ratio: 1, family: 'SUIT-SemiBold' }),    // 600/15 방문일 진입 행 날짜 텍스트(킷 mk-log:418)
   // ── 알림 설정(notif-settings)로 추가한 킷 정합 역할 토큰 (킷 mk-extra NotifSettingsScreen 128-175) ──
-  notifItemTitle:   makeTypography({ size: 15.5, ratio: 1.3, family: 'Pretendard-Bold' }),    // 700/15.5 마스터 토글 제목 "새 먹로그 알림"(킷 mk-extra:143)
-  notifItemDesc:    makeTypography({ size: 12.5, ratio: 1.4, family: 'Pretendard-Medium' }),  // 500/12.5 마스터 토글 부제(킷 mk-extra:144, text-alternative)
-  notifSectionLabel:makeTypography({ size: 13, ratio: 1, family: 'Pretendard-Bold' }),        // 800/13 "로그별 알림" 섹션 라벨(킷 mk-extra:151, text-alternative)
-  notifLogName:     makeTypography({ size: 14.5, ratio: 1.3, family: 'Pretendard-SemiBold' }),// 600/14.5 로그별 행 로그명(킷 mk-extra:162, 1줄 ellipsis)
-  notifHint:        makeTypography({ size: 12, ratio: 1.6, family: 'Pretendard-Medium' }),    // 500/12 하단 안내 카피(킷 mk-extra:168, text-assistive)
+  notifItemTitle:   makeTypography({ size: 15.5, ratio: 1.3, family: 'SUIT-Bold' }),    // 700/15.5 마스터 토글 제목 "새 먹로그 알림"(킷 mk-extra:143)
+  notifItemDesc:    makeTypography({ size: 12.5, ratio: 1.4, family: 'SUIT-Medium' }),  // 500/12.5 마스터 토글 부제(킷 mk-extra:144, text-alternative)
+  notifSectionLabel:makeTypography({ size: 13, ratio: 1, family: 'SUIT-Bold' }),        // 800/13 "로그별 알림" 섹션 라벨(킷 mk-extra:151, text-alternative)
+  notifLogName:     makeTypography({ size: 14.5, ratio: 1.3, family: 'SUIT-SemiBold' }),// 600/14.5 로그별 행 로그명(킷 mk-extra:162, 1줄 ellipsis)
+  notifHint:        makeTypography({ size: 12, ratio: 1.6, family: 'SUIT-Medium' }),    // 500/12 하단 안내 카피(킷 mk-extra:168, text-assistive)
 } as const;
 
 export const themes = {

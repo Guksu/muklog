@@ -38,6 +38,10 @@ jest.mock('@/features/auth', () => ({ useAuth: () => mockUseAuth() }));
 const mockUseProfile = jest.fn();
 jest.mock('@/features/profile', () => ({ useProfile: (a: unknown) => mockUseProfile(a) }));
 
+// 전역 토스트 컨트롤러 — 삭제 성공 토스트 호출(message/tone) 검증용.
+const mockShowToast = jest.fn();
+jest.mock('@/components', () => ({ useToastController: () => ({ showToast: mockShowToast }) }));
+
 // MuklogDetailScreen probe — 받은 props를 외부로 노출(렌더 트리에 직렬화).
 let lastProps: Record<string, unknown> = {};
 jest.mock('./MuklogDetailScreen', () => {
@@ -197,7 +201,22 @@ describe('MuklogDetailRoute — 편집/삭제 배선 (plan §4·§5)', () => {
     await waitFor(() => expect(mockGoBack).toHaveBeenCalledTimes(1));
   });
 
-  it('삭제 실패면 goBack하지 않는다(확인 시트 유지·재시도)', async () => {
+  it('삭제 성공 시 "먹로그를 삭제했어요"(positive) 전역 토스트를 goBack 전에 띄운다 (AC2)', async () => {
+    mockUseMuklog.mockReturnValue({ state: readyMuklog(), refresh });
+    render(<MuklogDetailRoute />);
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('probe-delete'));
+    });
+
+    expect(mockShowToast).toHaveBeenCalledWith({
+      message: '먹로그를 삭제했어요',
+      tone: 'positive',
+    });
+    await waitFor(() => expect(mockGoBack).toHaveBeenCalledTimes(1));
+  });
+
+  it('삭제 실패면 goBack하지 않고 토스트도 띄우지 않는다(확인 시트 유지·재시도, AC2)', async () => {
     mockDeleteMuklog.mockRejectedValue(new Error('boom'));
     mockUseMuklog.mockReturnValue({ state: readyMuklog(), refresh });
     render(<MuklogDetailRoute />);
@@ -208,5 +227,6 @@ describe('MuklogDetailRoute — 편집/삭제 배선 (plan §4·§5)', () => {
 
     expect(mockDeleteMuklog).toHaveBeenCalled();
     expect(mockGoBack).not.toHaveBeenCalled();
+    expect(mockShowToast).not.toHaveBeenCalled();
   });
 });

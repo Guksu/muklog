@@ -7,14 +7,20 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ThemeProvider } from '@/theme';
 
+import { ToastProvider } from '@/components';
+
 const initialMetrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
   insets: { top: 0, left: 0, right: 0, bottom: 0 },
 };
 
+// ToastProvider를 기본 포함 — 전역 토스트 이관 후(useToastController) 화면/컴포넌트 spec이 추가 래핑 없이 동작한다.
+//   App.tsx의 실제 트리(SafeArea→Theme→ToastProvider)와 동일 순서로 둔다.
 const AllProviders = ({ children }: { children: React.ReactNode }) => (
   <SafeAreaProvider initialMetrics={initialMetrics}>
-    <ThemeProvider>{children}</ThemeProvider>
+    <ThemeProvider>
+      <ToastProvider>{children}</ToastProvider>
+    </ThemeProvider>
   </SafeAreaProvider>
 );
 

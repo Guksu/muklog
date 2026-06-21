@@ -16,7 +16,7 @@ import { type WishlistItem } from './types';
 export type WishlistViewProps = {
   /** 조회된 위시 항목(이미 ready). loading/error는 컨테이너(developer)가 처리. */
   items: WishlistItem[];
-  /** 내 닉네임 — addedByMe=true 항목의 "{닉}님이 추가" 라벨용(계산 아님, props 수신). */
+  /** 내 닉네임 — addedByMe=true 항목의 "{닉}님이 담았어요" 라벨용(계산 아님, props 수신). */
   meNickname: string;
   /** 내 아바타 URL(addedByMe일 때 이미지). 없으면 addedBy uuid 결정적 이모지 폴백. */
   meAvatarUrl?: string | null;
@@ -58,14 +58,14 @@ export const WishlistView = ({
           color="fg"
           style={[styles.centerText, { marginTop: theme.spacing[8], marginBottom: theme.spacing[6] }]}
         >
-          가보고 싶은 곳을 모아요
+          다음엔 여기 어때요?
         </Text>
         <Text
           variant="bodySm"
           color="fgMuted"
           style={[styles.centerText, { marginBottom: theme.spacing[20] }]}
         >
-          다음 데이트에 가고 싶은 맛집을{'\n'}위시리스트에 담아두세요.
+          가보고 싶은 맛집을 미리 담아두면{'\n'}다음 데이트가 더 쉬워져요.
         </Text>
         <Button
           title="위시리스트에 추가"
@@ -145,7 +145,7 @@ export const WishlistView = ({
                   </Text>
                 ) : null}
 
-                {/* 작성자 행 + 액션 — 킷 209-216. 아바타18 + "{닉}님이 추가" + 다녀왔어요 + ✕. */}
+                {/* 작성자 행 + 액션 — 킷 209-216. 아바타18 + "{닉}님이 담았어요" + 다녀왔어요 + ✕. */}
                 <View style={styles.authorRow}>
                   <Avatar
                     url={wish.addedByMe ? meAvatarUrl : null}
@@ -154,7 +154,7 @@ export const WishlistView = ({
                     ring={false}
                   />
                   <Text variant="caption" color="fgMuted" numberOfLines={1} style={styles.authorLabel}>
-                    {authorName}님이 추가
+                    {authorName}님이 담았어요
                   </Text>
                   <Pressable
                     accessibilityRole="button"
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
   note: { fontSize: 12.5, lineHeight: 19, marginTop: 5 },
   // 작성자 행 — 킷 209 marginTop 9(odd값 raw), gap 8.
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 9 },
-  // "{닉}님이 추가" 500/11.5(킷 211) — caption 크기 오버라이드. flex로 액션 버튼을 우측 정렬.
+  // "{닉}님이 담았어요" 500/11.5(킷 211) — caption 크기 오버라이드. flex로 액션 버튼을 우측 정렬.
   authorLabel: { flex: 1, fontSize: 11.5 },
   // 다녀왔어요 pill — 킷 ex.visitBtn(232): padding 7×13, radius full.
   visitBtn: { paddingVertical: 7, paddingHorizontal: 13 },

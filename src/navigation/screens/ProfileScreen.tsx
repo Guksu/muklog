@@ -1,17 +1,28 @@
 // src/navigation/screens/ProfileScreen.tsx
-// 프로필 화면 — 킷 mk-log.jsx:380-451 ProfileScreen 재현 (plan §5 B3 / §4.8).
-//   96px 아바타(url 있으면 이미지 / 없으면 userId 디폴트 이모지+컬러) + 우하단 카메라 배지(탭→이미지 업로드),
-//   닉네임 + 편집 펜슬(탭→닉네임 편집 시트), 통계 3칸(로그/기록한 맛집="-"/커플 로그), 설정 리스트 4행(비활성).
-//   ⚠️ 이모지 선택 시트는 범위 밖(plan §47, 리더 결정) — 아바타 커스터마이즈는 이미지 업로드 동선만.
+// 프로필 화면 — 킷 mk-log.jsx:527-622 ProfileScreen 재현 (plan profile-fidelity S5).
+//   96px 아바타(url 있으면 이미지 / 없으면 userId 디폴트 이모지+컬러) + 우하단 카메라 배지(탭→이미지 업로드·실변경 토스트),
+//   닉네임 + 편집 펜슬(탭→닉네임 편집 시트·저장 토스트), 통계 3칸(로그/기록한 맛집=ΣspotCount/커플 로그),
+//   설정 리스트 2행(알림 설정 navigate / 이용 안내 toast), 즉시 로그아웃(Alert 없음, 킷 595).
+//   ⚠️ 사진 소스 선택 시트·기본이미지 복원은 범위 밖(S5b 분리) — 아바타 커스터마이즈는 라이브러리 업로드 동선만.
 //
 // 생산자: useProfile(조회)/useUpdateProfile(저장·업로드)/useMyLogs(통계). 소비자: 상태별 UX. 스타일=토큰만(raw hex 0).
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { Avatar, Button, Icon, IconName, RenameDialog, Screen, SubBar, Text } from '@/components';
+import {
+  Avatar,
+  Button,
+  Icon,
+  IconName,
+  RenameDialog,
+  Screen,
+  SubBar,
+  Text,
+  useToastController,
+} from '@/components';
 import { Routes, type AppStackParamList } from '../routes';
 import { useAuth } from '@/features/auth';
 import {
@@ -26,14 +37,21 @@ import {
 import { useMyLogs } from '@/features/room';
 import { useTheme } from '@/theme';
 
-// 설정 리스트 행(킷 mk-log.jsx:422). route가 있으면 탭→navigate, 없으면 비활성 플레이스홀더(차기 기능).
-//   ⚠️ wishlist 스프린트(델타 #5): "위시리스트" 행 제거. 위시리스트는 로그 내부 세그먼트로 진입(중복 진입점 제거, 킷 정합).
-//   notif-settings: "알림 설정" 행만 route=NotifSettings로 활성화(나머지는 동작 변경 없음).
-const SETTINGS_ROWS = [
-  { icon: IconName.Bell, label: '알림 설정', route: Routes.NotifSettings },
-  { icon: IconName.CircleInfo, label: '이용 안내', route: null },
-  { icon: IconName.Setting, label: '설정', route: null },
-] as const;
+// 설정 리스트 행(킷 mk-log.jsx:586) — 2행(알림 설정·이용 안내). "설정" 행 제거(킷 584).
+//   행 동작은 navigate(route) | toast(메시지) 2종(킷: 알림설정=onOpenNotif / 이용안내=showToast).
+//   ⚠️ wishlist 델타 #5: "위시리스트" 행 제거(로그 세그먼트로 진입, 중복 진입점 제거).
+const RowKind = { Navigate: 'navigate', Toast: 'toast' } as const;
+type RowKind = (typeof RowKind)[keyof typeof RowKind];
+
+// navigate 행은 param-less 라우트만(여기선 NotifSettings) — navigate()가 리터럴 라우트명을 요구.
+type SettingsRow =
+  | { kind: typeof RowKind.Navigate; icon: IconName; label: string; route: typeof Routes.NotifSettings }
+  | { kind: typeof RowKind.Toast; icon: IconName; label: string; toastMessage: string };
+
+const SETTINGS_ROWS: readonly SettingsRow[] = [
+  { kind: RowKind.Navigate, icon: IconName.Bell, label: '알림 설정', route: Routes.NotifSettings },
+  { kind: RowKind.Toast, icon: IconName.CircleInfo, label: '이용 안내', toastMessage: '조금만 기다려 주세요' },
+];
 
 const AVATAR_SIZE = 96;
 const CAMERA_BADGE_SIZE = 32;
@@ -58,6 +76,7 @@ const ProfileContent = ({ userId }: { userId: string }) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
+  const { showToast } = useToastController();
   const { signOut } = useAuth();
   const { state, refresh } = useProfile({ userId });
   const { saveNickname, changeAvatar, savingNickname, uploadingAvatar, error } = useUpdateProfile({
@@ -115,13 +134,13 @@ const ProfileContent = ({ userId }: { userId: string }) => {
   // 검증 통과 + 변경됨 + 저장 중 아님일 때만 활성(불필요 쓰기 방지, plan §6).
   const canSave = validation.ok && !savingNickname && validation.value !== currentNickname;
 
-  // 통계(plan §B3) — computeProfileStats(테스트된 단일 출처)로 산출. 미준비(loading/error)면 빈 배열로 0/-/0.
-  //   spotCount는 집계 미보유(SPOT_COUNT_UNAVAILABLE=null) → "-" 표기(차기 백엔드 스프린트에서 실값).
+  // 통계(plan profile-fidelity §4) — computeProfileStats(테스트된 단일 출처)로 산출.
+  //   미준비(loading/error)면 빈 배열로 0/0/0. spotCount는 Σ myLogs.spotCount(킷 totalSpots, S2 집계 실값).
   const myLogs = myLogsState.status === 'ready' ? myLogsState.logs : [];
   const profileStats = computeProfileStats({ logs: myLogs });
-  const stats: { key: string; label: string; value: string | number }[] = [
+  const stats: { key: string; label: string; value: number }[] = [
     { key: 'log', label: '로그', value: profileStats.logCount },
-    { key: 'spot', label: '기록한 맛집', value: profileStats.spotCount ?? '-' },
+    { key: 'spot', label: '기록한 맛집', value: profileStats.spotCount },
     { key: 'couple', label: '커플 로그', value: profileStats.coupleCount },
   ];
 
@@ -130,6 +149,8 @@ const ProfileContent = ({ userId }: { userId: string }) => {
       await saveNickname({ nickname: draft });
       setNickDialogOpen(false);
       await refresh();
+      // 성공 시에만 변경 토스트(킷 545). 실패는 catch로 빠져 토스트 미노출.
+      showToast({ message: '닉네임을 변경했어요', tone: 'positive' });
     } catch {
       // 실패는 useUpdateProfile.error(인라인)로 표시. 입력값/다이얼로그는 유지.
     }
@@ -137,19 +158,19 @@ const ProfileContent = ({ userId }: { userId: string }) => {
 
   const handleChangeAvatar = async () => {
     try {
-      await changeAvatar();
+      const { changed } = await changeAvatar();
+      if (!changed) return; // 취소(피커 닫힘) → refresh·토스트 없음.
       await refresh();
+      // 실변경 성공 시에만 토스트(킷 539). 취소/실패는 미노출.
+      showToast({ message: '프로필 사진을 변경했어요', tone: 'positive' });
     } catch {
       // 권한거부/업로드 실패는 useUpdateProfile.error로 표시. 취소는 no-op.
     }
   };
 
-  // 로그아웃 — 파괴적 액션이므로 확인 후 signOut(→ AuthGate가 unauthenticated→LoginScreen).
+  // 로그아웃 — 즉시 signOut(킷 595, 사용자 결정: 확인 Alert 제거 → AuthGate가 unauthenticated→LoginScreen).
   const handleSignOut = () => {
-    Alert.alert('로그아웃', '로그아웃하면 다시 로그인해야 해요. 로그아웃할까요?', [
-      { text: '취소', style: 'cancel' },
-      { text: '로그아웃', style: 'destructive', onPress: () => void signOut() },
-    ]);
+    void signOut();
   };
 
   return (
@@ -196,7 +217,7 @@ const ProfileContent = ({ userId }: { userId: string }) => {
                 { backgroundColor: theme.color.surfaceAlt, borderRadius: theme.radius.full },
               ]}
             >
-              <Icon name={IconName.Setting} size={15} color="fgWeak" />
+              <Icon name={IconName.Pencil} size={15} color="fgWeak" />
             </Pressable>
           </View>
         </View>
@@ -227,7 +248,7 @@ const ProfileContent = ({ userId }: { userId: string }) => {
           ))}
         </View>
 
-        {/* 설정 리스트 4행(비활성 플레이스홀더) */}
+        {/* 설정 리스트 2행(알림 설정·이용 안내) — 알림설정=navigate, 이용안내=toast */}
         <View
           style={[
             styles.settingsCard,
@@ -241,9 +262,11 @@ const ProfileContent = ({ userId }: { userId: string }) => {
               testID={`settings-row-${row.label}`}
               accessibilityRole="button"
               accessibilityLabel={row.label}
-              // route 있는 행만 탭 활성(없으면 비활성 플레이스홀더 — 기존 동작 유지).
-              disabled={row.route === null}
-              onPress={row.route !== null ? () => navigation.navigate(row.route) : undefined}
+              onPress={
+                row.kind === RowKind.Navigate
+                  ? () => navigation.navigate(row.route)
+                  : () => showToast({ message: row.toastMessage, tone: 'neutral' })
+              }
               style={[
                 styles.settingsRow,
                 index < SETTINGS_ROWS.length - 1

@@ -28,8 +28,8 @@ export type LoginScreenProps = {
   showApple?: boolean;
 };
 
-// 킷 상단 비주얼 카피(mk-auth:99-101) — <br/> → '\n'.
-const LOGIN_COPY = '데이트하며 다닌 맛집을\n사진·메모·위치로 둘이 함께 기록해요.';
+// 킷 상단 비주얼 카피(mk-auth:96-98) — <br/> → '\n'.
+const LOGIN_COPY = '둘이 다녀온 맛집을\n오래오래 함께 기억해요.';
 // 킷 그라데이션 160deg(우상→좌하 대각) 근사 + stops 0%/70%(mk-auth:91).
 const GRADIENT_START = { x: 0.15, y: 0 } as const;
 const GRADIENT_END = { x: 0.85, y: 1 } as const;
@@ -127,11 +127,11 @@ const styles = StyleSheet.create({
   },
   copyBlock: { alignItems: 'center' },
   // 킷 워드마크: 먹로그 단독(800/34)(mk-auth:94) — 킷에 이모지 없음(AppMark가 플레이풀 요소 담당).
-  // HomeHeader 워드마크('먹로그' variant=wordmark, Pretendard-Bold) 미러: emptyTitle 변형도 Pretendard-Bold(동일 weight)로 앱 전역 워드마크 일관성 확보.
+  // HomeHeader 워드마크('먹로그' variant=wordmark, SUIT-Bold) 미러: emptyTitle 변형도 SUIT-Bold(동일 weight)로 앱 전역 워드마크 일관성 확보.
   // lineHeight=40(킷 /1=34이나 한글 글리프 클리핑 방지 — 34×1.15 근사). letterSpacing -1(킷 -0.03em×34≈-1.02, HomeHeader 밀착 미러).
   wordmark: { fontSize: 34, lineHeight: 40, letterSpacing: -1 },
   // 킷 카피 600/15.5/1.6(SemiBold), margin-top 14, center(mk-auth:99) — bodySm 변형 Medium 보정.
-  copy: { textAlign: 'center', marginTop: 14, fontSize: 15.5, lineHeight: 25, fontFamily: 'Pretendard-SemiBold' },
+  copy: { textAlign: 'center', marginTop: 14, fontSize: 15.5, lineHeight: 25, fontFamily: 'SUIT-SemiBold' },
   // 킷: 버튼 영역 flex none, padding 0 24 40, gap 11(mk-auth:106).
   actions: { paddingHorizontal: 24, paddingBottom: 40, gap: 11 },
   error: { textAlign: 'center' },

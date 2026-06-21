@@ -37,7 +37,7 @@ export const HomeTabs = () => {
         },
         // 킷 라벨 11px, SemiBold(비활성 600 근사 — react-navigation은 focus별 weight 변경 어려움).
         tabBarLabelStyle: {
-          fontFamily: 'Pretendard-SemiBold',
+          fontFamily: 'SUIT-SemiBold',
           fontSize: 11,
         },
       }}

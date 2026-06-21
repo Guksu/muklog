@@ -2,8 +2,8 @@
 // 토큰 정합(muklog 웜 변형 킷) 값 단언 — AC-1/2/5. (plan §6 A, T2 / ui-redesign 디테일 보정)
 //   primary #3366FF · accentStrong #1F4FE0 · primaryWeak #EAF0FF · accentLine #BFD0FF · accentShadow rgba(51,102,255,.30)
 //   · fg 웜잉크 #2A2422 / fgWeak #5C5550 · brand #0066FF · hairline·surfaceAlt·fgAssistive 키 존재
-//   · radius.control=14 / card=22 / sheet=20 · shadow.card 웜 섀도우 · body 계열 family = Pretendard-Medium.
-import { themes, radius, shadow, typography, brandGradient, authVisualGradient } from './tokens';
+//   · radius.control=14 / card=22 / sheet=20 · shadow.card 웜 섀도우 · body 계열 family = SUIT-Medium.
+import { themes, radius, shadow, typography, brandGradient, authVisualGradient, heroGradient } from './tokens';
 
 describe('tokens — 컬러 (muklog 웜 변형, AC-1)', () => {
   it('primary가 포인트 블루 #3366FF다', () => {
@@ -133,6 +133,10 @@ describe('tokens — 인증(social-auth) 토큰 (킷 mk-auth.jsx)', () => {
     expect(authVisualGradient).toEqual(['#EAF0FF', '#FFFFFF']);
   });
 
+  it('heroGradient가 킷 홈 빈 상태 히어로 [#EAF0FF, #FFE7DD]이다 (mk-home:152, home-fidelity)', () => {
+    expect(heroGradient).toEqual(['#EAF0FF', '#FFE7DD']);
+  });
+
   it('lineStrong이 킷 SocialButton 보더(--line-strong rgba 112,115,124,.52)다', () => {
     expect(themes.light.color.lineStrong).toBe('rgba(112,115,124,0.52)');
   });
@@ -155,10 +159,17 @@ describe('tokens — 다크 미러링 (엣지1)', () => {
 });
 
 describe('tokens — typography (AC-5)', () => {
-  it('body/bodyLg/bodySm의 기본 family가 Pretendard-Medium이다', () => {
-    expect(typography.body.fontFamily).toBe('Pretendard-Medium');
-    expect(typography.bodyLg.fontFamily).toBe('Pretendard-Medium');
-    expect(typography.bodySm.fontFamily).toBe('Pretendard-Medium');
+  it('body/bodyLg/bodySm의 기본 family가 SUIT-Medium이다', () => {
+    expect(typography.body.fontFamily).toBe('SUIT-Medium');
+    expect(typography.bodyLg.fontFamily).toBe('SUIT-Medium');
+    expect(typography.bodySm.fontFamily).toBe('SUIT-Medium');
+  });
+
+  it('typography 전 항목 fontFamily가 SUIT-로 시작한다(Pretendard 잔존 0건, AC2)', () => {
+    Object.values(typography).forEach((token) => {
+      expect(token.fontFamily.startsWith('SUIT-')).toBe(true);
+      expect(token.fontFamily.startsWith('Pretendard-')).toBe(false);
+    });
   });
 
   it('muklog 킷 역할 토큰(wordmark/cardTitle/emptyTitle/badge)의 크기를 정합한다', () => {
@@ -170,24 +181,24 @@ describe('tokens — typography (AC-5)', () => {
 
   it('sectionTitle이 킷 섹션 헤더 800/19(Bold)다 (LogScreen "우리 맛집 N")', () => {
     expect(typography.sectionTitle.fontSize).toBe(19);
-    expect(typography.sectionTitle.fontFamily).toBe('Pretendard-Bold');
+    expect(typography.sectionTitle.fontFamily).toBe('SUIT-Bold');
   });
 
   it('navTitle이 킷 로그 헤더 700/16(Bold)다 (LogScreen 헤더 로그명, 킷 mk-log:25)', () => {
     expect(typography.navTitle.fontSize).toBe(16);
-    expect(typography.navTitle.fontFamily).toBe('Pretendard-Bold');
+    expect(typography.navTitle.fontFamily).toBe('SUIT-Bold');
   });
 
   it('ui-fidelity-audit 추가 역할 토큰이 킷 실값과 정합한다', () => {
     // 시트 타이틀 700/18(킷 mk-ui:167), 상세 섹션 800/16(mk-log:175), 필드 라벨 800/15(mk-log:373).
     expect(typography.sheetTitle.fontSize).toBe(18);
-    expect(typography.sheetTitle.fontFamily).toBe('Pretendard-Bold');
+    expect(typography.sheetTitle.fontFamily).toBe('SUIT-Bold');
     expect(typography.sectionLabel.fontSize).toBe(16);
-    expect(typography.sectionLabel.fontFamily).toBe('Pretendard-Bold');
+    expect(typography.sectionLabel.fontFamily).toBe('SUIT-Bold');
     expect(typography.fieldLabel.fontSize).toBe(15);
     // 메모 본문 500/15(mk-log:177), 별점 숫자 700/15(mk-log:165).
     expect(typography.memoBody.fontSize).toBe(15);
-    expect(typography.memoBody.fontFamily).toBe('Pretendard-Medium');
+    expect(typography.memoBody.fontFamily).toBe('SUIT-Medium');
     expect(typography.ratingNum.fontSize).toBe(15);
     // 초대코드 800/26(mk-home:225), 프로필 닉네임 800/22(mk-log:440).
     expect(typography.inviteCode.fontSize).toBe(26);
@@ -303,24 +314,24 @@ describe('tokens — 캘린더 요일 색 (date-picker, 킷 mk-extra:100)', () =
 describe('tokens — 캘린더 타이포 (date-picker, 킷 mk-extra DatePickerSheet)', () => {
   it('월 네비 라벨이 800/17(Bold)다 (킷 mk-extra:93)', () => {
     expect(typography.calendarMonth.fontSize).toBe(17);
-    expect(typography.calendarMonth.fontFamily).toBe('Pretendard-Bold');
+    expect(typography.calendarMonth.fontFamily).toBe('SUIT-Bold');
   });
 
   it('요일 헤더가 700/12(Bold)다 (킷 mk-extra:99)', () => {
     expect(typography.calendarDow.fontSize).toBe(12);
-    expect(typography.calendarDow.fontFamily).toBe('Pretendard-Bold');
+    expect(typography.calendarDow.fontFamily).toBe('SUIT-Bold');
   });
 
   it('날짜 셀 기본/강조가 14.5(SemiBold/Bold)다 (킷 mk-extra:114)', () => {
     expect(typography.calendarDay.fontSize).toBe(14.5);
-    expect(typography.calendarDay.fontFamily).toBe('Pretendard-SemiBold');
+    expect(typography.calendarDay.fontFamily).toBe('SUIT-SemiBold');
     expect(typography.calendarDayStrong.fontSize).toBe(14.5);
-    expect(typography.calendarDayStrong.fontFamily).toBe('Pretendard-Bold');
+    expect(typography.calendarDayStrong.fontFamily).toBe('SUIT-Bold');
   });
 
   it('방문일 진입 행 날짜 텍스트가 600/15(SemiBold)다 (킷 mk-log:418)', () => {
     expect(typography.dateRowValue.fontSize).toBe(15);
-    expect(typography.dateRowValue.fontFamily).toBe('Pretendard-SemiBold');
+    expect(typography.dateRowValue.fontFamily).toBe('SUIT-SemiBold');
   });
 });
 

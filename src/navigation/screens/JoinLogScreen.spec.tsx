@@ -1,5 +1,5 @@
 // src/navigation/screens/JoinLogScreen.spec.tsx
-// 초대코드 입장 화면 — 버튼 활성 조건·성공 시 refresh+replace·실패 시 인라인 에러 (plan §6.5 / §5 T8, AC11–AC15).
+// 초대코드 입력 화면 — 버튼 활성 조건·성공 시 refresh+replace·실패 시 인라인 에러 (plan §6.5 / §5 T8, AC11–AC15).
 import React from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
@@ -51,7 +51,7 @@ describe('JoinLogScreen', () => {
   it('6자 미만이면 입장 버튼이 비활성이라 joinRoom을 호출하지 않는다 (AC11)', () => {
     renderWithTheme(<JoinLogScreen />);
     typeCode('ABCDE'); // 5자
-    fireEvent.press(screen.getByLabelText('입장하기'));
+    fireEvent.press(screen.getByLabelText('들어가기'));
     expect(joinRoom).not.toHaveBeenCalled();
   });
 
@@ -60,13 +60,25 @@ describe('JoinLogScreen', () => {
     renderWithTheme(<JoinLogScreen />);
 
     typeCode('ABCDEF');
-    fireEvent.press(screen.getByLabelText('입장하기'));
+    fireEvent.press(screen.getByLabelText('들어가기'));
 
     await waitFor(() => {
       expect(joinRoom).toHaveBeenCalledWith({ code: 'ABCDEF' });
     });
     expect(refresh).toHaveBeenCalled();
     expect(mockReplace).toHaveBeenCalledWith('LogScreen', { roomId: 'r1' });
+  });
+
+  it('입장 성공 시 전역 토스트 "로그에 들어왔어요! 💕"를 표시한다 (킷 SPEC §2-2)', async () => {
+    joinRoom.mockResolvedValueOnce({ roomId: 'r1' });
+    renderWithTheme(<JoinLogScreen />);
+
+    typeCode('ABCDEF');
+    fireEvent.press(screen.getByLabelText('들어가기'));
+
+    await waitFor(() => {
+      expect(screen.getByText('로그에 들어왔어요! 💕')).toBeTruthy();
+    });
   });
 
   it('실패 시(INVALID_CODE) 인라인 에러 메시지를 표시하고 네비게이션하지 않는다 (AC13)', async () => {
@@ -78,7 +90,7 @@ describe('JoinLogScreen', () => {
     const { rerender } = renderWithTheme(<JoinLogScreen />);
 
     typeCode('ZZZZZZ');
-    fireEvent.press(screen.getByLabelText('입장하기'));
+    fireEvent.press(screen.getByLabelText('들어가기'));
 
     await waitFor(() => {
       expect(joinRoom).toHaveBeenCalled();
@@ -98,7 +110,7 @@ describe('JoinLogScreen', () => {
     setupHooks({ loading: true });
     renderWithTheme(<JoinLogScreen />);
     typeCode('ABCDEF');
-    fireEvent.press(screen.getByLabelText('입장하기'));
+    fireEvent.press(screen.getByLabelText('들어가기'));
     expect(joinRoom).not.toHaveBeenCalled();
   });
 });

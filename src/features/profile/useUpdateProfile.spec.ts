@@ -127,24 +127,28 @@ describe('useUpdateProfile.changeAvatar (T7 / P3·P4·P7·P10)', () => {
     expect(result.current.error).toBe('사진 접근 권한이 필요해요. 설정에서 허용해 주세요.');
   });
 
-  it('피커 취소 → no-op (업로드 0회, error null)', async () => {
+  it('피커 취소 → no-op + { changed: false } (업로드 0회, error null)', async () => {
     launchPicker.mockResolvedValueOnce({ canceled: true, assets: null });
     const { result } = renderHook(() => useUpdateProfile({ userId: 'u1' }));
 
+    let outcome: { changed: boolean } | undefined;
     await act(async () => {
-      await result.current.changeAvatar();
+      outcome = await result.current.changeAvatar();
     });
 
     expect(upload).not.toHaveBeenCalled();
     expect(result.current.error).toBeNull();
+    expect(outcome).toEqual({ changed: false });
   });
 
-  it('정상: process→upload(처리본·jpeg)→getPublicUrl→update(avatar_url)→이전파일 remove (P4·P7·P10)', async () => {
+  it('정상: process→upload(처리본·jpeg)→getPublicUrl→update(avatar_url)→이전파일 remove + { changed: true } (P4·P7·P10)', async () => {
     const { result } = renderHook(() => useUpdateProfile({ userId: 'u1' }));
 
+    let outcome: { changed: boolean } | undefined;
     await act(async () => {
-      await result.current.changeAvatar();
+      outcome = await result.current.changeAvatar();
     });
+    expect(outcome).toEqual({ changed: true });
 
     // 원본이 아닌 처리본을 읽어 업로드(P7 — 비용 가드레일)
     expect(process).toHaveBeenCalledWith({ uri: 'file:///orig.png' });

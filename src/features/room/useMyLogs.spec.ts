@@ -20,6 +20,8 @@ const row = (over?: Partial<{
   delete_scheduled_at: string | null;
   delete_requested_by: string | null;
   preview_paths: string[] | null;
+  spot_count: number | null;
+  last_muklog_at: string | null;
 }>) => ({
   room_id: 'r1',
   mode: 'couple',
@@ -63,6 +65,8 @@ describe('useMyLogs', () => {
           deleteScheduledAt: null,
           deleteRequestedBy: null,
           previewPaths: [],
+          spotCount: 0,
+          lastMuklogAt: null,
         },
         {
           roomId: 'r2',
@@ -74,9 +78,48 @@ describe('useMyLogs', () => {
           deleteScheduledAt: null,
           deleteRequestedBy: null,
           previewPaths: [],
+          spotCount: 0,
+          lastMuklogAt: null,
         },
       ],
     });
+  });
+
+  it('spot_count·last_muklog_at 투영: 값 있으면 spotCount(숫자)·lastMuklogAt(ISO)로 매핑 (home-fidelity 경계)', async () => {
+    rpc.mockResolvedValueOnce({
+      data: [
+        row({ room_id: 'r1', spot_count: 7, last_muklog_at: '2026-06-19T05:30:00.000Z' }),
+        row({ room_id: 'r2', spot_count: 0, last_muklog_at: null }), // 맛집 0 → 0·null
+      ],
+      error: null,
+    });
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('ready');
+    });
+    const logs = result.current.state.status === 'ready' ? result.current.state.logs : [];
+    expect(logs.map((l) => [l.spotCount, l.lastMuklogAt])).toEqual([
+      [7, '2026-06-19T05:30:00.000Z'],
+      [0, null],
+    ]);
+  });
+
+  it('spot_count·last_muklog_at 누락(레거시 RPC): spotCount=0·lastMuklogAt=null로 안전 폴백 (거짓 카운트 0)', async () => {
+    rpc.mockResolvedValueOnce({
+      data: [
+        // 두 키 자체가 없는 레거시 행(집계 컬럼 추가 전 RPC) → 0·null
+        { room_id: 'r1', mode: 'couple', member_count: 2, created_at: 'x', joined_at: 'x' },
+      ],
+      error: null,
+    });
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+
+    await waitFor(() => {
+      expect(result.current.state.status).toBe('ready');
+    });
+    const logs = result.current.state.status === 'ready' ? result.current.state.logs : [];
+    expect(logs.map((l) => [l.spotCount, l.lastMuklogAt])).toEqual([[0, null]]);
   });
 
   it('name 컬럼 매핑: 값 있으면 MyLog.name, null/누락이면 null (C3)', async () => {

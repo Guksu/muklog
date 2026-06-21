@@ -873,6 +873,10 @@ describe('LogScreen — room-lifecycle 나가기/예약삭제 배선 (T9~T11)', 
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     expect(mockGoBack).not.toHaveBeenCalled();
     expect(sheetsText()).toContain('confirm:false');
+    // SPEC §4-1 커플 나가기 성공 토스트(전역, positive).
+    await waitFor(() =>
+      expect(screen.getByText('로그에서 나갔어요 · 24시간 뒤 삭제돼요')).toBeTruthy(),
+    );
   });
 
   it('솔로 삭제 확인 → roomDeleted 성공 시 goBack 호출(목록 복귀)', async () => {
@@ -891,6 +895,8 @@ describe('LogScreen — room-lifecycle 나가기/예약삭제 배선 (T9~T11)', 
     });
     expect(mockLeaveRoom).toHaveBeenCalledWith({ roomId: 'r1' });
     await waitFor(() => expect(mockGoBack).toHaveBeenCalledTimes(1));
+    // SPEC §4-1 솔로 삭제 성공 토스트(전역, positive). goBack 후에도 전역이라 유지.
+    await waitFor(() => expect(screen.getByText('로그를 삭제했어요')).toBeTruthy());
   });
 
   it('나가기 실패(reject) → goBack·refresh 안 하고 확인 시트 유지(leaveError 인라인)', async () => {
@@ -908,6 +914,8 @@ describe('LogScreen — room-lifecycle 나가기/예약삭제 배선 (T9~T11)', 
     const t = sheetsText();
     expect(t).toContain('confirm:true');
     expect(t).toContain('세션이 만료됐어요');
+    // 실패 시 성공 토스트 미노출(SPEC §4-1 — 성공 경로 전용).
+    expect(screen.queryByText('로그에서 나갔어요 · 24시간 뒤 삭제돼요')).toBeNull();
   });
 
   it('leaving(useLeaveRoom.loading) 상태를 시트에 전달한다', () => {

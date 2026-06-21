@@ -72,7 +72,9 @@ export const useUpdateProfile = ({ userId }: { userId: string }) => {
     }
   };
 
-  const changeAvatar = async () => {
+  // 반환: { changed }로 실변경 여부를 소비처(ProfileScreen 토스트)에 알린다.
+  //   취소=changed:false(토스트 없음), 업로드 성공=changed:true, 실패=throw(기존 에러 유지).
+  const changeAvatar = async (): Promise<{ changed: boolean }> => {
     setError(null);
 
     // 1. 갤러리 권한.
@@ -82,12 +84,12 @@ export const useUpdateProfile = ({ userId }: { userId: string }) => {
       throw new Error(ProfileErrorToken.PermissionDenied);
     }
 
-    // 2. 피커(이미지 한정). 취소면 조용히 종료(에러 아님).
+    // 2. 피커(이미지 한정). 취소면 조용히 종료(에러 아님, changed:false).
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 1,
     });
-    if (picked.canceled || !picked.assets?.[0]) return;
+    if (picked.canceled || !picked.assets?.[0]) return { changed: false };
     const sourceUri = picked.assets[0].uri;
 
     setUploadingAvatar(true);
@@ -126,6 +128,7 @@ export const useUpdateProfile = ({ userId }: { userId: string }) => {
 
       // 7. 성공 시 이전 파일 정리(best-effort, P10).
       if (oldPath) await removeAvatarFile({ path: oldPath });
+      return { changed: true };
     } catch {
       // 업로드/URL 갱신 실패 → 업로드된 새 파일 정리(orphan 방지) + 에러.
       if (newPath) await removeAvatarFile({ path: newPath });

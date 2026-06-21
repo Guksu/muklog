@@ -1,8 +1,9 @@
 // src/navigation/screens/ProfileScreen.spec.tsx
-// 프로필 화면 핵심 흐름 — 킷 mk-log.jsx:380-451 B3 정합(plan §5 B3 / §5-1).
-//   상태 분기(loading/error), 96px 아바타(userId 디폴트)+카메라 배지(탭→changeAvatar),
-//   닉네임 편집 시트(prefill·검증·저장→refresh), 통계 3칸[로그·"-"·커플], 설정 리스트 4행.
-// 유틸(nickname/errors)은 실제, 훅(profile 2종/auth/room useMyLogs)만 모킹.
+// 프로필 화면 핵심 흐름 — 킷 mk-log.jsx:527-622 ProfileScreen 정합(plan profile-fidelity S5).
+//   상태 분기(loading/error), 96px 아바타(userId 디폴트)+카메라 배지(탭→changeAvatar·실변경 토스트),
+//   닉네임 편집 시트(prefill·검증·저장→refresh·토스트), 통계 3칸[로그·Σ맛집·커플], 설정 리스트 2행(알림·이용안내),
+//   이용안내 토스트, 즉시 로그아웃(Alert 없음).
+// 유틸(nickname/errors)은 실제, 훅(profile 2종/auth/room useMyLogs)·전역 토스트만 모킹.
 import React from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
@@ -30,7 +31,7 @@ jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn(), navigate: mockNavigate }),
 }));
 
-// Alert.alert: 확인 버튼(onPress)을 즉시 호출하도록 모킹(로그아웃 확인 흐름 검증).
+// Alert.alert: 즉시 로그아웃 전환 후엔 호출되지 않아야 함(회귀 가드).
 import { Alert } from 'react-native';
 jest.spyOn(Alert, 'alert');
 
@@ -65,9 +66,10 @@ const setupUpdate = (overrides?: {
     error: overrides?.error ?? null,
   });
 };
-const setupMyLogs = (logs: { memberCount: number }[] = []) => {
-  // 실제 useMyLogs 반환형: { state: MyLogsState, refresh }.
-  useMyLogsMock.mockReturnValue({ state: { status: 'ready', logs }, refresh: jest.fn() });
+const setupMyLogs = (logs: { memberCount: number; spotCount?: number }[] = []) => {
+  // 실제 useMyLogs 반환형: { state: MyLogsState, refresh }. spotCount 누락 시 0(통계 합산용).
+  const withSpot = logs.map((l) => ({ spotCount: 0, ...l }));
+  useMyLogsMock.mockReturnValue({ state: { status: 'ready', logs: withSpot }, refresh: jest.fn() });
 };
 
 beforeEach(() => {
@@ -113,7 +115,7 @@ describe('ProfileScreen — ready 구조(B3)', () => {
   });
 
   it('카메라 배지를 누르면 changeAvatar를 호출한다(이미지 업로드 동선)', async () => {
-    changeAvatar.mockResolvedValueOnce(undefined);
+    changeAvatar.mockResolvedValueOnce({ changed: true });
     renderWithTheme(<ProfileScreen />);
     fireEvent.press(screen.getByLabelText('프로필 사진 변경'));
     await waitFor(() => {
@@ -121,39 +123,75 @@ describe('ProfileScreen — ready 구조(B3)', () => {
     });
   });
 
-  it('통계 3칸[로그 수·"-"·커플 로그 수]을 계산해 표시한다', () => {
-    setupMyLogs([{ memberCount: 2 }, { memberCount: 1 }, { memberCount: 2 }]);
+  it('아바타 실변경 성공 시 "프로필 사진을 변경했어요" 토스트(킷 539)', async () => {
+    changeAvatar.mockResolvedValueOnce({ changed: true });
+    renderWithTheme(<ProfileScreen />);
+    fireEvent.press(screen.getByLabelText('프로필 사진 변경'));
+    await waitFor(() => {
+      expect(screen.getByText('프로필 사진을 변경했어요')).toBeTruthy();
+    });
+  });
+
+  it('아바타 취소(changed:false) 시 토스트 미노출', async () => {
+    changeAvatar.mockResolvedValueOnce({ changed: false });
+    renderWithTheme(<ProfileScreen />);
+    fireEvent.press(screen.getByLabelText('프로필 사진 변경'));
+    await waitFor(() => {
+      expect(changeAvatar).toHaveBeenCalled();
+    });
+    expect(screen.queryByText('프로필 사진을 변경했어요')).toBeNull();
+  });
+
+  it('아바타 실패(reject) 시 토스트 미노출', async () => {
+    changeAvatar.mockRejectedValueOnce(new Error('fail'));
+    renderWithTheme(<ProfileScreen />);
+    fireEvent.press(screen.getByLabelText('프로필 사진 변경'));
+    await waitFor(() => {
+      expect(changeAvatar).toHaveBeenCalled();
+    });
+    expect(screen.queryByText('프로필 사진을 변경했어요')).toBeNull();
+  });
+
+  it('통계 3칸[로그 수·Σ맛집·커플 로그 수]을 계산해 표시한다 (킷 totalSpots)', () => {
+    setupMyLogs([
+      { memberCount: 2, spotCount: 3 },
+      { memberCount: 1, spotCount: 2 },
+      { memberCount: 2, spotCount: 0 },
+    ]);
     renderWithTheme(<ProfileScreen />);
     expect(screen.getByText('로그')).toBeTruthy();
     expect(screen.getByText('3')).toBeTruthy(); // 로그 수
     expect(screen.getByText('기록한 맛집')).toBeTruthy();
-    expect(screen.getByText('-')).toBeTruthy(); // 집계 OUT 플레이스홀더
+    expect(screen.getByText('5')).toBeTruthy(); // Σ spotCount = 3+2+0
     expect(screen.getByText('커플 로그')).toBeTruthy();
     expect(screen.getByText('2')).toBeTruthy(); // 커플 로그 수(memberCount>=2)
+    // "-" 플레이스홀더는 제거됨(실값 표기).
+    expect(screen.queryByText('-')).toBeNull();
   });
 
-  it('설정 리스트 3행(알림·이용안내·설정)을 표시한다 (wishlist 델타 #5: "위시리스트" 행 제거)', () => {
+  it('설정 리스트 2행(알림 설정·이용 안내)을 표시한다 (킷 584 "설정" 행 제거)', () => {
     renderWithTheme(<ProfileScreen />);
     expect(screen.getByText('알림 설정')).toBeTruthy();
     expect(screen.getByText('이용 안내')).toBeTruthy();
-    expect(screen.getByText('설정')).toBeTruthy();
-    // 델타 #5(B9): 위시리스트는 로그 세그먼트로 진입 → 프로필 중복 진입점 제거.
+    // 킷 584: "설정" 행 제거.
+    expect(screen.queryByText('설정')).toBeNull();
+    expect(screen.queryByTestId('settings-row-설정')).toBeNull();
+    // 델타 #5(B9): 위시리스트 행도 부재(회귀 가드).
     expect(screen.queryByText('위시리스트')).toBeNull();
-    expect(screen.queryByTestId('settings-row-위시리스트')).toBeNull();
   });
 
-  it('"알림 설정" 행 탭 → NotifSettings로 navigate 한다 (notif-settings T9)', () => {
+  it('"알림 설정" 행 탭 → NotifSettings로 navigate 한다 (notif-settings 회귀)', () => {
     mockNavigate.mockClear();
     renderWithTheme(<ProfileScreen />);
     fireEvent.press(screen.getByTestId('settings-row-알림 설정'));
     expect(mockNavigate).toHaveBeenCalledWith('NotifSettings');
   });
 
-  it('"이용 안내"/"설정" 행은 비활성(탭해도 navigate 미발생) — 기존 동작 유지 (T9 회귀)', () => {
+  it('"이용 안내" 행 탭 → "조금만 기다려 주세요" 토스트(navigate 미발생) (킷 586)', () => {
     mockNavigate.mockClear();
     renderWithTheme(<ProfileScreen />);
     fireEvent.press(screen.getByTestId('settings-row-이용 안내'));
-    fireEvent.press(screen.getByTestId('settings-row-설정'));
+    expect(screen.getByText('조금만 기다려 주세요')).toBeTruthy();
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
@@ -168,17 +206,10 @@ describe('ProfileScreen — ready 구조(B3)', () => {
     expect(screen.getByText('로그아웃')).toBeTruthy();
   });
 
-  it('"로그아웃" 행을 누르면 확인 Alert 후 signOut을 호출한다', () => {
-    (Alert.alert as jest.Mock).mockImplementation((_t, _m, buttons) => {
-      // 확인(파괴적) 버튼 onPress 실행 — 확인 흐름 시뮬.
-      const confirm = (buttons as { text: string; onPress?: () => void }[]).find(
-        (b) => b.text === '로그아웃',
-      );
-      confirm?.onPress?.();
-    });
+  it('"로그아웃" 행을 누르면 Alert 없이 즉시 signOut을 호출한다 (즉시 로그아웃, 킷 595)', () => {
     renderWithTheme(<ProfileScreen />);
     fireEvent.press(screen.getByText('로그아웃'));
-    expect(Alert.alert).toHaveBeenCalled();
+    expect(Alert.alert).not.toHaveBeenCalled();
     expect(signOut).toHaveBeenCalledTimes(1);
   });
 });
@@ -214,6 +245,29 @@ describe('ProfileScreen — 닉네임 편집 시트', () => {
       expect(saveNickname).toHaveBeenCalledWith({ nickname: '새닉' });
     });
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it('닉네임 저장 성공 시 "닉네임을 변경했어요" 토스트(킷 545)', async () => {
+    saveNickname.mockResolvedValueOnce(undefined);
+    renderWithTheme(<ProfileScreen />);
+    openNicknameSheet();
+    fireEvent.changeText(screen.getByDisplayValue('민수'), '새닉');
+    fireEvent.press(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => {
+      expect(screen.getByText('닉네임을 변경했어요')).toBeTruthy();
+    });
+  });
+
+  it('닉네임 저장 실패 시 변경 토스트 미노출', async () => {
+    saveNickname.mockRejectedValueOnce(new Error('fail'));
+    renderWithTheme(<ProfileScreen />);
+    openNicknameSheet();
+    fireEvent.changeText(screen.getByDisplayValue('민수'), '새닉');
+    fireEvent.press(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => {
+      expect(saveNickname).toHaveBeenCalled();
+    });
+    expect(screen.queryByText('닉네임을 변경했어요')).toBeNull();
   });
 
   it('닉네임 입력은 maxLength 20으로 제한한다 (AC3.4)', () => {

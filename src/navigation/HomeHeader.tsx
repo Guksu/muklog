@@ -1,6 +1,6 @@
 // src/navigation/HomeHeader.tsx
 // 홈(먹로그·지도 탭) 공통 커스텀 헤더 — mk-home HomeHeader 재현(ui-redesign 슬라이스 A 충실화).
-//   좌측: 워드마크 "먹로그"(Pretendard-Bold 최굵게) + 🍽️ 이모지(muklog 킷 정책 — 이모지 허용).
+//   좌측: 워드마크 "먹로그"(SUIT-Bold 최굵게) + 🍽️ 이모지(muklog 킷 정책 — 이모지 허용).
 //   우측: +버튼(PlusHeaderButton — 액센트-weak 버블 배경/액센트 아이콘, 로그 생성) + 프로필 아바타(36, 누르면 Profile).
 //
 // 생산자(소비): useAuth(userId) → useProfile(닉네임/아바타) → Avatar 표시. PlusHeaderButton(생성+refresh).

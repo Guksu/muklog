@@ -42,7 +42,7 @@ const renderView = (props?: Partial<React.ComponentProps<typeof WishlistView>>) 
 describe('WishlistView — 빈 상태 (TC-1)', () => {
   it('items가 비면 빈 상태 문구 + 추가 CTA를 표시한다', () => {
     renderView({ items: [] });
-    expect(screen.getByText('가보고 싶은 곳을 모아요')).toBeTruthy();
+    expect(screen.getByText('다음엔 여기 어때요?')).toBeTruthy();
     expect(screen.getByText('위시리스트에 추가')).toBeTruthy();
   });
 
@@ -68,14 +68,14 @@ describe('WishlistView — 리스트 / addedBy 매핑 (TC-3)', () => {
     expect(screen.getByText('연남동')).toBeTruthy();
   });
 
-  it('addedByMe=true면 내 닉으로 "{닉}님이 추가"를 표시한다', () => {
+  it('addedByMe=true면 내 닉으로 "{닉}님이 담았어요"를 표시한다', () => {
     renderView({ items: [item({ addedByMe: true })], meNickname: '민수' });
-    expect(screen.getByText('민수님이 추가')).toBeTruthy();
+    expect(screen.getByText('민수님이 담았어요')).toBeTruthy();
   });
 
-  it('addedByMe=false면 "짝꿍님이 추가"를 표시한다(파트너 익명, RLS 제약)', () => {
+  it('addedByMe=false면 "짝꿍님이 담았어요"를 표시한다(파트너 익명, RLS 제약)', () => {
     renderView({ items: [item({ addedByMe: false, addedBy: 'partner-uid' })], meNickname: '민수' });
-    expect(screen.getByText('짝꿍님이 추가')).toBeTruthy();
+    expect(screen.getByText('짝꿍님이 담았어요')).toBeTruthy();
   });
 
   it('note가 있으면 2줄 clamp로 표시한다', () => {

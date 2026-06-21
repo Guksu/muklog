@@ -1,6 +1,6 @@
 // src/navigation/screens/RoomCreatedScreen.tsx
-// 로그 생성 완료 축하 화면(비주얼 셸) — 킷 mk-home.jsx:196-214 CreatedScreen 재현 (FLAG-3).
-//   SubBar "로그 만들기" + 🎉 + "새 로그가 만들어졌어요" + 초대코드 카드 + "로그 열기"/"나중에".
+// 로그 생성 완료 축하 화면(비주얼 셸) — 킷 mk-home.jsx:273-289 CreatedScreen 재현 (FLAG-3).
+//   SubBar "로그 만들기" + 🎉 + "우리 로그가 만들어졌어요" + 초대코드 카드 + "로그 열기"/"나중에".
 //   순수 프리젠테이션 — props 계약만(developer가 멀티로그 생성 플로우·네비 배선).
 //   이모지 허용(킷 정책). 스타일은 토큰만(raw hex 0).
 import React from 'react';
@@ -31,30 +31,30 @@ export const RoomCreatedScreen = ({ inviteCode, onEnter, onLater }: RoomCreatedS
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          // 킷 mk-home:200 본문 padding 12 / 24(+insets.bottom 인디케이터 클리어).
+          // 킷 mk-home:277 본문 padding 12 / 24(+insets.bottom 인디케이터 클리어).
           { paddingTop: theme.spacing[12], paddingHorizontal: theme.spacing[24], paddingBottom: theme.spacing[24] + insets.bottom },
         ]}
       >
-        {/* 킷 mk-home:201 🎉 fontSize 56, center. */}
+        {/* 킷 mk-home:278 🎉 fontSize 56, center. */}
         <Text style={[styles.center, styles.emoji, { marginTop: theme.spacing[24] }]}>
           {PARTY_EMOJI}
         </Text>
-        {/* 킷 mk-home:202 제목 800/22/1.35 center. */}
+        {/* 킷 mk-home:279 제목 800/22/1.35 center. */}
         <Text variant="profileName" color="fg" style={[styles.center, styles.title, { marginTop: theme.spacing[8] }]}>
-          새 로그가 만들어졌어요
+          우리 로그가 만들어졌어요
         </Text>
-        {/* 킷 mk-home:203 본문 500/14.5/1.6 text-alternative center. */}
+        {/* 킷 mk-home:280-281 본문 500/14.5/1.6 text-alternative center. */}
         <Text
           variant="bodySm"
           color="fgMuted"
           style={[styles.center, { marginTop: theme.spacing[8], marginBottom: theme.spacing[28] }]}
         >
-          {'아래 초대코드를 연인에게 보내면\n둘이 함께 기록할 수 있어요.'}
+          {'아래 코드를 연인에게 보내면\n둘이 함께 기록할 수 있어요.'}
         </Text>
 
         <InviteCodeCard code={inviteCode} />
 
-        {/* 킷 mk-home:207 flex 1 스페이서로 버튼을 하단에 밀어냄. */}
+        {/* 킷 mk-home:284 flex 1 스페이서로 버튼을 하단에 밀어냄. */}
         <View style={styles.spacer} />
 
         <Button title="로그 열기" accessibilityLabel="로그 열기" size="lg" onPress={onEnter} />

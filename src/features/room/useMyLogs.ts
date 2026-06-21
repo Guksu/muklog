@@ -1,8 +1,9 @@
 // src/features/room/useMyLogs.ts
 // 내 로그 목록 조회 훅 (plan §3.5, C1·C9). useMembership(단일 maybeSingle)을 대체한다.
 //
-// 생산자: list_my_rooms() DEFINER RPC → rows(snake) [{ room_id, mode, member_count, created_at, joined_at }].
-//   member_count는 DEFINER로 전 멤버 집계(RLS 우회) → 솔로/커플 파생 가능(C2).
+// 생산자: list_my_rooms() DEFINER RPC → rows(snake) [{ room_id, mode, member_count, created_at, joined_at,
+//   spot_count, last_muklog_at }]. member_count·spot_count·last_muklog_at은 DEFINER로 전 멤버 집계(RLS 우회).
+//   solo/couple 파생(C2) + 카드 통계행(맛집 수·마지막 기록, home-fidelity).
 // 소비자: MyLogsProvider → LogListScreen(목록/빈상태/에러) + PlusHeaderButton(생성 성공 후 refresh).
 //
 // 정책: 앱 진입(Provider 마운트) 1회 조회 + 성공 후 refresh()만. 폴링/주기 조회 금지(비용 가드레일 §8,
@@ -24,6 +25,8 @@ export type MyLog = {
   deleteScheduledAt: string | null; // 예약 삭제 시각(ISO) | null. LogList 배지 후속 대비 투영(이번 표시 OUT, room-lifecycle).
   deleteRequestedBy: string | null; // 나가기를 요청한 사용자 id | null.
   previewPaths: string[]; // 카드 썸네일용 최근 사진 경로 최대 4장(storage_path). signed URL은 useLogPreviewUrls가 발급.
+  spotCount: number; // 로그의 맛집(muklog) 총 개수(DEFINER 집계). 카드 통계행·+N·홈 합계(home-fidelity). 레거시 RPC=0.
+  lastMuklogAt: string | null; // 가장 최근 muklog 기록 시각(ISO) | null(기록 0 또는 레거시). 카드 "마지막 기록 N일 전".
 };
 
 export type MyLogsState =
@@ -42,6 +45,8 @@ type MyLogRow = {
   delete_scheduled_at?: string | null; // room-lifecycle 투영. 누락/null 모두 null로 흡수.
   delete_requested_by?: string | null; // room-lifecycle 투영. 동상.
   preview_paths?: string[] | null; // log_preview_photos 투영. 누락/null → [].
+  spot_count?: number | null; // muklog 집계(home-fidelity). 누락/null → 0(레거시 RPC 안전 폴백).
+  last_muklog_at?: string | null; // 최근 muklog 시각(home-fidelity). 누락/null → null.
 };
 
 /**
@@ -59,6 +64,8 @@ const toMyLog = ({ row }: { row: MyLogRow }): MyLog => ({
   deleteScheduledAt: row.delete_scheduled_at ?? null,
   deleteRequestedBy: row.delete_requested_by ?? null,
   previewPaths: row.preview_paths ?? [],
+  spotCount: row.spot_count ?? 0, // 누락/null → 0(레거시 RPC면 빈카드로 안전 폴백, 거짓 카운트 0).
+  lastMuklogAt: row.last_muklog_at ?? null,
 });
 
 /**

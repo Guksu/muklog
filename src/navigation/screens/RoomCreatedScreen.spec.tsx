@@ -1,5 +1,5 @@
 // src/navigation/screens/RoomCreatedScreen.spec.tsx
-// 로그 생성 완료 축하 화면 — 킷 mk-home CreatedScreen(196-214) 재현.
+// 로그 생성 완료 축하 화면 — 킷 mk-home CreatedScreen(273-289) 재현.
 import React from 'react';
 import { fireEvent, screen } from '@testing-library/react-native';
 
@@ -12,7 +12,7 @@ describe('RoomCreatedScreen', () => {
 
   it('축하 카피와 초대코드를 렌더한다', () => {
     renderWithTheme(<RoomCreatedScreen {...baseProps} />);
-    expect(screen.getByText('새 로그가 만들어졌어요')).toBeTruthy();
+    expect(screen.getByText('우리 로그가 만들어졌어요')).toBeTruthy();
     expect(screen.getByText('MK7P3A')).toBeTruthy();
   });
 

@@ -13,7 +13,7 @@ const STAR_POSITIONS = [1, 2, 3, 4, 5] as const;
 export type StarsProps = {
   /** 채워질 별 수(1~5). 0/null/undefined = 미평가(모두 빈 별). */
   value?: number | null;
-  /** 한 별의 한 변 길이(px). 기본 14. */
+  /** 한 별의 한 변 길이(px). 기본 15(킷 mk-ui:32). */
   size?: number;
   /** true면 별 탭으로 점수를 입력받는다. */
   editable?: boolean;
@@ -21,7 +21,7 @@ export type StarsProps = {
   onChange?: (value: number) => void;
 };
 
-export const Stars = ({ value, size = 14, editable = false, onChange }: StarsProps) => {
+export const Stars = ({ value, size = 15, editable = false, onChange }: StarsProps) => {
   const filledCount = value ?? 0;
 
   return (

@@ -638,6 +638,75 @@ describe('MuklogEditor — 장소검색 풀스크린 스왑 상태머신 (FLAG-1
   });
 });
 
+describe('MuklogEditor — 킷 정합 (editor-fidelity, mk-log:400·449·418)', () => {
+  // AC1 — 저장 성공 시 토스트(신규/편집 분기, positive). 실패 시 토스트 없음.
+  it('작성 저장 성공 시 "맛집을 기록했어요! 🍽️" 토스트를 표시한다 (AC1)', async () => {
+    renderEditor();
+    fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+    fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요');
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('저장'));
+    });
+    await waitFor(() => expect(screen.getByText('맛집을 기록했어요! 🍽️')).toBeTruthy());
+  });
+
+  it('편집 저장 성공 시 "기록을 수정했어요" 토스트를 표시한다 (AC1)', async () => {
+    const onSubmit = jest.fn().mockResolvedValue({ id: 'mk-1' });
+    renderWithTheme(
+      <MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} initial={editInitial()} onSubmit={onSubmit} />,
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('수정'));
+    });
+    await waitFor(() => expect(screen.getByText('기록을 수정했어요')).toBeTruthy());
+  });
+
+  it('작성 저장 실패 시 토스트를 표시하지 않는다 (AC1)', async () => {
+    createMuklog.mockRejectedValueOnce(new Error('PLACE_NAME_REQUIRED'));
+    useCreateMuklogMock.mockReturnValue({
+      createMuklog,
+      loading: false,
+      error: '장소 이름을 입력해 주세요.',
+    });
+    renderEditor();
+    fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+    fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요');
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('저장'));
+    });
+    await waitFor(() => expect(createMuklog).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('맛집을 기록했어요! 🍽️')).toBeNull();
+    expect(screen.queryByText('기록을 수정했어요')).toBeNull();
+  });
+
+  // AC2 — 별점 보조 텍스트(미선택 placeholder / 선택 시 n.0).
+  it('별점 미선택(0) 시 보조 텍스트 "어땠어요?"를 표시한다 (AC2)', () => {
+    renderEditor();
+    expect(screen.getByText('어땠어요?')).toBeTruthy();
+  });
+
+  it('별점 선택 시 보조 텍스트가 "{n.0}"로 갱신된다 (AC2)', () => {
+    renderEditor();
+    fireEvent.press(screen.getByLabelText('별점 4점'));
+    expect(screen.getByText('4.0')).toBeTruthy();
+    expect(screen.queryByText('어땠어요?')).toBeNull();
+  });
+
+  // AC3 — 미선택 검색 버튼 카피.
+  it('장소 미선택 검색 버튼 라벨이 "맛집 이름을 검색해요"다 (AC3)', () => {
+    renderWithTheme(
+      <MuklogEditor
+        roomId="r1"
+        onBack={onBack}
+        onSaved={onSaved}
+        placeSearch={{ query: '', onChangeQuery: jest.fn(), status: 'idle', results: [] }}
+      />,
+    );
+    expect(screen.getByText('맛집 이름을 검색해요')).toBeTruthy();
+    expect(screen.queryByText('장소 검색 (카카오)')).toBeNull();
+  });
+});
+
 describe('MuklogEditor — 방문일 캘린더 시트 배선 (date-picker T4)', () => {
   // AC4.1 — 방문일 TextInput 제거 → 탭형 날짜 행(button).
   it('방문일 영역에 TextInput("방문일")이 없고 탭형 날짜 행(button)이 있다', () => {
