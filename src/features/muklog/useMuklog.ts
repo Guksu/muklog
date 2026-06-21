@@ -47,7 +47,7 @@ export type MuklogDetail = {
   roadAddress: string | null; // road_address
   kakaoPlaceId: string | null; // kakao_place_id(수동입력 시 null)
   hasCoords: boolean; // lat != null && lng != null → 미니맵(map-tab) 핀 여부
-  createdBy: string; // uuid (작성자 라벨/아바타 파생)
+  createdBy: string | null; // uuid | null(탈퇴자 익명화 — ON DELETE SET NULL, plan §1·§5)
   createdAt: string; // ISO
   photos: MuklogDetailPhoto[]; // order_index 오름차순. [] = 사진 0장
   // 삭제용 storage_path 전체(order_index 오름차순). 임베드에서 매핑 — 추가 쿼리 0(plan §3.6 e).
@@ -79,7 +79,7 @@ type MuklogDetailRow = {
   address: string | null;
   road_address: string | null;
   kakao_place_id: string | null;
-  created_by: string;
+  created_by: string | null; // 탈퇴자 익명화 시 NULL(ON DELETE SET NULL)
   created_at: string;
   muklog_photos?: MuklogPhotoEmbed[] | null;
 };

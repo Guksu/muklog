@@ -12,6 +12,12 @@ import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { Avatar, FoodCover, Icon, IconName, Stars, Text } from '@/components';
 import { useTheme } from '@/theme';
 
+import {
+  AuthorKind,
+  DELETED_AUTHOR_LABEL,
+  authorAvatarUserId,
+  deriveAuthorKind,
+} from './author';
 import { categoryEmoji, categoryLabel } from './categories';
 import { formatVisitedDate } from './formatVisitedDate';
 import { type Muklog } from './types';
@@ -39,7 +45,14 @@ export const MuklogCard = ({ muklog, meId, onPress }: MuklogCardProps) => {
   const dateText = formatVisitedDate({ visitedAt: muklog.visitedAt });
   const locationText = muklog.area ? `${muklog.area} · ${dateText}` : dateText;
 
-  const authorLabel = muklog.createdBy === meId ? '내가 기록' : '짝꿍이 기록';
+  // 작성자 파생(데이터 레벨, plan §5/AC6) — createdBy NULL(탈퇴자 익명화)은 "탈퇴한 사용자"로 graceful.
+  const authorKind = deriveAuthorKind({ createdBy: muklog.createdBy, meId });
+  const authorLabel =
+    authorKind === AuthorKind.Me
+      ? '내가 기록'
+      : authorKind === AuthorKind.Deleted
+        ? DELETED_AUTHOR_LABEL
+        : '짝꿍이 기록';
 
   // 커버 오버레이 — 킷 mk-log.jsx:91-97. 카테고리 칩(좌상)·사진 장수 배지(우상).
   //   썸네일(Image)·FoodCover 어느 쪽에도 동일하게 얹는다(인라인 중복 방지).
@@ -149,7 +162,11 @@ export const MuklogCard = ({ muklog, meId, onPress }: MuklogCardProps) => {
 
         {/* 작성자 행 — 22px 디폴트 아바타(createdBy 파생) + 라벨. 킷 gap 6, marginTop 11. */}
         <View style={[styles.authorRow, { marginTop: theme.spacing[12] }]}>
-          <Avatar userId={muklog.createdBy} size={AUTHOR_AVATAR_SIZE} ring={false} />
+          <Avatar
+            userId={authorAvatarUserId({ createdBy: muklog.createdBy })}
+            size={AUTHOR_AVATAR_SIZE}
+            ring={false}
+          />
           <Text variant="meta" color="fgMuted">
             {authorLabel}
           </Text>

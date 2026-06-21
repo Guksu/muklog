@@ -14,7 +14,7 @@ export type Muklog = {
   memo: string | null;
   rating: number | null; // 1~5
   visitedAt: string | null; // 'YYYY-MM-DD'
-  createdBy: string; // uuid
+  createdBy: string | null; // uuid | null(탈퇴자 익명화 — ON DELETE SET NULL, plan §1·§5)
   createdAt: string; // ISO
   // 사진(muklog-photos) — 카드 커버/장수. developer가 useMuklogs 임베드+signed URL로 채운다(plan §3.5).
   photoCount: number; // 0~5

@@ -25,6 +25,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar, Button, FoodCover, Icon, IconButton, IconName, Sheet, Stars, Text } from '@/components';
 // 직접 경로 import — 배럴(@/features/map/components)은 다른 지도 컴포넌트(expo-location 등) 의존을 함께 끌어옴.
 import { MuklogMiniMap } from '@/features/map/components/MuklogMiniMap';
+import {
+  AuthorKind,
+  DELETED_AUTHOR_LABEL,
+  authorAvatarUserId,
+  deriveAuthorKind,
+} from '@/features/muklog/author';
 import { categoryEmoji, categoryLabel } from '@/features/muklog/categories';
 import { formatVisitedDate } from '@/features/muklog/formatVisitedDate';
 import { useTheme } from '@/theme';
@@ -47,7 +53,7 @@ export type MuklogDetailViewData = {
   hasCoords: boolean; // lat/lng 보유 여부(파생)
   lat: number | null; // 미니맵 핀 좌표(muklog-place). null → 지도 대신 텍스트 폴백
   lng: number | null;
-  createdBy: string; // uuid → meId 비교로 작성자 라벨/아바타 파생
+  createdBy: string | null; // uuid | null(탈퇴자 익명화) → meId 비교로 작성자 라벨/아바타 파생(plan §5)
   photos: MuklogDetailPhoto[]; // order_index 오름차순. [] → FoodCover 폴백 1칸
 };
 
@@ -234,8 +240,15 @@ export const MuklogDetailScreen = ({
         : '위치 정보가 아직 없어요';
   const dateText = formatVisitedDate({ visitedAt: muklog.visitedAt });
 
-  const authorIsMe = muklog.createdBy === meId;
-  const authorLabel = authorIsMe ? '내가 기록' : '짝꿍이 기록';
+  // 작성자 파생(데이터 레벨, plan §5/AC6) — createdBy NULL(탈퇴자 익명화)은 deleted 로 갈라 "탈퇴한 사용자".
+  const authorKind = deriveAuthorKind({ createdBy: muklog.createdBy, meId });
+  const authorIsMe = authorKind === AuthorKind.Me;
+  const authorLabel =
+    authorKind === AuthorKind.Me
+      ? '내가 기록'
+      : authorKind === AuthorKind.Deleted
+        ? DELETED_AUTHOR_LABEL
+        : '짝꿍이 기록';
 
   // 캐러셀 스냅 인덱스 갱신(킷 mk-log:134). 외부(RN) 콜백 → named-args 예외.
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -410,7 +423,7 @@ export const MuklogDetailScreen = ({
             >
               <Avatar
                 url={authorIsMe ? meAvatarUrl : null}
-                userId={muklog.createdBy}
+                userId={authorAvatarUserId({ createdBy: muklog.createdBy })}
                 size={AUTHOR_AVATAR_SIZE}
                 ring={false}
               />

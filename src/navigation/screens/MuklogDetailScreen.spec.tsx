@@ -320,4 +320,12 @@ describe('MuklogDetailScreen — 작성자 라벨 (AC e)', () => {
     renderReady({ createdBy: 'partner-uid' });
     expect(screen.getByText('짝꿍이 기록')).toBeTruthy();
   });
+
+  it('createdBy가 null(탈퇴자 익명화)이면 "탈퇴한 사용자"로 안전 표시한다 (AC6, 크래시 0)', () => {
+    renderReady({ createdBy: null });
+    // 익명 작성자 라벨 + 본인/짝꿍 라벨 부재(deleted 최우선 분기 — null===null 오판 차단).
+    expect(screen.getByText('탈퇴한 사용자')).toBeTruthy();
+    expect(screen.queryByText('내가 기록')).toBeNull();
+    expect(screen.queryByText('짝꿍이 기록')).toBeNull();
+  });
 });

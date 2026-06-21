@@ -15,12 +15,16 @@ jest.mock('@/features/profile', () => {
   const errors = jest.requireActual('@/features/profile/errors');
   // computeProfileStats는 순수 함수(MyLog는 type-only import라 supabase/room 런타임 미연결) → requireActual 안전.
   const profileStats = jest.requireActual('@/features/profile/profileStats');
+  // DeleteAccountSheet 는 순수 presentational(Sheet/Button/Text + 토큰) → requireActual 안전(supabase 미연결).
+  const deleteAccountSheet = jest.requireActual('@/features/profile/DeleteAccountSheet');
   return {
     ...nickname,
     ...errors,
     ...profileStats,
+    ...deleteAccountSheet,
     useProfile: jest.fn(),
     useUpdateProfile: jest.fn(),
+    useDeleteAccount: jest.fn(),
   };
 });
 jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
@@ -35,13 +39,14 @@ jest.mock('@react-navigation/native', () => ({
 import { Alert } from 'react-native';
 jest.spyOn(Alert, 'alert');
 
-import { useProfile, useUpdateProfile } from '@/features/profile';
+import { useDeleteAccount, useProfile, useUpdateProfile } from '@/features/profile';
 import { useAuth } from '@/features/auth';
 import { useMyLogs } from '@/features/room';
 import { ProfileScreen } from './ProfileScreen';
 
 const useProfileMock = useProfile as jest.Mock;
 const useUpdateProfileMock = useUpdateProfile as jest.Mock;
+const useDeleteAccountMock = useDeleteAccount as jest.Mock;
 const useAuthMock = useAuth as jest.Mock;
 const useMyLogsMock = useMyLogs as jest.Mock;
 
@@ -49,6 +54,7 @@ const refresh = jest.fn();
 const saveNickname = jest.fn();
 const changeAvatar = jest.fn();
 const signOut = jest.fn();
+const deleteAccount = jest.fn();
 
 const setupProfile = (state: unknown) => {
   useProfileMock.mockReturnValue({ state, refresh });
@@ -72,6 +78,14 @@ const setupMyLogs = (logs: { memberCount: number; spotCount?: number }[] = []) =
   useMyLogsMock.mockReturnValue({ state: { status: 'ready', logs: withSpot }, refresh: jest.fn() });
 };
 
+const setupDelete = (overrides?: { loading?: boolean; error?: string | null }) => {
+  useDeleteAccountMock.mockReturnValue({
+    deleteAccount,
+    loading: overrides?.loading ?? false,
+    error: overrides?.error ?? null,
+  });
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   useAuthMock.mockReturnValue({
@@ -81,6 +95,7 @@ beforeEach(() => {
   });
   setupProfile({ status: 'ready', profile: { nickname: '민수', avatarUrl: null } });
   setupUpdate();
+  setupDelete();
   setupMyLogs();
 });
 
@@ -211,6 +226,65 @@ describe('ProfileScreen — ready 구조(B3)', () => {
     fireEvent.press(screen.getByText('로그아웃'));
     expect(Alert.alert).not.toHaveBeenCalled();
     expect(signOut).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ProfileScreen — 회원 탈퇴(AC5)', () => {
+  const openDeleteSheet = () => fireEvent.press(screen.getByText('회원 탈퇴'));
+
+  it('"회원 탈퇴" 행을 로그아웃 아래에 약하게 표시한다 (Apple 5.1.1(v))', () => {
+    renderWithTheme(<ProfileScreen />);
+    expect(screen.getByText('회원 탈퇴')).toBeTruthy();
+    // 행 자체는 확인 시트 진입점일 뿐(즉시 삭제 금지) → 초기엔 확인 시트 미노출.
+    expect(screen.queryByText('정말 탈퇴할까요?')).toBeNull();
+  });
+
+  it('"회원 탈퇴" 행 탭 → 파괴 확인 시트(되돌릴 수 없음)를 연다(즉시 삭제 안 함)', () => {
+    renderWithTheme(<ProfileScreen />);
+    openDeleteSheet();
+    expect(screen.getByText('정말 탈퇴할까요?')).toBeTruthy();
+    expect(screen.getByText(/되돌릴 수 없어요/)).toBeTruthy();
+    expect(deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it('확인 시트 "취소" → 시트가 닫히고 deleteAccount 미호출', () => {
+    renderWithTheme(<ProfileScreen />);
+    openDeleteSheet();
+    fireEvent.press(screen.getByLabelText('취소'));
+    expect(screen.queryByText('정말 탈퇴할까요?')).toBeNull();
+    expect(deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it('"탈퇴하기" → deleteAccount() 실행, 성공 시 signOut을 호출한다 (AC5 배선)', async () => {
+    deleteAccount.mockResolvedValueOnce(true);
+    renderWithTheme(<ProfileScreen />);
+    openDeleteSheet();
+    fireEvent.press(screen.getByLabelText('탈퇴하기'));
+    await waitFor(() => {
+      expect(deleteAccount).toHaveBeenCalledTimes(1);
+    });
+    expect(signOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('탈퇴 실패 시 signOut을 호출하지 않고 토스트로 알린다(세션 유지·재시도)', async () => {
+    deleteAccount.mockRejectedValueOnce(new Error('fail'));
+    setupDelete({ error: '탈퇴에 실패했어요. 다시 시도해 주세요.' });
+    renderWithTheme(<ProfileScreen />);
+    openDeleteSheet();
+    fireEvent.press(screen.getByLabelText('탈퇴하기'));
+    await waitFor(() => {
+      expect(deleteAccount).toHaveBeenCalled();
+    });
+    expect(signOut).not.toHaveBeenCalled();
+    // 실패 신호 2종: 시트 인라인 error(useDeleteAccount.error) + 전역 토스트 → 같은 카피가 둘 노출.
+    expect(screen.getAllByText('탈퇴에 실패했어요. 다시 시도해 주세요.').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('탈퇴 진행 중(loading)이면 danger 버튼이 비활성된다(중복 실행 차단)', () => {
+    setupDelete({ loading: true });
+    renderWithTheme(<ProfileScreen />);
+    openDeleteSheet();
+    expect(screen.getByLabelText('탈퇴하기').props.accessibilityState.disabled).toBe(true);
   });
 });
 

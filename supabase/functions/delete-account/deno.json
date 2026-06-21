@@ -1,0 +1,6 @@
+{
+  "//": "delete-account Edge Function (Deno) — account-deletion. handleDeleteAccount 는 deps 주입(테스트는 외부 의존 0). serve 진입점만 @supabase/supabase-js(esm.sh) 사용.",
+  "tasks": {
+    "test": "deno test --allow-env"
+  }
+}

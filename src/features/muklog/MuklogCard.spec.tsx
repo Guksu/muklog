@@ -78,6 +78,15 @@ describe('MuklogCard', () => {
     expect(screen.getByText('짝꿍이 기록')).toBeTruthy();
   });
 
+  it('createdBy가 null(탈퇴자 익명화)이면 "탈퇴한 사용자" 라벨 + 익명 아바타로 안전 표시한다 (AC6, 크래시 0)', () => {
+    renderCard({ createdBy: null }, 'me-uid');
+    expect(screen.getByText('탈퇴한 사용자')).toBeTruthy();
+    // userId null → Avatar 익명 폴백(기본 아바타). 짝꿍/내 기록으로 오표시되지 않는다.
+    expect(screen.getByTestId('avatar-anonymous')).toBeTruthy();
+    expect(screen.queryByText('짝꿍이 기록')).toBeNull();
+    expect(screen.queryByText('내가 기록')).toBeNull();
+  });
+
   it('category가 null이면 칩을 숨긴다(데이터 결측)', () => {
     renderCard({ category: null });
     expect(screen.queryByTestId('muklog-card-chip')).toBeNull();

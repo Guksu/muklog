@@ -27,9 +27,11 @@ import { Routes, type AppStackParamList } from '../routes';
 import { useAuth } from '@/features/auth';
 import {
   computeProfileStats,
+  DeleteAccountSheet,
   NICKNAME_MAX_LENGTH,
   ProfileErrorToken,
   PROFILE_ERROR_MESSAGES,
+  useDeleteAccount,
   useProfile,
   useUpdateProfile,
   validateNickname,
@@ -82,11 +84,14 @@ const ProfileContent = ({ userId }: { userId: string }) => {
   const { saveNickname, changeAvatar, savingNickname, uploadingAvatar, error } = useUpdateProfile({
     userId,
   });
+  const { deleteAccount, loading: deletingAccount, error: deleteError } = useDeleteAccount();
   const { state: myLogsState } = useMyLogs({ userId });
 
   // RenameDialog는 controlled → 닉네임 입력 draft를 ProfileContent가 소유(open 시 현재 닉네임으로 prefill).
   const [draft, setDraft] = useState('');
   const [nickDialogOpen, setNickDialogOpen] = useState(false);
+  // 회원 탈퇴 확인 시트(파괴적, 되돌릴 수 없음) — "회원 탈퇴" 행 탭으로 open, 취소/성공 시 close.
+  const [deleteSheetOpen, setDeleteSheetOpen] = useState(false);
 
   // 조회 완료 시 입력칸을 현재 닉네임으로 prefill(null=빈 상태면 빈 칸 유지).
   const readyNickname = state.status === 'ready' ? state.profile.nickname : null;
@@ -171,6 +176,21 @@ const ProfileContent = ({ userId }: { userId: string }) => {
   // 로그아웃 — 즉시 signOut(킷 595, 사용자 결정: 확인 Alert 제거 → AuthGate가 unauthenticated→LoginScreen).
   const handleSignOut = () => {
     void signOut();
+  };
+
+  // 회원 탈퇴(AC5) — 확인 시트 "탈퇴하기" → deleteAccount() → 성공 시 signOut(AuthGate→로그인).
+  //   훅은 signOut 안 함(관심사 분리, dev-notes §AC4) → 호출부 책임. 실패는 toast + 시트 내 인라인 error(세션 유지·재시도).
+  //   진행 중(deletingAccount)이면 시트 danger 버튼이 비활성(중복 실행 차단).
+  const handleConfirmDelete = async () => {
+    try {
+      await deleteAccount();
+      // 성공: 세션 정리 → AuthGate가 unauthenticated → LoginScreen(시트는 화면 언마운트로 사라짐).
+      void signOut();
+    } catch {
+      // 실패: 세션 유지. useDeleteAccount.error(시트 인라인 error색) + 전역 토스트로 재시도 유도.
+      //   Toast tone 은 neutral|positive 2종 → 실패 메시지는 neutral(인라인 error 텍스트가 파괴 톤 담당).
+      showToast({ message: '탈퇴에 실패했어요. 다시 시도해 주세요.', tone: 'neutral' });
+    }
   };
 
   return (
@@ -308,6 +328,19 @@ const ProfileContent = ({ userId }: { userId: string }) => {
             {error}
           </Text>
         ) : null}
+
+        {/* 회원 탈퇴(AC5) — 로그아웃보다 약하게(앱 정책 UI, 킷 비종속). 카드 없이 텍스트 행만,
+            error 색이되 작은 폰트·언더라인 톤으로 덜 강조 → 탭 시 파괴 확인 시트. Apple 5.1.1(v) 인앱 계정 삭제. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="회원 탈퇴"
+          onPress={() => setDeleteSheetOpen(true)}
+          style={({ pressed }) => [styles.deleteRow, { opacity: pressed ? 0.5 : 1 }]}
+        >
+          <Text variant="caption" color="fgMuted" style={styles.deleteLabel}>
+            회원 탈퇴
+          </Text>
+        </Pressable>
       </ScrollView>
 
       {/* 닉네임 편집 다이얼로그(킷 mk-extra:24-64 RenameDialog 공용화) — controlled(draft는 ProfileContent 소유).
@@ -324,6 +357,16 @@ const ProfileContent = ({ userId }: { userId: string }) => {
         saving={savingNickname}
         error={nicknameMessage}
         saveDisabled={!canSave}
+      />
+
+      {/* 회원 탈퇴 확인 시트(파괴적·되돌릴 수 없음, AC5) — 파괴 확인 패턴(LeaveLogSheets) 재사용.
+          "탈퇴하기" → handleConfirmDelete(deleteAccount→성공 시 signOut). deleting/error 는 useDeleteAccount 상태. */}
+      <DeleteAccountSheet
+        visible={deleteSheetOpen}
+        onClose={() => setDeleteSheetOpen(false)}
+        onConfirm={() => void handleConfirmDelete()}
+        deleting={deletingAccount}
+        error={deleteError}
       />
     </Screen>
   );
@@ -360,4 +403,7 @@ const styles = StyleSheet.create({
   // 로그아웃 행 — 설정 카드와 동일 톤(surface 카드), 텍스트는 error 컬러(파괴적), 중앙 정렬.
   signOutRow: { paddingVertical: 16, alignItems: 'center' },
   signOutLabel: { fontSize: 15, lineHeight: 20 },
+  // 회원 탈퇴 행 — 로그아웃보다 약하게(카드 없음, caption/fgMuted, 언더라인). 화면 최하단 보조 액션.
+  deleteRow: { paddingVertical: 16, alignItems: 'center' },
+  deleteLabel: { textDecorationLine: 'underline' },
 });

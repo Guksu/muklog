@@ -2,6 +2,12 @@
 //   조회/입력 훅 + 카드/리스트/시트 + 카테고리/타입/에러 매핑.
 export { useMuklogs } from './useMuklogs';
 export {
+  AuthorKind,
+  DELETED_AUTHOR_LABEL,
+  authorAvatarUserId,
+  deriveAuthorKind,
+} from './author';
+export {
   useMuklog,
   type MuklogDetail,
   type MuklogDetailPhoto,

@@ -35,7 +35,7 @@ type MuklogRow = {
   memo: string | null;
   rating: number | null;
   visited_at: string | null;
-  created_by: string;
+  created_by: string | null; // 탈퇴자 익명화 시 NULL(ON DELETE SET NULL)
   created_at: string;
   muklog_photos?: MuklogPhotoEmbed[] | null;
 };
