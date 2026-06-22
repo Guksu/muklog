@@ -13,6 +13,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.muklog.app",
       "usesAppleSignIn": true,
+      "icon": "./assets/muklog-app-icon-ios.png",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "근처 맛집을 지도에 보여주려면 위치 권한이 필요해요.",
         "ITSAppUsesNonExemptEncryption": false
