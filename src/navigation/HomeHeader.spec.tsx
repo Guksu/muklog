@@ -1,5 +1,5 @@
 // src/navigation/HomeHeader.spec.tsx
-// 홈 커스텀 헤더 — 워드마크 "먹로그"+🍽️ / +버튼(로그 생성) / 프로필 아바타(누르면 Profile 이동).
+// 홈 커스텀 헤더 — 워드마크 "먹로그"(이모지 제거) / +버튼(로그 생성) / 프로필 아바타(누르면 Profile 이동).
 //   (mk-home HomeHeader 재현 · ui-redesign 슬라이스 A 충실화)
 //   useAuth(userId)·useProfile(닉/아바타)·useCreateRoom·useMyLogsContext·useNavigation 모킹.
 import React from 'react';
@@ -61,10 +61,10 @@ beforeEach(() => {
 });
 
 describe('HomeHeader', () => {
-  it('워드마크 "먹로그"와 🍽️ 이모지를 렌더한다', () => {
+  it('워드마크 "먹로그"를 렌더한다 (헤더 워드마크 옆 이모지는 제거 — 사용자 결정)', () => {
     renderWithTheme(<HomeHeader />);
     expect(screen.getByText('먹로그')).toBeTruthy();
-    expect(screen.getByText('🍽️')).toBeTruthy();
+    expect(screen.queryByText('🍽️')).toBeNull();
   });
 
   it('+버튼(로그 만들기)을 렌더한다', () => {

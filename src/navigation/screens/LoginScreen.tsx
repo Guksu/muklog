@@ -5,14 +5,16 @@
 //   web→RN 변환:
 //     · linear-gradient(160deg,#EAF0FF 0%,bg 70%) → expo-linear-gradient(authVisualGradient, 세로 근사 + locations[0,0.7]).
 //     · AppMark boxShadow(컬러 그림자 rgba(42,85,230,.26)) → RN 근사(accentShadow + offset). 컬러 섀도우는 iOS만 충실.
-//     · <br/> 줄바꿈 → '\n'. <u> 밑줄 약관 → Text underline(비활성 placeholder, 링크 라우팅은 out-of-scope).
+//     · <br/> 줄바꿈 → '\n'. <u> 밑줄 약관 → Text underline + onPress(expo-web-browser 인앱 브라우저로 약관/개인정보 열기, OAuth와 동일 패턴).
 //   showApple 기본값 = Platform.OS==='ios'(Android는 Apple 버튼 비노출 — plan E5).
 import React from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as WebBrowser from 'expo-web-browser';
 
 import { AppMark, SocialButton, Text } from '@/components';
+import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { authVisualGradient, useTheme } from '@/theme';
 
 export type LoginScreenProps = {
@@ -30,6 +32,10 @@ export type LoginScreenProps = {
 
 // 킷 상단 비주얼 카피(mk-auth:96-98) — <br/> → '\n'.
 const LOGIN_COPY = '둘이 다녀온 맛집을\n오래오래 함께 기억해요.';
+// 약관/개인정보 URL은 @/lib/legal 단일 출처(ProfileScreen과 공용).
+// 인앱 브라우저로 열기(expo-web-browser, OAuth와 동일). 화살표 함수·props 무의존이라 모듈 레벨.
+const openTerms = () => void WebBrowser.openBrowserAsync(TERMS_URL);
+const openPrivacy = () => void WebBrowser.openBrowserAsync(PRIVACY_URL);
 // 킷 그라데이션 160deg(우상→좌하 대각) 근사 + stops 0%/70%(mk-auth:91).
 const GRADIENT_START = { x: 0.15, y: 0 } as const;
 const GRADIENT_END = { x: 0.85, y: 1 } as const;
@@ -101,11 +107,25 @@ export const LoginScreen = ({
         />
         <Text variant="caption" color="fgAssistive" style={styles.terms}>
           {'계속하면 '}
-          <Text variant="caption" color="fgAssistive" style={styles.termsLink}>
+          <Text
+            variant="caption"
+            color="fgAssistive"
+            style={styles.termsLink}
+            accessibilityRole="link"
+            accessibilityLabel="서비스 약관 열기"
+            onPress={openTerms}
+          >
             서비스 약관
           </Text>
           {' 및 '}
-          <Text variant="caption" color="fgAssistive" style={styles.termsLink}>
+          <Text
+            variant="caption"
+            color="fgAssistive"
+            style={styles.termsLink}
+            accessibilityRole="link"
+            accessibilityLabel="개인정보 처리방침 열기"
+            onPress={openPrivacy}
+          >
             개인정보 처리방침
           </Text>
           {'에\n동의하는 것으로 간주돼요.'}

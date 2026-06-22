@@ -11,6 +11,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as WebBrowser from 'expo-web-browser';
 
 import {
   Avatar,
@@ -24,6 +25,7 @@ import {
   useToastController,
 } from '@/components';
 import { Routes, type AppStackParamList } from '../routes';
+import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { useAuth } from '@/features/auth';
 import {
   computeProfileStats,
@@ -39,20 +41,24 @@ import {
 import { useMyLogs } from '@/features/room';
 import { useTheme } from '@/theme';
 
-// 설정 리스트 행(킷 mk-log.jsx:586) — 2행(알림 설정·이용 안내). "설정" 행 제거(킷 584).
-//   행 동작은 navigate(route) | toast(메시지) 2종(킷: 알림설정=onOpenNotif / 이용안내=showToast).
+// 설정 리스트 행 — 알림 설정·이용 안내(킷 mk-log.jsx:586) + 약관·개인정보(앱 정책, 로그인 후 접근).
+//   행 동작은 navigate(route) | toast(메시지) | link(외부 URL) 3종.
+//   알림설정=navigate / 이용안내=showToast / 서비스 약관·개인정보 처리방침=expo-web-browser 인앱 브라우저(@/lib/legal).
 //   ⚠️ wishlist 델타 #5: "위시리스트" 행 제거(로그 세그먼트로 진입, 중복 진입점 제거).
-const RowKind = { Navigate: 'navigate', Toast: 'toast' } as const;
+const RowKind = { Navigate: 'navigate', Toast: 'toast', Link: 'link' } as const;
 type RowKind = (typeof RowKind)[keyof typeof RowKind];
 
 // navigate 행은 param-less 라우트만(여기선 NotifSettings) — navigate()가 리터럴 라우트명을 요구.
 type SettingsRow =
   | { kind: typeof RowKind.Navigate; icon: IconName; label: string; route: typeof Routes.NotifSettings }
-  | { kind: typeof RowKind.Toast; icon: IconName; label: string; toastMessage: string };
+  | { kind: typeof RowKind.Toast; icon: IconName; label: string; toastMessage: string }
+  | { kind: typeof RowKind.Link; icon: IconName; label: string; url: string };
 
 const SETTINGS_ROWS: readonly SettingsRow[] = [
   { kind: RowKind.Navigate, icon: IconName.Bell, label: '알림 설정', route: Routes.NotifSettings },
   { kind: RowKind.Toast, icon: IconName.CircleInfo, label: '이용 안내', toastMessage: '조금만 기다려 주세요' },
+  { kind: RowKind.Link, icon: IconName.Link, label: '서비스 약관', url: TERMS_URL },
+  { kind: RowKind.Link, icon: IconName.Link, label: '개인정보 처리방침', url: PRIVACY_URL },
 ];
 
 const AVATAR_SIZE = 96;
@@ -193,6 +199,17 @@ const ProfileContent = ({ userId }: { userId: string }) => {
     }
   };
 
+  // 설정 행 탭 — 종류별 분기(navigate=NotifSettings / toast=이용안내 / link=약관·개인정보 인앱 브라우저).
+  const handleRowPress = ({ row }: { row: SettingsRow }) => {
+    if (row.kind === RowKind.Navigate) {
+      navigation.navigate(row.route);
+    } else if (row.kind === RowKind.Toast) {
+      showToast({ message: row.toastMessage, tone: 'neutral' });
+    } else {
+      void WebBrowser.openBrowserAsync(row.url);
+    }
+  };
+
   return (
     <Screen edges={['left', 'right']} style={styles.flush}>
       {/* 킷 mk-log:428 SubBar "프로필"(좌측정렬). 네이티브 헤더는 AppNavigator에서 headerShown:false.
@@ -282,11 +299,7 @@ const ProfileContent = ({ userId }: { userId: string }) => {
               testID={`settings-row-${row.label}`}
               accessibilityRole="button"
               accessibilityLabel={row.label}
-              onPress={
-                row.kind === RowKind.Navigate
-                  ? () => navigation.navigate(row.route)
-                  : () => showToast({ message: row.toastMessage, tone: 'neutral' })
-              }
+              onPress={() => handleRowPress({ row })}
               style={[
                 styles.settingsRow,
                 index < SETTINGS_ROWS.length - 1

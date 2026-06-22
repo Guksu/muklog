@@ -6,8 +6,10 @@
 // 유틸(nickname/errors)은 실제, 훅(profile 2종/auth/room useMyLogs)·전역 토스트만 모킹.
 import React from 'react';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import * as WebBrowser from 'expo-web-browser';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
+import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 
 // ⚠️ 배럴 requireActual은 supabase→AsyncStorage를 끌어오므로 순수 모듈만 requireActual.
 jest.mock('@/features/profile', () => {
@@ -29,6 +31,8 @@ jest.mock('@/features/profile', () => {
 });
 jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
 jest.mock('@/features/room', () => ({ useMyLogs: jest.fn() }));
+// 약관/개인정보 행 → 인앱 브라우저(openBrowserAsync) 모킹.
+jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn(() => Promise.resolve()) }));
 // SubBar(뒤로) + 설정 행 진입을 위한 navigation 모킹 — goBack/navigate.
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
@@ -184,10 +188,13 @@ describe('ProfileScreen — ready 구조(B3)', () => {
     expect(screen.queryByText('-')).toBeNull();
   });
 
-  it('설정 리스트 2행(알림 설정·이용 안내)을 표시한다 (킷 584 "설정" 행 제거)', () => {
+  it('설정 리스트(알림 설정·이용 안내·서비스 약관·개인정보 처리방침)를 표시한다 (킷 584 "설정" 행 제거)', () => {
     renderWithTheme(<ProfileScreen />);
     expect(screen.getByText('알림 설정')).toBeTruthy();
     expect(screen.getByText('이용 안내')).toBeTruthy();
+    // 약관·개인정보(로그인 후 접근, App Store 정합).
+    expect(screen.getByText('서비스 약관')).toBeTruthy();
+    expect(screen.getByText('개인정보 처리방침')).toBeTruthy();
     // 킷 584: "설정" 행 제거.
     expect(screen.queryByText('설정')).toBeNull();
     expect(screen.queryByTestId('settings-row-설정')).toBeNull();
@@ -208,6 +215,20 @@ describe('ProfileScreen — ready 구조(B3)', () => {
     fireEvent.press(screen.getByTestId('settings-row-이용 안내'));
     expect(screen.getByText('조금만 기다려 주세요')).toBeTruthy();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('"서비스 약관" 행 탭 → 이용약관 URL을 인앱 브라우저로 연다', () => {
+    (WebBrowser.openBrowserAsync as jest.Mock).mockClear();
+    renderWithTheme(<ProfileScreen />);
+    fireEvent.press(screen.getByTestId('settings-row-서비스 약관'));
+    expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(TERMS_URL);
+  });
+
+  it('"개인정보 처리방침" 행 탭 → 개인정보 URL을 인앱 브라우저로 연다', () => {
+    (WebBrowser.openBrowserAsync as jest.Mock).mockClear();
+    renderWithTheme(<ProfileScreen />);
+    fireEvent.press(screen.getByTestId('settings-row-개인정보 처리방침'));
+    expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(PRIVACY_URL);
   });
 
   it('아바타 업로드 에러 메시지를 표시한다 (P6)', () => {

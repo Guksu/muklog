@@ -3,10 +3,20 @@
 //   비주얼/레이아웃만 담당. 핸들러·상태는 developer가 useAuth로 주입(props 계약).
 import React from 'react';
 import { fireEvent, screen } from '@testing-library/react-native';
+import * as WebBrowser from 'expo-web-browser';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
 import { LoginScreen } from './LoginScreen';
+
+// 약관/개인정보 링크 탭 → 인앱 브라우저(openBrowserAsync) 모킹.
+jest.mock('expo-web-browser', () => ({
+  openBrowserAsync: jest.fn(() => Promise.resolve()),
+}));
+
+beforeEach(() => {
+  (WebBrowser.openBrowserAsync as jest.Mock).mockClear();
+});
 
 const baseProps = {
   authenticating: null as 'google' | 'apple' | null,
@@ -79,5 +89,21 @@ describe('LoginScreen', () => {
     expect(
       screen.getByText(/서비스 약관.*개인정보 처리방침/s),
     ).toBeTruthy();
+  });
+
+  it('"서비스 약관" 탭 → 이용약관 URL을 인앱 브라우저로 연다', () => {
+    renderWithTheme(<LoginScreen {...baseProps} showApple />);
+    fireEvent.press(screen.getByLabelText('서비스 약관 열기'));
+    expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(
+      'https://guksu.github.io/muklog-privacy/terms.html',
+    );
+  });
+
+  it('"개인정보 처리방침" 탭 → 개인정보처리방침 URL을 인앱 브라우저로 연다', () => {
+    renderWithTheme(<LoginScreen {...baseProps} showApple />);
+    fireEvent.press(screen.getByLabelText('개인정보 처리방침 열기'));
+    expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(
+      'https://guksu.github.io/muklog-privacy/privacy.html',
+    );
   });
 });
