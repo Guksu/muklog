@@ -5,7 +5,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 
 jest.mock('@/lib/supabase', () => ({
-  supabase: { auth: { getUser: jest.fn() }, from: jest.fn() },
+  supabase: { auth: { getUser: jest.fn() }, from: jest.fn(), functions: { invoke: jest.fn() } },
 }));
 // 사진 업로드는 별도 단위(uploadMuklogPhotos.spec)에서 검증 → 여기선 모킹해 연동/롤백만 본다.
 jest.mock('./uploadMuklogPhotos', () => ({ uploadMuklogPhotos: jest.fn() }));
@@ -16,6 +16,7 @@ import { useCreateMuklog } from './useCreateMuklog';
 
 const getUserMock = supabase.auth.getUser as jest.Mock;
 const fromMock = supabase.from as jest.Mock;
+const invokeMock = supabase.functions.invoke as jest.Mock;
 const uploadMock = uploadMuklogPhotos as jest.Mock;
 const singleMock = jest.fn();
 const selectMock = jest.fn();
@@ -54,9 +55,16 @@ beforeEach(() => {
   deleteEqMock.mockReset();
   deleteMock.mockClear();
   uploadMock.mockReset();
+  invokeMock.mockReset();
+  invokeMock.mockResolvedValue({ data: { sent: 1 }, error: null });
   deleteEqMock.mockResolvedValue({ error: null });
   uploadMock.mockResolvedValue({ uploadedPaths: [] });
   getUserMock.mockResolvedValue({ data: { user: { id: 'u9' } }, error: null });
+  jest.spyOn(console, 'warn').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  (console.warn as jest.Mock).mockRestore();
 });
 
 describe('useCreateMuklog', () => {
@@ -215,5 +223,57 @@ describe('useCreateMuklog', () => {
     expect(deleteMock).toHaveBeenCalledTimes(1);
     expect(deleteEqMock).toHaveBeenCalledWith('id', 'new-id');
     expect(result.current.error).toBe('사진 업로드에 실패했어요. 다시 시도해 주세요.');
+  });
+
+  // 발송 트리거(push-send §3) — 생성 성공 직후 best-effort fire-and-forget invoke(편집 미발송은 MuklogEditor 경로).
+  it('생성 성공 후 send-muklog-push 를 { roomId, muklogId } 로 1회 invoke 한다 (push-send AC4)', async () => {
+    wireInsert({ data: { id: 'new-id' }, error: null });
+    const { result } = renderHook(() => useCreateMuklog());
+
+    await act(async () => {
+      await result.current.createMuklog({ input: validInput });
+    });
+
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith('send-muklog-push', {
+      body: { roomId: 'r1', muklogId: 'new-id' },
+    });
+  });
+
+  it('발송 invoke 가 reject 해도 createMuklog 는 정상 {id} 반환(best-effort, 저장 결과 무영향) (AC4)', async () => {
+    wireInsert({ data: { id: 'new-id' }, error: null });
+    invokeMock.mockRejectedValueOnce(new Error('Network request failed'));
+    const { result } = renderHook(() => useCreateMuklog());
+
+    let created: { id: string } | undefined;
+    await act(async () => {
+      created = await result.current.createMuklog({ input: validInput });
+    });
+
+    expect(created).toEqual({ id: 'new-id' });
+    expect(result.current.error).toBeNull();
+  });
+
+  it('insert 실패 시 발송을 invoke 하지 않는다(생성 성공 경로만)', async () => {
+    wireInsert({ data: null, error: new Error('PLACE_NAME_REQUIRED') });
+    const { result } = renderHook(() => useCreateMuklog());
+
+    await act(async () => {
+      await expect(result.current.createMuklog({ input: validInput })).rejects.toThrow();
+    });
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it('사진 업로드 실패(롤백) 시 발송을 invoke 하지 않는다', async () => {
+    wireInsert({ data: { id: 'new-id' }, error: null });
+    uploadMock.mockRejectedValueOnce(new Error('PHOTO_UPLOAD_FAILED'));
+    const { result } = renderHook(() => useCreateMuklog());
+
+    await act(async () => {
+      await expect(
+        result.current.createMuklog({ input: { ...validInput, photos: [{ uri: 'a' }] } }),
+      ).rejects.toThrow();
+    });
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 });

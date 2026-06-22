@@ -1,0 +1,6 @@
+{
+  "//": "send-muklog-push Edge Function (Deno) — push-send S2. handleSendMuklogPush 는 deps 주입(테스트는 외부 의존 0). serve 진입점만 @supabase/supabase-js(esm.sh) 사용. 토큰은 service_role 경계 안에서만.",
+  "tasks": {
+    "test": "deno test --allow-env"
+  }
+}
