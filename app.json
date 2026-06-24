@@ -33,7 +33,8 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/muklog-splash.png",
+          "image": "./assets/muklog-app-icon.png",
+          "imageWidth": 200,
           "backgroundColor": "#EBF1FF",
           "resizeMode": "contain"
         }
