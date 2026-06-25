@@ -29,6 +29,16 @@ jest.mock('@/features/room', () => ({
   },
 }));
 
+// ProfileProvider: children passthrough + 주입 userId 캡처(#2 — 공유 프로필 상태 전파의 단일 마운트점).
+//   배럴(@/features/profile)을 통째 모킹하면 supabase→AsyncStorage(native) import를 끊어 단위 격리.
+const mockProfileProvider = jest.fn();
+jest.mock('@/features/profile', () => ({
+  ProfileProvider: (props: { userId: string; children: React.ReactNode }) => {
+    mockProfileProvider(props.userId);
+    return props.children;
+  },
+}));
+
 // NavigationContainer: passthrough.
 jest.mock('@react-navigation/native', () => ({
   NavigationContainer: ({ children }: { children: React.ReactNode }) => children,
@@ -69,6 +79,7 @@ const authValue = (state: unknown, overrides?: Record<string, unknown>) => ({
 beforeEach(() => {
   useAuthMock.mockReset();
   mockMyLogsProvider.mockReset();
+  mockProfileProvider.mockReset();
   mockLoginScreen.mockReset();
 });
 
@@ -90,11 +101,13 @@ describe('AuthGate', () => {
     expect(retry).toHaveBeenCalled();
   });
 
-  it('authenticated면 게이트 없이 AppNavigator를 렌더하고 MyLogsProvider에 userId를 주입한다 (C7)', () => {
+  it('authenticated면 게이트 없이 AppNavigator를 렌더하고 ProfileProvider·MyLogsProvider에 userId를 주입한다 (C7, #2)', () => {
     useAuthMock.mockReturnValue(authValue({ status: 'authenticated', userId: 'u1' }));
     renderWithTheme(<AuthGate />);
     expect(screen.getByText('APP_NAVIGATOR')).toBeTruthy();
     expect(mockMyLogsProvider).toHaveBeenCalledWith('u1');
+    // #2: 공유 프로필 상태 마운트점 — 인증 userId 주입.
+    expect(mockProfileProvider).toHaveBeenCalledWith('u1');
   });
 
   it('unauthenticated면 LoginScreen을 렌더한다(authenticating=null, loginError 전달)', () => {

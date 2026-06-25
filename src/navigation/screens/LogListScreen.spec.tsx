@@ -22,7 +22,10 @@ jest.mock('@/features/room', () => {
 });
 
 // 본인 프로필(카드/CTA 닉네임 표시)
-jest.mock('@/features/profile', () => ({ useProfile: jest.fn() }));
+jest.mock('@/features/profile', () => {
+  const defaultNicknameMod = jest.requireActual('@/features/profile/defaultNickname');
+  return { ...defaultNicknameMod, useProfileContext: jest.fn() };
+});
 jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
 
 const mockNavigate = jest.fn();
@@ -41,14 +44,14 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 import { useMyLogsContext, useCreateRoom } from '@/features/room';
-import { useProfile } from '@/features/profile';
+import { useProfileContext } from '@/features/profile';
 import { useAuth } from '@/features/auth';
 import { LogListScreen } from './LogListScreen';
 import { Routes } from '../routes';
 
 const useMyLogsContextMock = useMyLogsContext as jest.Mock;
 const useCreateRoomMock = useCreateRoom as jest.Mock;
-const useProfileMock = useProfile as jest.Mock;
+const useProfileMock = useProfileContext as jest.Mock;
 const useAuthMock = useAuth as jest.Mock;
 const useLogPreviewUrlsMock = (
   jest.requireMock('@/features/room') as { useLogPreviewUrls: jest.Mock }

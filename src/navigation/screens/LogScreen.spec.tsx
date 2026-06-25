@@ -172,8 +172,11 @@ jest.mock('@/features/auth', () => ({
   useAuth: () => ({ state: { status: 'authenticated', userId: 'me-uid' } }),
 }));
 
-// 본인 프로필(헤더 로그명/아바타). 배럴만 모킹 — Avatar의 avatarDefault(서브모듈)는 실 구현 사용.
-jest.mock('@/features/profile', () => ({ useProfile: jest.fn() }));
+// 본인 프로필(헤더 로그명/아바타). 배럴만 모킹 — Avatar의 avatarDefault/defaultNickname(서브모듈)는 실 구현 사용.
+jest.mock('@/features/profile', () => {
+  const defaultNicknameMod = jest.requireActual('@/features/profile/defaultNickname');
+  return { ...defaultNicknameMod, useProfileContext: jest.fn() };
+});
 // 먹로그/위시 데이터 훅 — LogScreen이 소유(세그 카운트). 더블로 state 주입 + 컴포넌트는 probe.
 const mockUseMuklogs = jest.fn();
 const refreshMuklogs = jest.fn();
@@ -271,12 +274,12 @@ jest.mock('@/features/wishlist', () => {
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 
 import { useRoom, useRenameRoom } from '@/features/room';
-import { useProfile } from '@/features/profile';
+import { useProfileContext } from '@/features/profile';
 import { LogScreen } from './LogScreen';
 
 const useRoomMock = useRoom as jest.Mock;
 const useRenameRoomMock = useRenameRoom as jest.Mock;
-const useProfileMock = useProfile as jest.Mock;
+const useProfileMock = useProfileContext as jest.Mock;
 const refresh = jest.fn();
 const renameRoom = jest.fn();
 

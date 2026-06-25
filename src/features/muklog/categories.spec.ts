@@ -10,17 +10,24 @@ import {
 } from './categories';
 
 describe('MUKLOG_CATEGORIES', () => {
-  it('mk-data.js CAT와 동일한 8종 key를 가진다', () => {
+  it('mk-data.js CAT 8종 + 고기 = 9종 key를 가진다 (#6 고기 추가)', () => {
     expect(MUKLOG_CATEGORY_KEYS).toEqual([
       'pasta',
       'cafe',
       'noodle',
+      'meat',
       'sushi',
       'bakery',
       'chinese',
       'burger',
       'izakaya',
     ]);
+  });
+
+  it('고기 카테고리는 🍖 라벨·이모지와 따뜻한 그라데이션을 가진다 (#6)', () => {
+    expect(MUKLOG_CATEGORIES.meat).toMatchObject({ label: '고기', emoji: '🍖' });
+    // 따뜻한 그라데이션(주황/구이 톤) — [from, to] 두 색.
+    expect(MUKLOG_CATEGORIES.meat.colors).toHaveLength(2);
   });
 
   it('각 카테고리는 label과 emoji를 가진다', () => {

@@ -4,6 +4,7 @@
 //   주변 음식점은 별점·area·heart 데이터가 없다(plan §4). 거리(distanceText)는 developer가 formatDistance로 만들어 주입.
 //   데이터는 props로만 주입. 비즈니스 로직 없음.
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { screen } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
@@ -50,5 +51,14 @@ describe('NearbySpotCard', () => {
     );
     expect(screen.queryByTestId('star-filled')).toBeNull();
     expect(screen.queryByTestId('star-empty')).toBeNull();
+  });
+
+  // #5: 카테고리/거리 메타 텍스트 상단 클리핑 방지 — lineHeight > fontSize(한글 글리프 윗부분 잘림 방지).
+  it('메타 텍스트의 lineHeight가 fontSize보다 커서 상단 클리핑이 없다(#5)', () => {
+    renderWithTheme(
+      <NearbySpotCard placeName="연남 칼국수" categoryName="칼국수" coverEmoji="🍜" distanceText="320m" />,
+    );
+    const meta = StyleSheet.flatten(screen.getByText('칼국수 · 320m').props.style);
+    expect(meta.lineHeight).toBeGreaterThan(meta.fontSize);
   });
 });

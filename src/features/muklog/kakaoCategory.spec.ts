@@ -53,6 +53,65 @@ describe('mapKakaoCategory', () => {
     ).toBe('chinese');
   });
 
+  // ── #6 고기(meat) — 고기집/구이/삼겹/갈비/스테이크/바베큐/곱창 → meat ──────────
+  describe('#6 고기(meat) 매핑', () => {
+    const meatCases: { categoryName: string }[] = [
+      { categoryName: '음식점 > 한식 > 육류,고기' },
+      { categoryName: '음식점 > 한식 > 육류,고기 > 삼겹살' },
+      { categoryName: '음식점 > 한식 > 갈비' },
+      { categoryName: '음식점 > 한식 > 곱창,막창' },
+      { categoryName: '음식점 > 한식 > 갈비 > 소갈비' },
+      { categoryName: '음식점 > 양식 > 스테이크,립' },
+      { categoryName: '음식점 > 한식 > 바베큐' },
+      { categoryName: '음식점 > 한식 > 정육식당' },
+    ];
+    it.each(meatCases)('$categoryName → meat', ({ categoryName }) => {
+      expect(mapKakaoCategory({ categoryName, categoryGroupCode: 'FD6' })).toBe('meat');
+    });
+
+    it('고기는 "한식"(noodle) 폴백보다 우선한다 — "한식 > 갈비"는 noodle 아님', () => {
+      expect(
+        mapKakaoCategory({ categoryName: '음식점 > 한식 > 갈비', categoryGroupCode: 'FD6' }),
+      ).toBe('meat');
+    });
+
+    it('스테이크는 양식(pasta)보다 meat 우선', () => {
+      expect(
+        mapKakaoCategory({ categoryName: '음식점 > 양식 > 스테이크', categoryGroupCode: 'FD6' }),
+      ).toBe('meat');
+    });
+  });
+
+  // ── #7 검색 커버가 늘 cafe로 폴백하던 실제 카카오 브레드크럼들이 이제 정확히 매핑된다 ──
+  describe('#7 실제 카카오 브레드크럼 커버리지(이전엔 null→cafe 폴백)', () => {
+    const cases: { categoryName: string; expected: string }[] = [
+      { categoryName: '음식점 > 한식 > 국밥', expected: 'noodle' },
+      { categoryName: '음식점 > 한식 > 해장국', expected: 'noodle' },
+      { categoryName: '음식점 > 한식 > 찌개,전골', expected: 'noodle' },
+      { categoryName: '음식점 > 치킨', expected: 'burger' },
+      { categoryName: '음식점 > 한식 > 육류,고기 > 닭요리', expected: 'meat' },
+      { categoryName: '음식점 > 술집 > 호프,요리주점', expected: 'izakaya' },
+      { categoryName: '음식점 > 술집 > 포장마차', expected: 'izakaya' },
+      { categoryName: '음식점 > 패스트푸드 > 햄버거', expected: 'burger' },
+      { categoryName: '음식점 > 양식 > 피자', expected: 'pasta' },
+      { categoryName: '음식점 > 분식 > 떡볶이', expected: 'noodle' },
+      { categoryName: '음식점 > 한식 > 해물,생선', expected: 'noodle' },
+      { categoryName: '음식점 > 일식 > 돈까스,우동', expected: 'sushi' },
+      { categoryName: '음식점 > 아시아음식 > 베트남음식', expected: 'noodle' },
+    ];
+    it.each(cases)('$categoryName → $expected (cafe 폴백 아님)', ({ categoryName, expected }) => {
+      const result = mapKakaoCategory({ categoryName, categoryGroupCode: 'FD6' });
+      expect(result).toBe(expected);
+      expect(result).not.toBeNull();
+    });
+
+    it('카페(CE7)는 여전히 cafe — 회귀 없음', () => {
+      expect(
+        mapKakaoCategory({ categoryName: '음식점 > 카페', categoryGroupCode: 'CE7' }),
+      ).toBe('cafe');
+    });
+  });
+
   it('햄버거·버거·펍은 양식(pasta)보다 burger 우선', () => {
     expect(
       mapKakaoCategory({ categoryName: '음식점 > 양식 > 햄버거', categoryGroupCode: 'FD6' }),

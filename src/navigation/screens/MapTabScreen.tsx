@@ -63,6 +63,9 @@ export const MapTabScreen = () => {
   const [mapReady, setMapReady] = useState(false);
   const [mapErrored, setMapErrored] = useState(false);
   const webviewRef = useRef<MapWebViewHandle>(null);
+  // #4: 첫 진입 현위치 자동 센터링 1회 가드. READY 시 coords가 아직 없으면 INIT은 폴백(서울/핀 bbox)
+  //   센터를 쓰므로, GPS 첫 픽스로 coords가 도착하면 1회 RECENTER로 현위치에 맞춘다(이후 사용자 이동은 따라가지 않음).
+  const autoCenteredRef = useRef(false);
 
   // 현재 핀 목록(ready일 때만, 아니면 빈 배열 — 지도/INIT는 항상 유효하게 유지).
   const pins: MuklogPin[] = state.status === 'ready' ? state.pins : [];
@@ -84,6 +87,8 @@ export const MapTabScreen = () => {
   );
 
   const sendInit = () => {
+    // INIT center가 이미 현위치면(coords 존재) 자동 RECENTER 불필요 — 1회 가드를 소진한 것으로 본다(#4).
+    if (permission.coords) autoCenteredRef.current = true;
     webviewRef.current?.injectJavaScript(
       buildInitScript({ center, markers, me: permission.coords }),
     );
@@ -137,6 +142,21 @@ export const MapTabScreen = () => {
       webviewRef.current?.injectJavaScript(buildSetMarkersScript({ markers }));
     },
     [markersKey, mapReady],
+  );
+
+  // #4: READY 이후 현위치(coords)가 처음 도착하면 1회 자동 RECENTER(서울 폴백 고정 해제).
+  //   READY 시 coords가 있었으면 INIT이 이미 현위치 센터라 sendInit이 가드를 소진 → 여기선 no-op.
+  //   1회 가드(autoCenteredRef)로 이후 사용자 이동(coords 변경)은 따라가지 않는다(FAB로만 재센터).
+  const myCoords = permission.coords;
+  useEffect(
+    function autoRecenterOnFirstFix() {
+      if (!mapReady) return;
+      if (autoCenteredRef.current) return;
+      if (!myCoords) return;
+      autoCenteredRef.current = true;
+      webviewRef.current?.injectJavaScript(buildRecenterScript({ me: myCoords }));
+    },
+    [mapReady, myCoords],
   );
 
   // 재시도: 핀 에러는 refresh, 지도 SDK 에러는 INIT 재주입(SDK가 살아있으면 즉시 복구) + 핀 재조회.

@@ -11,6 +11,8 @@ export const MUKLOG_CATEGORIES = {
   pasta: { label: '파스타·양식', emoji: '🍝', colors: ['#FFD9A8', '#FF9E7D'] },
   cafe: { label: '카페·디저트', emoji: '☕', colors: ['#F6D2B8', '#C99877'] },
   noodle: { label: '면·한식', emoji: '🍜', colors: ['#FFE1A8', '#FF8A6B'] },
+  // #6 고기 — 따뜻한 구이 그라데이션(주황→짙은 구이 갈색). 칩 순서는 한식(noodle) 바로 뒤(고기=한식 인접 종목).
+  meat: { label: '고기', emoji: '🍖', colors: ['#FFC58A', '#E2622F'] },
   sushi: { label: '스시·오마카세', emoji: '🍣', colors: ['#FFC7C2', '#FF7E8A'] },
   bakery: { label: '베이커리', emoji: '🥐', colors: ['#FFE7B0', '#F0B45E'] },
   chinese: { label: '중식', emoji: '🥟', colors: ['#FFD2A6', '#E78B5A'] },

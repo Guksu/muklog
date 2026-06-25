@@ -11,9 +11,10 @@ jest.mock('@/features/auth', () => ({
   useAuth: jest.fn(),
 }));
 
-jest.mock('@/features/profile', () => ({
-  useProfile: jest.fn(),
-}));
+jest.mock('@/features/profile', () => {
+  const defaultNicknameMod = jest.requireActual('@/features/profile/defaultNickname');
+  return { ...defaultNicknameMod, useProfileContext: jest.fn() };
+});
 
 jest.mock('@/features/room', () => {
   const errors = jest.requireActual('@/features/room/errors');
@@ -26,14 +27,14 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 import { useAuth } from '@/features/auth';
-import { useProfile } from '@/features/profile';
+import { useProfileContext } from '@/features/profile';
 import { useCreateRoom, useMyLogsContext } from '@/features/room';
 
 import { HomeHeader } from './HomeHeader';
 import { Routes } from './routes';
 
 const useAuthMock = useAuth as jest.Mock;
-const useProfileMock = useProfile as jest.Mock;
+const useProfileMock = useProfileContext as jest.Mock;
 const useCreateRoomMock = useCreateRoom as jest.Mock;
 const useMyLogsContextMock = useMyLogsContext as jest.Mock;
 

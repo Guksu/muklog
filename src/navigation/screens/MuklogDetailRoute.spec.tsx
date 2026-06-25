@@ -36,7 +36,7 @@ const mockUseAuth = jest.fn();
 jest.mock('@/features/auth', () => ({ useAuth: () => mockUseAuth() }));
 
 const mockUseProfile = jest.fn();
-jest.mock('@/features/profile', () => ({ useProfile: (a: unknown) => mockUseProfile(a) }));
+jest.mock('@/features/profile', () => ({ useProfileContext: () => mockUseProfile() }));
 
 // 전역 토스트 컨트롤러 — 삭제 성공 토스트 호출(message/tone) 검증용.
 const mockShowToast = jest.fn();
@@ -125,9 +125,10 @@ describe('MuklogDetailRoute', () => {
     expect((lastProps.state as { status: string }).status).toBe('ready');
   });
 
-  it('useAuth userId를 meId로, 본인 useProfile avatarUrl을 meAvatarUrl로 전달한다', () => {
+  it('useAuth userId를 meId로, 공유 프로필(useProfileContext) avatarUrl을 meAvatarUrl로 전달한다 (#2)', () => {
     render(<MuklogDetailRoute />);
-    expect(mockUseProfile).toHaveBeenCalledWith({ userId: 'me-uid' });
+    // #2: 프로필은 공유 context에서 읽으므로 userId 인자 없이 호출(트리 상위 ProfileProvider가 주입).
+    expect(mockUseProfile).toHaveBeenCalled();
     expect(screen.getByText('meId:me-uid')).toBeTruthy();
     expect(screen.getByText('avatar:http://a')).toBeTruthy();
   });

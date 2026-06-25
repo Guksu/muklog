@@ -1,5 +1,7 @@
 // src/features/profile — 공개 표면 (plan §5 T12)
 export { useProfile, type Profile, type ProfileState } from './useProfile';
+export { ProfileProvider, useProfileContext } from './ProfileProvider';
+export { defaultNickname, ANIMAL_NAMES } from './defaultNickname';
 export { useUpdateProfile } from './useUpdateProfile';
 export { useDeleteAccount } from './useDeleteAccount';
 export { DeleteAccountSheet, type DeleteAccountSheetProps } from './DeleteAccountSheet';

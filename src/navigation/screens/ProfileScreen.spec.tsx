@@ -19,12 +19,15 @@ jest.mock('@/features/profile', () => {
   const profileStats = jest.requireActual('@/features/profile/profileStats');
   // DeleteAccountSheet 는 순수 presentational(Sheet/Button/Text + 토큰) → requireActual 안전(supabase 미연결).
   const deleteAccountSheet = jest.requireActual('@/features/profile/DeleteAccountSheet');
+  // defaultNickname 은 순수 함수(#3) → requireActual(닉네임 미설정 폴백 표시 검증용).
+  const defaultNicknameMod = jest.requireActual('@/features/profile/defaultNickname');
   return {
     ...nickname,
     ...errors,
     ...profileStats,
     ...deleteAccountSheet,
-    useProfile: jest.fn(),
+    ...defaultNicknameMod,
+    useProfileContext: jest.fn(),
     useUpdateProfile: jest.fn(),
     useDeleteAccount: jest.fn(),
   };
@@ -43,12 +46,12 @@ jest.mock('@react-navigation/native', () => ({
 import { Alert } from 'react-native';
 jest.spyOn(Alert, 'alert');
 
-import { useDeleteAccount, useProfile, useUpdateProfile } from '@/features/profile';
+import { defaultNickname, useDeleteAccount, useProfileContext, useUpdateProfile } from '@/features/profile';
 import { useAuth } from '@/features/auth';
 import { useMyLogs } from '@/features/room';
 import { ProfileScreen } from './ProfileScreen';
 
-const useProfileMock = useProfile as jest.Mock;
+const useProfileMock = useProfileContext as jest.Mock;
 const useUpdateProfileMock = useUpdateProfile as jest.Mock;
 const useDeleteAccountMock = useDeleteAccount as jest.Mock;
 const useAuthMock = useAuth as jest.Mock;
@@ -392,10 +395,12 @@ describe('ProfileScreen — 닉네임 편집 시트', () => {
     expect(screen.getByText('닉네임 저장에 실패했어요. 다시 시도해 주세요.')).toBeTruthy();
   });
 
-  it('빈 상태(nickname null)면 닉네임 미설정 + userId 디폴트 아바타를 보인다', () => {
+  it('빈 상태(nickname null)면 결정적 기본 닉네임(동물명+숫자) + userId 디폴트 아바타를 보인다 (#3)', () => {
     setupProfile({ status: 'ready', profile: { nickname: null, avatarUrl: null } });
     renderWithTheme(<ProfileScreen />);
-    expect(screen.getByText('닉네임 미설정')).toBeTruthy();
+    // #3: '닉네임 미설정' 대신 userId 파생 결정적 기본 닉네임 표시(같은 userId면 항상 동일).
+    expect(screen.queryByText('닉네임 미설정')).toBeNull();
+    expect(screen.getByText(defaultNickname({ userId: 'u1' }))).toBeTruthy();
     expect(screen.getByTestId('avatar-default')).toBeTruthy();
   });
 });

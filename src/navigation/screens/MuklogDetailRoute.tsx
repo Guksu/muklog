@@ -21,7 +21,7 @@ import {
 
 import { useToastController } from '@/components';
 import { useAuth } from '@/features/auth';
-import { useProfile } from '@/features/profile';
+import { useProfileContext } from '@/features/profile';
 import { useDeleteMuklog, useMuklog } from '@/features/muklog';
 
 import { Routes, type AppStackParamList } from '../routes';
@@ -39,7 +39,8 @@ export const MuklogDetailRoute = () => {
 
   // ⚠️ 훅은 조건부 호출 불가 → muklogId/meId가 비어도 안전한 값으로 호출하고 결과로 분기.
   const { state, refresh } = useMuklog({ muklogId });
-  const { state: profileState } = useProfile({ userId: meId });
+  // #2: 공유 프로필 context — 아바타 변경이 내 작성 먹로그 상세에도 즉시 전파.
+  const { state: profileState } = useProfileContext();
   const meAvatarUrl = profileState.status === 'ready' ? profileState.profile.avatarUrl : null;
 
   const { deleteMuklog, loading: deleting, error: deleteError } = useDeleteMuklog();

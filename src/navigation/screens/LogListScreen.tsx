@@ -11,7 +11,7 @@
 //
 // 인사 헤드라인(116-122) = "{닉}님, 오늘은\n어디 다녀왔어요?" + "지금까지 함께 {Σ spotCount}곳을 기록했어요"(합계 accentStrong 강조).
 //
-// 생산자(소비): useMyLogsContext(state/refresh) + useCreateRoom(생성) + useProfile(닉/아바타) + useNavigation.
+// 생산자(소비): useMyLogsContext(state/refresh) + useCreateRoom(생성) + useProfileContext(공유 닉/아바타·#2) + useNavigation.
 //   ⚠️ 실데이터: spotCount/lastMuklogAt/previewPaths는 MyLog(developer 소유, useMyLogs.ts)에서 직접 읽는다. 추가 페치 0(UI-only).
 import React from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, ScrollView, StyleSheet, View } from 'react-native';
@@ -20,7 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { Avatar, Button, Card, Icon, IconName, MemberBadge, Screen, Text } from '@/components';
 import { useAuth } from '@/features/auth';
-import { useProfile } from '@/features/profile';
+import { defaultNickname, useProfileContext } from '@/features/profile';
 import {
   displayLogName,
   mapRoomError,
@@ -44,14 +44,18 @@ const HERO_HEIGHT = 172;
 const HERO_GRADIENT_START = { x: 0, y: 0 } as const;
 const HERO_GRADIENT_END = { x: 1, y: 1 } as const;
 
-// 본인 닉네임/아바타. userId가 있을 때만 useProfile을 마운트해야 하므로 상위에서 분기.
+// 본인 닉네임/아바타. 공유 context에서 읽어 다른 화면(ProfileScreen) 변경이 즉시 전파되게 한다(#2).
 //   userId도 함께 노출 → Avatar가 url 없을 때 결정적 디폴트(이모지+컬러)를 파생(plan §3.3).
+//   닉네임 미설정 시 결정적 기본 닉네임(동물명+숫자)으로 폴백(#3, 화면 간 동일 신원).
 const useSelfDisplay = ({ userId }: { userId: string }) => {
-  const { state } = useProfile({ userId });
+  const { state } = useProfileContext();
   const profile = state.status === 'ready' ? state.profile : null;
   return {
     userId,
-    nickname: profile?.nickname && profile.nickname.length > 0 ? profile.nickname : '나',
+    nickname:
+      profile?.nickname && profile.nickname.length > 0
+        ? profile.nickname
+        : defaultNickname({ userId }),
     avatarUrl: profile?.avatarUrl ?? null,
   };
 };

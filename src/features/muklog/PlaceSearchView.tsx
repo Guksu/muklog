@@ -12,7 +12,14 @@ import { useTheme } from '@/theme';
 
 import { PlaceResultRow } from './PlaceResultRow';
 import { type MuklogCategoryKey } from './categories';
+import { mapKakaoCategory } from './kakaoCategory';
 import { type PlaceSearchItem, type PlaceSearchStatus } from './types';
+
+// resolveCategory 미주입 시 기본 해석 — Kakao 브레드크럼을 9종 enum으로 매핑(미매핑 null).
+//   ⚠️ #7 근본원인 2: 위시리스트 검색(LogScreen)이 resolveCategory를 안 넘겨 모든 결과가 category=null → cafe 커버였다.
+//   기본값을 mapKakaoCategory로 둬 전 소비처(에디터·위시)에서 일관 동작(에디터의 defaultResolveCategory와 동치).
+const resolveByKakaoCategory = ({ item }: { item: PlaceSearchItem }): MuklogCategoryKey | null =>
+  mapKakaoCategory({ categoryName: item.categoryName, categoryGroupCode: item.categoryGroupCode });
 
 const SEARCH_ICON_SIZE = 18; // 킷 mk-log:391
 const EMPTY_MESSAGE = '검색 결과가 없어요. 직접 입력해도 돼요.'; // plan §4.2
@@ -49,7 +56,7 @@ export const PlaceSearchView = ({
   status,
   results,
   onSelectResult,
-  resolveCategory,
+  resolveCategory = resolveByKakaoCategory,
   errorMessage = null,
   onBack,
   backLabel = '뒤로 가기',
@@ -185,7 +192,7 @@ export const PlaceSearchView = ({
                 key={resultItem.kakaoPlaceId || `${resultItem.placeName}-${index}`}
                 testID={`place-result-${index}`}
                 placeName={resultItem.placeName}
-                category={resolveCategory ? resolveCategory({ item: resultItem }) : null}
+                category={resolveCategory({ item: resultItem })}
                 roadAddress={resultItem.roadAddressName}
                 address={resultItem.addressName}
                 onPress={() => onSelectResult({ item: resultItem })}

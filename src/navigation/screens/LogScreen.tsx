@@ -38,7 +38,7 @@ import {
   useToastController,
 } from '@/components';
 import { useAuth } from '@/features/auth';
-import { useProfile } from '@/features/profile';
+import { defaultNickname, useProfileContext } from '@/features/profile';
 import {
   deletionCountdownLabel,
   displayLogName,
@@ -215,7 +215,8 @@ export const LogScreen = () => {
 
   // ⚠️ 훅은 조건부 호출 불가 → roomId/meId 없을 때도 안전한 값으로 호출하고 렌더에서 분기.
   const { state, refresh } = useRoom({ roomId: roomId ?? '' });
-  const { state: profileState } = useProfile({ userId: meId });
+  // #2: 공유 프로필 context — ProfileScreen 변경이 이 화면 헤더/이름 폴백에도 즉시 전파.
+  const { state: profileState } = useProfileContext();
   const { renameRoom, loading: renaming, error: renameError } = useRenameRoom();
   // 나가기/예약삭제 취소(room-lifecycle). leaveRoom 결과(scheduled/roomDeleted)로 nav·refresh 분기(§3 통합 레시피).
   const { leaveRoom, loading: leaving, error: leaveError } = useLeaveRoom();
@@ -223,7 +224,7 @@ export const LogScreen = () => {
   const meNickname =
     profileState.status === 'ready' && profileState.profile.nickname
       ? profileState.profile.nickname
-      : '나';
+      : defaultNickname({ userId: meId }); // #3: 닉 미설정 시 결정적 기본 닉네임(동물명+숫자)
   const meAvatarUrl = profileState.status === 'ready' ? profileState.profile.avatarUrl : null;
 
   // 이름 편집 다이얼로그 open 상태(로컬 UI). 저장 성공 시 닫고 useRoom.refresh로 헤더 갱신(비-낙관적, plan §3.4).

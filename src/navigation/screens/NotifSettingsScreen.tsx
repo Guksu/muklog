@@ -13,7 +13,7 @@ import { useAuth } from '@/features/auth';
 import { NotifSettingsView, type NotifLogItem } from '@/features/notif';
 import { useNotifPrefs } from '@/features/notif/useNotifPrefs';
 import { DEFAULT_NOTIF_PREFS, resolveLogEnabled } from '@/features/notif/notifPrefs';
-import { useProfile } from '@/features/profile';
+import { defaultNickname, useProfileContext } from '@/features/profile';
 import { displayLogName, useMyLogsContext } from '@/features/room';
 
 export const NotifSettingsScreen = () => {
@@ -35,11 +35,15 @@ const NotifSettingsContent = ({ userId }: { userId: string }) => {
   const navigation = useNavigation();
   const { state: prefsState, setMaster, setLogEnabled } = useNotifPrefs({ userId });
   const { state: myLogsState } = useMyLogsContext();
-  const { state: profileState } = useProfile({ userId });
+  // #2: 공유 프로필 context(ProfileScreen 변경 즉시 전파).
+  const { state: profileState } = useProfileContext();
 
   // 영속 read 전이거나 토글 직전이면 DEFAULT로 해석(master on, perLog 빈 = 전부 기본 on).
   const prefs = prefsState.status === 'ready' ? prefsState.prefs : DEFAULT_NOTIF_PREFS;
-  const selfNickname = profileState.status === 'ready' ? profileState.profile.nickname : null;
+  // #3: 닉네임 미설정 시 결정적 기본 닉네임(동물명+숫자)으로 폴백 → displayLogName "{닉}의 기록"이 일관 표기.
+  const readyNickname = profileState.status === 'ready' ? profileState.profile.nickname : null;
+  const selfNickname =
+    readyNickname && readyNickname.length > 0 ? readyNickname : defaultNickname({ userId });
   const selfAvatarUrl = profileState.status === 'ready' ? profileState.profile.avatarUrl : null;
 
   // error는 빈 목록으로 흡수(plan T8): ready만 실제 목록, 그 외(loading/error)는 [].

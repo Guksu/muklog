@@ -349,4 +349,54 @@ describe('MapTabScreen', () => {
     expect(injectedScripts.some((s) => s.includes('"type":"RECENTER"'))).toBe(false);
     expect(screen.queryByText('지도를 불러오지 못했어요')).toBeNull();
   });
+
+  // ── #4 첫 진입 자동 현위치 센터링 (READY 후 coords가 도착하면 1회 자동 RECENTER) ────
+  it('#4: READY 후 현재위치(coords)가 도착하면 1회 자동 RECENTER inject(서울 폴백 고정 해제)', () => {
+    // 첫 렌더: granted지만 coords 아직 null(GPS 첫 픽스 전) → INIT은 폴백 센터.
+    setPermission({ status: LocationPermissionStatus.Granted, coords: null });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    // 이 시점엔 coords 없음 → 자동 RECENTER 없음.
+    expect(injectedScripts.some((s) => s.includes('"type":"RECENTER"'))).toBe(false);
+
+    // coords 도착(첫 GPS 픽스) → 자동 RECENTER 1회.
+    setPermission({ status: LocationPermissionStatus.Granted, coords: { lat: 37.6, lng: 127.1 } });
+    rerender(<MapTabScreen />);
+
+    const recenter = injectedScripts.filter((s) => s.includes('"type":"RECENTER"'));
+    expect(recenter).toHaveLength(1);
+    expect(recenter[0]).toContain('"lat":37.6');
+    expect(recenter[0]).toContain('"lng":127.1');
+  });
+
+  it('#4: coords가 READY 전부터 있으면 INIT 센터가 현위치라 자동 RECENTER는 하지 않는다', () => {
+    setPermission({ status: LocationPermissionStatus.Granted, coords: { lat: 37.6, lng: 127.1 } });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    // INIT center가 이미 현위치 → 중복 RECENTER 불필요.
+    const joined = injectedScripts.join('\n');
+    expect(joined).toContain('"type":"INIT"');
+    expect(injectedScripts.some((s) => s.includes('"type":"RECENTER"'))).toBe(false);
+  });
+
+  it('#4: 자동 RECENTER는 1회만 — coords가 또 바뀌어도(사용자 이동) 재센터로 따라가지 않는다', () => {
+    setPermission({ status: LocationPermissionStatus.Granted, coords: null });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    setPermission({ status: LocationPermissionStatus.Granted, coords: { lat: 37.6, lng: 127.1 } });
+    rerender(<MapTabScreen />);
+    setPermission({ status: LocationPermissionStatus.Granted, coords: { lat: 37.7, lng: 127.2 } });
+    rerender(<MapTabScreen />);
+
+    const recenter = injectedScripts.filter((s) => s.includes('"type":"RECENTER"'));
+    expect(recenter).toHaveLength(1);
+    expect(recenter[0]).toContain('"lat":37.6'); // 첫 픽스만 따라감.
+  });
 });

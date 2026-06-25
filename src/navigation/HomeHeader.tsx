@@ -3,7 +3,7 @@
 //   좌측: 워드마크 "먹로그"(SUIT-Bold 최굵게). 헤더 워드마크 옆 이모지는 제거(킷 README·사용자 결정).
 //   우측: +버튼(PlusHeaderButton — 액센트-weak 버블 배경/액센트 아이콘, 로그 생성) + 프로필 아바타(36, 누르면 Profile).
 //
-// 생산자(소비): useAuth(userId) → useProfile(닉네임/아바타) → Avatar 표시. PlusHeaderButton(생성+refresh).
+// 생산자(소비): useAuth(userId) → useProfileContext(공유 닉네임/아바타·#2) → Avatar 표시. PlusHeaderButton(생성+refresh).
 //   먹로그·지도 탭 모두 react-navigation `header: () => <HomeHeader />`로 공통 적용(HomeTabs).
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Avatar, Text } from "@/components";
 import { useAuth } from "@/features/auth";
-import { useProfile } from "@/features/profile";
+import { defaultNickname, useProfileContext } from "@/features/profile";
 import { useTheme } from "@/theme";
 
 import { PlusHeaderButton } from "./PlusHeaderButton";
@@ -27,16 +27,21 @@ export type HomeHeaderProps = {
   title?: string;
 };
 
-// 본인 프로필(닉네임/아바타)을 조회해 헤더 아바타로 렌더. userId가 있을 때만 마운트(useProfile 보장).
+// 본인 프로필(닉네임/아바타)을 공유 context에서 읽어 헤더 아바타로 렌더(#2 — 다른 화면 변경 즉시 전파).
 //   url 없으면 userId 결정적 디폴트(이모지+컬러)로 표시(plan §3.3).
+//   닉네임 미설정 시 결정적 기본 닉네임(동물명+숫자)으로 폴백(#3) → 접근성 라벨/이니셜 일관.
 const HomeHeaderAvatar = ({ userId }: { userId: string }) => {
-  const { state } = useProfile({ userId });
+  const { state } = useProfileContext();
   const profile = state.status === "ready" ? state.profile : null;
+  const nickname =
+    profile?.nickname && profile.nickname.length > 0
+      ? profile.nickname
+      : defaultNickname({ userId });
   return (
     <Avatar
       url={profile?.avatarUrl ?? null}
       userId={userId}
-      nickname={profile?.nickname ?? null}
+      nickname={nickname}
       size={HEADER_AVATAR_SIZE}
     />
   );

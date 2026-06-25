@@ -5,7 +5,8 @@
 //   설정 리스트 2행(알림 설정 navigate / 이용 안내 toast), 즉시 로그아웃(Alert 없음, 킷 595).
 //   ⚠️ 사진 소스 선택 시트·기본이미지 복원은 범위 밖(S5b 분리) — 아바타 커스터마이즈는 라이브러리 업로드 동선만.
 //
-// 생산자: useProfile(조회)/useUpdateProfile(저장·업로드)/useMyLogs(통계). 소비자: 상태별 UX. 스타일=토큰만(raw hex 0).
+// 생산자: useProfileContext(공유 조회·#2)/useUpdateProfile(저장·업로드)/useMyLogs(통계). 소비자: 상태별 UX. 스타일=토큰만(raw hex 0).
+//   ⚠️ #2: 조회는 공유 ProfileProvider(useProfileContext) — 저장/업로드 성공 후 공유 refresh()로 HomeHeader·LogList까지 전파.
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,12 +30,13 @@ import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { useAuth } from '@/features/auth';
 import {
   computeProfileStats,
+  defaultNickname,
   DeleteAccountSheet,
   NICKNAME_MAX_LENGTH,
   ProfileErrorToken,
   PROFILE_ERROR_MESSAGES,
   useDeleteAccount,
-  useProfile,
+  useProfileContext,
   useUpdateProfile,
   validateNickname,
 } from '@/features/profile';
@@ -86,7 +88,8 @@ const ProfileContent = ({ userId }: { userId: string }) => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { showToast } = useToastController();
   const { signOut } = useAuth();
-  const { state, refresh } = useProfile({ userId });
+  // #2: 공유 프로필 상태/refresh — 저장·업로드 성공 후 이 refresh를 부르면 모든 화면(HomeHeader·LogList)이 함께 갱신된다.
+  const { state, refresh } = useProfileContext();
   const { saveNickname, changeAvatar, savingNickname, uploadingAvatar, error } = useUpdateProfile({
     userId,
   });
@@ -243,7 +246,10 @@ const ProfileContent = ({ userId }: { userId: string }) => {
 
           <View style={[styles.nicknameRow, { marginTop: theme.spacing[12] }]}>
             <Text variant="profileName" color="fg">
-              {profile.nickname ?? '닉네임 미설정'}
+              {/* #3: 닉네임 미설정 시 결정적 기본 닉네임(동물명+숫자) — 화면 간 동일 신원(표시 폴백, persist 아님). */}
+              {profile.nickname && profile.nickname.length > 0
+                ? profile.nickname
+                : defaultNickname({ userId })}
             </Text>
             <Pressable
               accessibilityRole="button"

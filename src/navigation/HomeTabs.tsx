@@ -3,6 +3,7 @@
 // ui-redesign 충실화: 기본 네비 헤더(title+headerRight) → 커스텀 HomeHeader(워드마크+버블+ 아바타) 공통 적용.
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, IconName } from '@/components';
 import { useTheme } from '@/theme';
@@ -11,11 +12,15 @@ import { HomeHeader } from './HomeHeader';
 import { Routes, type HomeTabParamList } from './routes';
 import { LogListScreen } from './screens/LogListScreen';
 import { MapTabScreen } from './screens/MapTabScreen';
+import { buildTabBarStyle } from './tabBarStyle';
 
 const Tab = createBottomTabNavigator<HomeTabParamList>();
 
 export const HomeTabs = () => {
   const theme = useTheme();
+  // #1 Android GNB safe-area: 하단 inset을 직접 읽어 탭바 하단 패딩·높이에 반영(buildTabBarStyle).
+  //   react-navigation 자동 inset은 Android(비 edge-to-edge)에서 bottom=0으로 보고돼 GNB가 시스템 내비바에 가려졌다.
+  const insets = useSafeAreaInsets();
   return (
     <Tab.Navigator
       // 디폴트 탭 = 먹로그(LogList)
@@ -28,13 +33,8 @@ export const HomeTabs = () => {
         tabBarActiveTintColor: theme.color.primary,
         // 킷 MkTabBar 비활성 라벨 = text-alternative(fgMuted).
         tabBarInactiveTintColor: theme.color.fgMuted,
-        // 킷 mk-ui:183 — 바 배경 surface(다크 정합), 상단 구분선 line-alt(hairlineAlt), paddingTop 9(≈spacing[8]).
-        //   하단 패딩(킷 22)은 react-navigation이 home-indicator safe-area inset으로 자동 처리.
-        tabBarStyle: {
-          backgroundColor: theme.color.surface,
-          borderTopColor: theme.color.hairlineAlt,
-          paddingTop: theme.spacing[8],
-        },
+        // 킷 mk-ui:183 비주얼 토큰 + 하단 safe-area inset 명시 적용(#1). 상세는 tabBarStyle.ts.
+        tabBarStyle: buildTabBarStyle({ insets, theme }),
         // 킷 라벨 11px, SemiBold(비활성 600 근사 — react-navigation은 focus별 weight 변경 어려움).
         tabBarLabelStyle: {
           fontFamily: 'SUIT-SemiBold',

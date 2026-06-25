@@ -11,7 +11,10 @@ jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ goBack: m
 
 jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
 jest.mock('@/features/notif/useNotifPrefs', () => ({ useNotifPrefs: jest.fn() }));
-jest.mock('@/features/profile', () => ({ useProfile: jest.fn() }));
+jest.mock('@/features/profile', () => {
+  const defaultNicknameMod = jest.requireActual('@/features/profile/defaultNickname');
+  return { ...defaultNicknameMod, useProfileContext: jest.fn() };
+});
 // ⚠️ 배럴 requireActual은 supabase→AsyncStorage를 끌어오므로 순수 모듈(logName)만 requireActual.
 jest.mock('@/features/room', () => {
   const logName = jest.requireActual('@/features/room/logName');
@@ -20,13 +23,13 @@ jest.mock('@/features/room', () => {
 
 import { useAuth } from '@/features/auth';
 import { useNotifPrefs } from '@/features/notif/useNotifPrefs';
-import { useProfile } from '@/features/profile';
+import { useProfileContext } from '@/features/profile';
 import { useMyLogsContext } from '@/features/room';
 import { NotifSettingsScreen } from './NotifSettingsScreen';
 
 const useAuthMock = useAuth as jest.Mock;
 const useNotifPrefsMock = useNotifPrefs as jest.Mock;
-const useProfileMock = useProfile as jest.Mock;
+const useProfileMock = useProfileContext as jest.Mock;
 const useMyLogsContextMock = useMyLogsContext as jest.Mock;
 
 const setMaster = jest.fn();

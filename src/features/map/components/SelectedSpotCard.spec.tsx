@@ -3,6 +3,7 @@
 //   핀 탭 시 하단 등장: FoodCover(카테고리 이모지) + 가게명 + 별점 + "· 카테고리 · area".
 //   데이터는 props로만 주입(plan §3.3 MuklogPin 필드). 비즈니스 로직 없음.
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { screen } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
@@ -51,5 +52,14 @@ describe('SelectedSpotCard', () => {
       <SelectedSpotCard placeName="무카테고리" rating={4} category={null} area="망원동" />,
     );
     expect(screen.getByText('· 망원동')).toBeTruthy();
+  });
+
+  // #5: 카테고리/area 메타 텍스트 상단 클리핑 방지 — lineHeight > fontSize(한글 글리프 윗부분 잘림 방지).
+  it('메타 텍스트의 lineHeight가 fontSize보다 커서 상단 클리핑이 없다(#5)', () => {
+    renderWithTheme(
+      <SelectedSpotCard placeName="트라토리아 보나" rating={5} category="pasta" area="연남동" />,
+    );
+    const meta = StyleSheet.flatten(screen.getByText('· 파스타·양식 · 연남동').props.style);
+    expect(meta.lineHeight).toBeGreaterThan(meta.fontSize);
   });
 });

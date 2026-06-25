@@ -32,6 +32,11 @@ const COVER_SIZE = 54;
 const COVER_RADIUS = 14;
 const COVER_EMOJI_SIZE = 26;
 
+// #5: 메타 타이포 토큰(meta)은 lineHeight==fontSize(13)라 한글 글리프 윗부분이 상단에서 잘린다.
+//   글로벌 토큰을 건드리지 않고(공용·타 화면 영향) 지도 카드 메타에서만 lineHeight를 넉넉히 잡아 클리핑을 막는다.
+//   (메모리 qa-layout-blind-spot: 한글은 lineHeight >= fontSize + 여유가 필요). NearbySpotCard와 동일값.
+const META_LINE_HEIGHT = 18;
+
 // 킷 메타줄 "· {라벨} · {area}"를 null 안전하게 합성한다(둘 다 null이면 "·"만 남지 않도록 빈 조각 제거).
 const buildMeta = ({ label, area }: { label: string; area: string | null }): string => {
   const parts = [label, area].filter((part): part is string => Boolean(part && part.length > 0));
@@ -72,7 +77,12 @@ export const SelectedSpotCard = ({ placeName, rating, category, area }: Selected
           <View style={[styles.metaRow, { gap: theme.spacing[6], marginTop: theme.spacing[4] }]}>
             <Stars value={rating} size={13} />
             {meta.length > 0 ? (
-              <Text variant="meta" color="fgMuted" numberOfLines={1} style={styles.meta}>
+              <Text
+                variant="meta"
+                color="fgMuted"
+                numberOfLines={1}
+                style={[styles.meta, { lineHeight: META_LINE_HEIGHT }]}
+              >
                 {meta}
               </Text>
             ) : null}

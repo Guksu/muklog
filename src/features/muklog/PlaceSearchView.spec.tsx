@@ -104,6 +104,31 @@ describe('PlaceSearchView', () => {
     expect(screen.getByText('장소 검색에 실패했어요.')).toBeTruthy();
   });
 
+  it('resolveCategory 미주입 시 mapKakaoCategory로 기본 해석한다 (#7 — 늘 cafe 폴백 방지)', () => {
+    // resolveCategory 없이도 양식 브레드크럼이 파스타 라벨로 해석되어야 한다(이전엔 null→cafe 라벨 생략).
+    renderWithTheme(
+      <PlaceSearchView
+        {...baseProps}
+        status="ready"
+        query="보나"
+        results={[item({ categoryName: '음식점 > 양식 > 이탈리안', categoryGroupCode: 'FD6' })]}
+      />,
+    );
+    expect(screen.getByText(/파스타·양식/)).toBeTruthy();
+  });
+
+  it('resolveCategory 미주입 + 고기 브레드크럼 → 고기 라벨 (#6·#7)', () => {
+    renderWithTheme(
+      <PlaceSearchView
+        {...baseProps}
+        status="ready"
+        query="고기"
+        results={[item({ categoryName: '음식점 > 한식 > 육류,고기 > 삼겹살', categoryGroupCode: 'FD6' })]}
+      />,
+    );
+    expect(screen.getByText(/^고기 ·|^고기$|고기 ·/)).toBeTruthy();
+  });
+
   it('error + onUseManualInput 주입 시에도 "직접 입력" 폴백을 노출한다 (§4.2)', () => {
     renderWithTheme(
       <PlaceSearchView

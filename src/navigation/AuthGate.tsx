@@ -9,6 +9,7 @@ import { NavigationContainer } from '@react-navigation/native';
 
 import { useAuth } from '@/features/auth';
 import { MapPrewarm } from '@/features/map/MapPrewarm';
+import { ProfileProvider } from '@/features/profile';
 import { MyLogsProvider } from '@/features/room';
 
 import { AppNavigator } from './AppNavigator';
@@ -37,14 +38,18 @@ export const AuthGate = () => {
       return <AuthErrorView message={state.message} onRetry={retry} />;
     case 'authenticated':
       return (
-        <MyLogsProvider userId={state.userId}>
-          <NavigationContainer>
-            <AppNavigator />
-          </NavigationContainer>
-          {/* 지도 WebView 프리워머(map-prewarm) — 인증 사용자에서만 마운트. 숨김 1×1, 권한·RPC 미보유.
-              유휴 시점에 SDK를 미리 부팅해 지도탭 첫 진입 체감 지연을 줄인다(인스턴스 비공유). */}
-          <MapPrewarm />
-        </MyLogsProvider>
+        // ProfileProvider — 본인 닉/아바타를 단일 상태로 공유(#2). ProfileScreen 변경이 HomeHeader·LogList 등
+        //   모든 소비자에 즉시 전파되도록 인증 트리 최상위에서 1회 마운트(MyLogsProvider와 동급 위치).
+        <ProfileProvider userId={state.userId}>
+          <MyLogsProvider userId={state.userId}>
+            <NavigationContainer>
+              <AppNavigator />
+            </NavigationContainer>
+            {/* 지도 WebView 프리워머(map-prewarm) — 인증 사용자에서만 마운트. 숨김 1×1, 권한·RPC 미보유.
+                유휴 시점에 SDK를 미리 부팅해 지도탭 첫 진입 체감 지연을 줄인다(인스턴스 비공유). */}
+            <MapPrewarm />
+          </MyLogsProvider>
+        </ProfileProvider>
       );
     default: {
       // 빠짐없는 분기 보장(컴파일 타임): 새로운 status가 추가되면 여기서 타입 에러.
