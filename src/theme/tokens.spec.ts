@@ -206,6 +206,78 @@ describe('tokens — typography (AC-5)', () => {
   });
 });
 
+describe('tokens — typo 한글 클리핑 수정 (typo-clipping, AC1/AC2)', () => {
+  // 직전까지 lineHeight==fontSize(ratio:1)라 한글 글리프 상단이 잘리던 12토큰.
+  //   lineHeight만 키워 클리핑 해소(fontSize·family 불변). 메모리 qa-layout-blind-spot.
+  const clipFixTokens = [
+    'wordmark', 'meta', 'spotCount', 'badge', 'ratingNum', 'inviteCode',
+    'calendarMonth', 'calendarDow', 'calendarDay', 'calendarDayStrong',
+    'dateRowValue', 'notifSectionLabel',
+  ] as const;
+
+  it('AC1: 대상 12토큰 모두 lineHeight > fontSize다 (ratio:1 클리핑 해소)', () => {
+    clipFixTokens.forEach((name) => {
+      const token = typography[name];
+      expect(token.lineHeight).toBeGreaterThan(token.fontSize);
+    });
+  });
+
+  it('AC1: 대상 12토큰 모두 lineHeight >= fontSize × 1.15다 (한글 상단 여유 확보)', () => {
+    clipFixTokens.forEach((name) => {
+      const token = typography[name];
+      expect(token.lineHeight).toBeGreaterThanOrEqual(token.fontSize * 1.15);
+    });
+  });
+
+  it('전역 안전망: typography 전 항목이 lineHeight >= fontSize다(어떤 토큰도 ratio<1 금지)', () => {
+    Object.values(typography).forEach((token) => {
+      expect(token.lineHeight).toBeGreaterThanOrEqual(token.fontSize);
+    });
+  });
+
+  it('AC2: fontSize 불변(시각 크기 회귀 0) — 대상 토큰 크기 고정', () => {
+    expect(typography.wordmark.fontSize).toBe(26);
+    expect(typography.meta.fontSize).toBe(13);
+    expect(typography.spotCount.fontSize).toBe(14);
+    expect(typography.badge.fontSize).toBe(12);
+    expect(typography.ratingNum.fontSize).toBe(15);
+    expect(typography.inviteCode.fontSize).toBe(26);
+    expect(typography.calendarMonth.fontSize).toBe(17);
+    expect(typography.calendarDow.fontSize).toBe(12);
+    expect(typography.calendarDay.fontSize).toBe(14.5);
+    expect(typography.calendarDayStrong.fontSize).toBe(14.5);
+    expect(typography.dateRowValue.fontSize).toBe(15);
+    expect(typography.notifSectionLabel.fontSize).toBe(13);
+  });
+
+  it('AC2: fontFamily(두께) 불변 — 대상 토큰 family 고정', () => {
+    expect(typography.wordmark.fontFamily).toBe('SUIT-Bold');
+    expect(typography.meta.fontFamily).toBe('SUIT-Medium');
+    expect(typography.spotCount.fontFamily).toBe('SUIT-SemiBold');
+    expect(typography.badge.fontFamily).toBe('SUIT-Bold');
+    expect(typography.ratingNum.fontFamily).toBe('SUIT-Bold');
+    expect(typography.inviteCode.fontFamily).toBe('SUIT-Bold');
+    expect(typography.calendarMonth.fontFamily).toBe('SUIT-Bold');
+    expect(typography.calendarDow.fontFamily).toBe('SUIT-Bold');
+    expect(typography.calendarDay.fontFamily).toBe('SUIT-SemiBold');
+    expect(typography.calendarDayStrong.fontFamily).toBe('SUIT-Bold');
+    expect(typography.dateRowValue.fontFamily).toBe('SUIT-SemiBold');
+    expect(typography.notifSectionLabel.fontFamily).toBe('SUIT-Bold');
+  });
+
+  it('AC4: meta 토큰 lineHeight가 18 이상이라 지도 카드 인라인 오버라이드(18)를 토큰이 흡수한다', () => {
+    expect(typography.meta.lineHeight).toBeGreaterThanOrEqual(18);
+  });
+
+  it('회귀 민감 토큰은 보수적(1.15~1.2) — 캘린더 셀·배지 정렬 보존', () => {
+    // 7열 정사각 셀 + 타이트 pill이라 과한 lineHeight 증가는 정렬을 바꾼다.
+    expect(typography.calendarDay.lineHeight).toBe(17);
+    expect(typography.calendarDayStrong.lineHeight).toBe(17);
+    expect(typography.calendarDow.lineHeight).toBe(14);
+    expect(typography.badge.lineHeight).toBe(14);
+  });
+});
+
 describe('tokens — fillAlt (세그먼트 트랙, wishlist)', () => {
   it('세그먼트 트랙 배경이 킷 --fill-alt rgba(112,115,124,.05)다(mk-log:58)', () => {
     expect(themes.light.color.fillAlt).toBe('rgba(112,115,124,0.05)');

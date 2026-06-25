@@ -42,10 +42,7 @@ const COVER_SIZE = 54;
 const COVER_RADIUS = 14;
 const COVER_EMOJI_SIZE = 26;
 
-// #5: 메타 타이포 토큰(meta)은 lineHeight==fontSize(13)라 한글 글리프 윗부분이 상단에서 잘린다.
-//   글로벌 토큰을 건드리지 않고(공용·타 화면 영향) 지도 카드 메타에서만 lineHeight를 넉넉히 잡아 클리핑을 막는다.
-//   (메모리 qa-layout-blind-spot: 한글은 lineHeight >= fontSize + 여유가 필요).
-const META_LINE_HEIGHT = 18;
+// 메타 한글 클리핑은 meta 토큰 lineHeight(13×1.4=18)로 토큰 레벨 해결(typo-clipping). 인라인 오버라이드 제거.
 
 // 킷 메타줄 패턴("· {조각}")을 따르되 nearby는 "카테고리명 · 거리". 거리 없으면 카테고리명만(거리 조각 생략).
 const buildMeta = ({
@@ -103,7 +100,7 @@ export const NearbySpotCard = ({
               variant="meta"
               color="fgMuted"
               numberOfLines={1}
-              style={[styles.meta, { marginTop: theme.spacing[4], lineHeight: META_LINE_HEIGHT }]}
+              style={[styles.meta, { marginTop: theme.spacing[4] }]}
             >
               {meta}
             </Text>

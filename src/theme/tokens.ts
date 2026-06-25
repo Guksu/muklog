@@ -200,38 +200,38 @@ export const typography = {
   caption: makeTypography({ size: 12, ratio: 1.4, family: 'SUIT-Medium' }),
   // muklog 킷 실수치 역할 토큰 — 폰트 크기/두께를 킷 mk-home/mk-ui와 정확히 정합.
   //   RN은 weight를 family로 잡는다(fonts.ts): 800/700→Bold, 600→SemiBold, 500→Medium.
-  wordmark:   makeTypography({ size: 26, ratio: 1, family: 'SUIT-Bold' }),      // 800/26 (헤더 워드마크)
+  wordmark:   makeTypography({ size: 26, ratio: 1.27, family: 'SUIT-Bold' }),   // 800/26 → lh 33 (헤더 워드마크, 한글 클리핑 해소 typo-clipping. baseline 행이라 시각 baseline 보존)
   cardTitle:  makeTypography({ size: 17, ratio: 1.3, family: 'SUIT-Bold' }),    // 700/17 (카드 타이틀)
   emptyTitle: makeTypography({ size: 21, ratio: 1.3, family: 'SUIT-Bold' }),    // 800/21 (빈상태 제목)
   sectionTitle: makeTypography({ size: 19, ratio: 1.2, family: 'SUIT-Bold' }),  // 800/19 (LogScreen "우리 맛집 N" 섹션, 킷 mk-log:56)
   navTitle:   makeTypography({ size: 16, ratio: 1.2, family: 'SUIT-Bold' }),     // 700/16 (LogScreen 헤더 로그명, 킷 mk-log:25)
   sectionCaption: makeTypography({ size: 14, ratio: 1.5, family: 'SUIT-Medium' }), // 500/14 (섹션 캡션)
-  meta:       makeTypography({ size: 13, ratio: 1, family: 'SUIT-Medium' }),     // 500/12.5 (카드 날짜 메타, 정수 근사)
-  spotCount:  makeTypography({ size: 14, ratio: 1, family: 'SUIT-SemiBold' }),   // 600/13.5 "맛집 N곳"(정수 근사)
-  badge:      makeTypography({ size: 12, ratio: 1, family: 'SUIT-Bold' }),       // 700/11.5 멤버배지(정수 근사)
+  meta:       makeTypography({ size: 13, ratio: 1.4, family: 'SUIT-Medium' }),   // 500/13 → lh 18 (카드 날짜 메타, 한글 클리핑 해소. lh18 = 지도카드 인라인 오버라이드 흡수)
+  spotCount:  makeTypography({ size: 14, ratio: 1.3, family: 'SUIT-SemiBold' }), // 600/14 → lh 18 "맛집 N곳"(한글 클리핑 해소)
+  badge:      makeTypography({ size: 12, ratio: 1.2, family: 'SUIT-Bold' }),     // 700/12 → lh 14 멤버배지(보수적 1.2 — 타이트 pill 정렬 보존, 한글 클리핑 해소)
   button:     makeTypography({ size: 16, ratio: 1.2, family: 'SUIT-Bold' }),     // 700/16 버튼(md)
   // ── 본 감사(ui-fidelity-audit)로 추가한 킷 정합 역할 토큰 ──
   sheetTitle:  makeTypography({ size: 18, ratio: 1.3, family: 'SUIT-Bold' }),    // 700/18 시트 타이틀(킷 mk-ui:167)
   sectionLabel:makeTypography({ size: 16, ratio: 1.2, family: 'SUIT-Bold' }),    // 800/16 상세 섹션 제목 "메모"/"위치"(킷 mk-log:175,186)
   fieldLabel:  makeTypography({ size: 15, ratio: 1.2, family: 'SUIT-Bold' }),    // 800/15 입력 필드 라벨(킷 mk-log Field:373) · 솔로배너 제목(mk-log:39)
   memoBody:    makeTypography({ size: 15, ratio: 1.7, family: 'SUIT-Medium' }),  // 500/15 상세 메모 본문(킷 mk-log:177)
-  ratingNum:   makeTypography({ size: 15, ratio: 1, family: 'SUIT-Bold' }),      // 700/15 상세 별점 숫자(킷 mk-log:165)
-  inviteCode:  makeTypography({ size: 26, ratio: 1, family: 'SUIT-Bold' }),      // 800/26 초대코드(킷 mk-home:225) — letterSpacing은 사용처에서 .18em
+  ratingNum:   makeTypography({ size: 15, ratio: 1.25, family: 'SUIT-Bold' }),   // 700/15 → lh 19 상세 별점 숫자(킷 mk-log:165, 한글 클리핑 해소 — 숫자지만 일관성)
+  inviteCode:  makeTypography({ size: 26, ratio: 1.25, family: 'SUIT-Bold' }),   // 800/26 → lh 33 초대코드(킷 mk-home:225) — letterSpacing은 사용처에서 .18em (영숫자지만 일관성)
   profileName: makeTypography({ size: 22, ratio: 1.2, family: 'SUIT-Bold' }),    // 800/22 프로필 닉네임(킷 mk-log:440)
   // ── 이름변경 다이얼로그(rename-dialog)로 추가한 킷 정합 역할 토큰 (킷 mk-extra RenameDialog) ──
   dialogTitle:   makeTypography({ size: 17.5, ratio: 1.3, family: 'SUIT-Bold' }),   // 800/17.5 RenameDialog 제목(킷 mk-extra:40)
   dialogSubtitle:makeTypography({ size: 12.5, ratio: 1.5, family: 'SUIT-Medium' }), // 500/12.5 RenameDialog 보조문(킷 mk-extra:41, text-alternative)
   dialogInput:   makeTypography({ size: 16, ratio: 1.2, family: 'SUIT-SemiBold' }), // 600/16 RenameDialog 입력·취소(킷 mk-extra:46,57). 저장(800/16)은 button 토큰 재사용.
   // ── 방문일 캘린더 시트(date-picker)로 추가한 킷 정합 역할 토큰 (킷 mk-extra DatePickerSheet 88-118, mk-log dateRow 418) ──
-  calendarMonth:    makeTypography({ size: 17, ratio: 1, family: 'SUIT-Bold' }),       // 800/17 월 네비 라벨 "YYYY년 M월"(킷 mk-extra:93)
-  calendarDow:      makeTypography({ size: 12, ratio: 1, family: 'SUIT-Bold' }),        // 700/12 요일 헤더 일~토(킷 mk-extra:99). badge(12/Bold)와 값 동일하나 의미 분리.
-  calendarDay:      makeTypography({ size: 14.5, ratio: 1, family: 'SUIT-SemiBold' }),  // 600/14.5 날짜 셀 기본(킷 mk-extra:114)
-  calendarDayStrong:makeTypography({ size: 14.5, ratio: 1, family: 'SUIT-Bold' }),      // 800/14.5 날짜 셀 선택/오늘(킷 mk-extra:114)
-  dateRowValue:     makeTypography({ size: 15, ratio: 1, family: 'SUIT-SemiBold' }),    // 600/15 방문일 진입 행 날짜 텍스트(킷 mk-log:418)
+  calendarMonth:    makeTypography({ size: 17, ratio: 1.3, family: 'SUIT-Bold' }),      // 800/17 → lh 22 월 네비 라벨 "YYYY년 M월"(킷 mk-extra:93, 한글 클리핑 해소)
+  calendarDow:      makeTypography({ size: 12, ratio: 1.15, family: 'SUIT-Bold' }),     // 700/12 → lh 14 요일 헤더 일~토(킷 mk-extra:99). 보수적 1.15 — 헤더 행 정렬 보존.
+  calendarDay:      makeTypography({ size: 14.5, ratio: 1.15, family: 'SUIT-SemiBold' }),// 600/14.5 → lh 17 날짜 셀 기본(킷 mk-extra:114). 보수적 1.15 — 7열 정사각 셀 정렬 보존(qa-layout-blind-spot 토요일 wrap 선례).
+  calendarDayStrong:makeTypography({ size: 14.5, ratio: 1.15, family: 'SUIT-Bold' }),   // 800/14.5 → lh 17 날짜 셀 선택/오늘(킷 mk-extra:114). 보수적 1.15(셀 정렬 보존).
+  dateRowValue:     makeTypography({ size: 15, ratio: 1.3, family: 'SUIT-SemiBold' }),  // 600/15 → lh 20 방문일 진입 행 날짜 텍스트(킷 mk-log:418, 한글 클리핑 해소)
   // ── 알림 설정(notif-settings)로 추가한 킷 정합 역할 토큰 (킷 mk-extra NotifSettingsScreen 128-175) ──
   notifItemTitle:   makeTypography({ size: 15.5, ratio: 1.3, family: 'SUIT-Bold' }),    // 700/15.5 마스터 토글 제목 "새 먹로그 알림"(킷 mk-extra:143)
   notifItemDesc:    makeTypography({ size: 12.5, ratio: 1.4, family: 'SUIT-Medium' }),  // 500/12.5 마스터 토글 부제(킷 mk-extra:144, text-alternative)
-  notifSectionLabel:makeTypography({ size: 13, ratio: 1, family: 'SUIT-Bold' }),        // 800/13 "로그별 알림" 섹션 라벨(킷 mk-extra:151, text-alternative)
+  notifSectionLabel:makeTypography({ size: 13, ratio: 1.3, family: 'SUIT-Bold' }),      // 800/13 → lh 17 "로그별 알림" 섹션 라벨(킷 mk-extra:151, text-alternative, 한글 클리핑 해소)
   notifLogName:     makeTypography({ size: 14.5, ratio: 1.3, family: 'SUIT-SemiBold' }),// 600/14.5 로그별 행 로그명(킷 mk-extra:162, 1줄 ellipsis)
   notifHint:        makeTypography({ size: 12, ratio: 1.6, family: 'SUIT-Medium' }),    // 500/12 하단 안내 카피(킷 mk-extra:168, text-assistive)
 } as const;
