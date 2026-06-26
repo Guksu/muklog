@@ -45,6 +45,18 @@ jest.mock('./avatarPath', () => {
   return { ...actual, createAvatarFileId: jest.fn(() => 'fixed') };
 });
 
+// --- AsyncStorage 모킹(picker 컨텍스트 영속 — picker-recovery) ---
+const mockSetItem = jest.fn();
+const mockRemoveItem = jest.fn();
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  __esModule: true,
+  default: {
+    setItem: (...a: unknown[]) => mockSetItem(...a),
+    getItem: jest.fn(),
+    removeItem: (...a: unknown[]) => mockRemoveItem(...a),
+  },
+}));
+
 import { useUpdateProfile } from './useUpdateProfile';
 
 const OLD_URL = 'https://proj.supabase.co/storage/v1/object/public/avatars/u1/old.jpg';
@@ -52,6 +64,8 @@ const NEW_URL = 'https://proj.supabase.co/storage/v1/object/public/avatars/u1/fi
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockSetItem.mockResolvedValue(undefined);
+  mockRemoveItem.mockResolvedValue(undefined);
   // 기본 성공값
   updateEq.mockResolvedValue({ error: null });
   selMaybeSingle.mockResolvedValue({ data: { avatar_url: OLD_URL }, error: null });
@@ -167,6 +181,20 @@ describe('useUpdateProfile.changeAvatar (T7 / P3·P4·P7·P10)', () => {
     // 이전 파일 정리(P10)
     expect(remove).toHaveBeenCalledWith(['u1/old.jpg']);
     expect(result.current.error).toBeNull();
+  });
+
+  it('picker 직전 컨텍스트를 영속하고 정상 resolve 시 제거한다 (AC1)', async () => {
+    const { result } = renderHook(() => useUpdateProfile({ userId: 'u1' }));
+
+    await act(async () => {
+      await result.current.changeAvatar();
+    });
+
+    expect(mockSetItem).toHaveBeenCalledWith(
+      'muklog:pending-pick',
+      JSON.stringify({ kind: 'avatar', userId: 'u1' }),
+    );
+    expect(mockRemoveItem).toHaveBeenCalledWith('muklog:pending-pick');
   });
 
   it('업로드 실패 → AVATAR_UPLOAD_FAILED + 새 파일 best-effort 정리, avatar_url 미변경', async () => {

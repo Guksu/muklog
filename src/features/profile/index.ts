@@ -14,6 +14,16 @@ export {
   type NicknameValidation,
 } from './nickname';
 export { processAvatarImage, AVATAR_SIZE, AVATAR_COMPRESS, type ProcessedImage } from './image';
+export { uploadAvatarFromUri } from './uploadAvatarFromUri';
+export {
+  PENDING_PICK_KEY,
+  PendingPickKind,
+  savePendingPick,
+  loadPendingPick,
+  clearPendingPick,
+  type PendingPickContext,
+} from './pendingPick';
+export { useRecoverPendingPick, PICK_RECOVERED_TOAST } from './useRecoverPendingPick';
 export {
   mapProfileError,
   ProfileErrorToken,

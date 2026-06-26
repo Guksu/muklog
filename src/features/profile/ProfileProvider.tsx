@@ -10,6 +10,7 @@
 import React, { createContext, useContext } from 'react';
 
 import { useProfile, type ProfileState } from './useProfile';
+import { useRecoverPendingPick } from './useRecoverPendingPick';
 
 type ProfileContextValue = {
   state: ProfileState;
@@ -26,6 +27,8 @@ export const ProfileProvider = ({
   children: React.ReactNode;
 }) => {
   const value = useProfile({ userId });
+  // Android picker 파괴 케이스 복구(§설계3) — 마운트·복귀 시 유실된 아바타 결과를 회수해 업로드·refresh.
+  useRecoverPendingPick({ refresh: value.refresh });
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;
 };
 

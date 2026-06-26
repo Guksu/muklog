@@ -9,20 +9,18 @@
 //
 // 비용 가드레일: 업로드 전 processAvatarImage(512·JPEG·0.7) 처리본만 업로드(원본 직업로드 0, P7).
 //   교체 성공 시 이전 파일 best-effort 삭제(스토리지 누적 방지, P10). 실패는 무시.
+//
+// picker-recovery: 업로드 본체는 uploadAvatarFromUri 로 공용화(정상/복구 재사용). picker 호출 직전
+//   AsyncStorage에 컨텍스트를 영속(파괴 시 복구용), 정상 resolve 시 제거(§설계1·4).
 import { useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 
 import { supabase } from '@/lib/supabase';
 
-import {
-  AVATARS_BUCKET,
-  buildAvatarPath,
-  createAvatarFileId,
-  parseAvatarPath,
-} from './avatarPath';
 import { mapProfileError, ProfileErrorToken } from './errors';
-import { processAvatarImage } from './image';
 import { validateNickname } from './nickname';
+import { clearPendingPick, PendingPickKind, savePendingPick } from './pendingPick';
+import { uploadAvatarFromUri } from './uploadAvatarFromUri';
 
 /**
  * 닉네임 저장 / 아바타 업로드 액션과 진행·에러 상태를 제공하는 훅.
@@ -33,15 +31,6 @@ export const useUpdateProfile = ({ userId }: { userId: string }) => {
   const [savingNickname, setSavingNickname] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // 이전 아바타 파일 best-effort 삭제(실패 무시 — 스토리지 누적 방지 가드레일).
-  const removeAvatarFile = async ({ path }: { path: string }) => {
-    try {
-      await supabase.storage.from(AVATARS_BUCKET).remove([path]);
-    } catch {
-      // best-effort: 정리 실패는 치명적이지 않으므로 무시한다.
-    }
-  };
 
   const saveNickname = async ({ nickname }: { nickname: string }) => {
     setError(null);
@@ -84,54 +73,24 @@ export const useUpdateProfile = ({ userId }: { userId: string }) => {
       throw new Error(ProfileErrorToken.PermissionDenied);
     }
 
-    // 2. 피커(이미지 한정). 취소면 조용히 종료(에러 아님, changed:false).
+    // 2. picker 직전 컨텍스트 영속(Android 파괴 시 getPendingResultAsync 로 복구하기 위함, §설계1).
+    await savePendingPick({ context: { kind: PendingPickKind.Avatar, userId } });
+
+    // 3. 피커(이미지 한정). 취소면 조용히 종료(에러 아님, changed:false).
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 1,
     });
+    // 정상 resolve(파괴 안 됨) → 컨텍스트 제거(복구 중복 방지). 파괴 시 이 줄 미실행 → 복구가 처리.
+    await clearPendingPick();
     if (picked.canceled || !picked.assets?.[0]) return { changed: false };
     const sourceUri = picked.assets[0].uri;
 
     setUploadingAvatar(true);
-    let newPath: string | null = null;
     try {
-      // 정리용 이전 path(직전 avatar_url에서 역파싱). 0행/null이면 정리 스킵.
-      const { data: current } = await supabase
-        .from('profiles')
-        .select('avatar_url')
-        .eq('id', userId)
-        .maybeSingle();
-      const oldPath = parseAvatarPath({
-        publicUrl: (current as { avatar_url?: string | null } | null)?.avatar_url ?? null,
-      });
-
-      // 3. 처리(512·JPEG·0.7) — 원본이 아닌 처리본만 업로드(P7).
-      const processed = await processAvatarImage({ uri: sourceUri });
-
-      // 4. 처리본을 ArrayBuffer로 읽기(supabase RN 업로드 권장 방식).
-      const fileBody = await fetch(processed.uri).then((res) => res.arrayBuffer());
-
-      // 5. 업로드(경로 첫 세그먼트=uid, jpeg, 덮어쓰기 금지).
-      newPath = buildAvatarPath({ userId, fileId: createAvatarFileId() });
-      const { error: uploadError } = await supabase.storage
-        .from(AVATARS_BUCKET)
-        .upload(newPath, fileBody, { contentType: 'image/jpeg', upsert: false });
-      if (uploadError) throw uploadError;
-
-      // 6. 공개 URL → avatar_url 갱신(공개 URL 문자열 저장, P4).
-      const { data: urlData } = supabase.storage.from(AVATARS_BUCKET).getPublicUrl(newPath);
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: urlData.publicUrl })
-        .eq('id', userId);
-      if (updateError) throw updateError;
-
-      // 7. 성공 시 이전 파일 정리(best-effort, P10).
-      if (oldPath) await removeAvatarFile({ path: oldPath });
+      await uploadAvatarFromUri({ uri: sourceUri, userId });
       return { changed: true };
     } catch {
-      // 업로드/URL 갱신 실패 → 업로드된 새 파일 정리(orphan 방지) + 에러.
-      if (newPath) await removeAvatarFile({ path: newPath });
       setError(mapProfileError({ error: ProfileErrorToken.AvatarUploadFailed }));
       throw new Error(ProfileErrorToken.AvatarUploadFailed);
     } finally {

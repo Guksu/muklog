@@ -13,6 +13,9 @@ const from = jest.fn(() => ({ select }));
 jest.mock('@/lib/supabase', () => ({ supabase: { from: (...a: unknown[]) => fromProxy(...a) } }));
 const fromProxy = (...a: unknown[]) => from(...(a as []));
 
+// 복구 훅은 별도 spec(useRecoverPendingPick.spec)에서 검증 — 여기선 격리(getPendingResult/토스트 부수효과 제거).
+jest.mock('./useRecoverPendingPick', () => ({ useRecoverPendingPick: jest.fn() }));
+
 import { ProfileProvider, useProfileContext } from './ProfileProvider';
 
 beforeEach(() => {
