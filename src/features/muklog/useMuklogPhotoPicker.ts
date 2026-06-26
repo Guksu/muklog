@@ -35,11 +35,14 @@ export const useMuklogPhotoPicker = () => {
     // 2. 다중선택(이미지 한정, 남은 슬롯까지). 취소면 조용히 종료(빈 배열).
     const limit = Math.max(0, remaining);
     if (limit === 0) return [];
+    // legacy:true — Android 시스템 Photo Picker가 일부 기기에서 선택 결과를 안 돌려주는(promise hang)
+    //   문제 회피. legacy picker(권한 기반)로 강제 → 결과 정상 수신. iOS는 무시(영향 0).
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
       selectionLimit: limit,
       quality: 1,
+      legacy: true,
     });
     if (picked.canceled || !picked.assets?.length) return [];
 

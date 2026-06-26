@@ -77,9 +77,12 @@ export const useUpdateProfile = ({ userId }: { userId: string }) => {
     await savePendingPick({ context: { kind: PendingPickKind.Avatar, userId } });
 
     // 3. 피커(이미지 한정). 취소면 조용히 종료(에러 아님, changed:false).
+    //   legacy:true — Android 시스템 Photo Picker가 일부 기기에서 선택 결과를 안 돌려주는(promise hang)
+    //   문제 회피. legacy picker(권한 기반)로 강제 → 결과 정상 수신. iOS는 무시(영향 0).
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 1,
+      legacy: true,
     });
     // 정상 resolve(파괴 안 됨) → 컨텍스트 제거(복구 중복 방지). 파괴 시 이 줄 미실행 → 복구가 처리.
     await clearPendingPick();
