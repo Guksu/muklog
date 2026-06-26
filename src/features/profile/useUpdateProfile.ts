@@ -10,7 +10,6 @@
 // 비용 가드레일: 업로드 전 processAvatarImage(512·JPEG·0.7) 처리본만 업로드(원본 직업로드 0, P7).
 //   교체 성공 시 이전 파일 best-effort 삭제(스토리지 누적 방지, P10). 실패는 무시.
 import { useState } from 'react';
-import { Alert } from 'react-native'; // [임시 진단] 아바타 실패 원인 파악용 — 확정 후 제거
 import * as ImagePicker from 'expo-image-picker';
 
 import { supabase } from '@/lib/supabase';
@@ -80,11 +79,6 @@ export const useUpdateProfile = ({ userId }: { userId: string }) => {
 
     // 1. 갤러리 권한.
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    // [임시 진단] 권한 결과 — 확정 후 제거.
-    Alert.alert(
-      '진단1·권한',
-      `granted=${permission.granted} status=${permission.status} canAskAgain=${permission.canAskAgain}`,
-    );
     if (!permission.granted) {
       setError(mapProfileError({ error: ProfileErrorToken.PermissionDenied }));
       throw new Error(ProfileErrorToken.PermissionDenied);
@@ -95,8 +89,6 @@ export const useUpdateProfile = ({ userId }: { userId: string }) => {
       mediaTypes: ['images'],
       quality: 1,
     });
-    // [임시 진단] 피커 결과 — 확정 후 제거.
-    Alert.alert('진단2·피커', `canceled=${picked.canceled} assets=${picked.assets?.length ?? 0}`);
     if (picked.canceled || !picked.assets?.[0]) return { changed: false };
     const sourceUri = picked.assets[0].uri;
 
@@ -137,9 +129,7 @@ export const useUpdateProfile = ({ userId }: { userId: string }) => {
       // 7. 성공 시 이전 파일 정리(best-effort, P10).
       if (oldPath) await removeAvatarFile({ path: oldPath });
       return { changed: true };
-    } catch (err) {
-      // [임시 진단] 실제 실패 원인 노출 — 확정 후 제거.
-      Alert.alert('진단3·업로드 실패', String((err as { message?: string })?.message ?? err));
+    } catch {
       // 업로드/URL 갱신 실패 → 업로드된 새 파일 정리(orphan 방지) + 에러.
       if (newPath) await removeAvatarFile({ path: newPath });
       setError(mapProfileError({ error: ProfileErrorToken.AvatarUploadFailed }));

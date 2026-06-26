@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "scheme": "muklog",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "icon": "./assets/muklog-app-icon.png",
     "assetBundlePatterns": ["**/*"],
     "ios": {
