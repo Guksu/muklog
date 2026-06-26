@@ -62,6 +62,7 @@
         }
       ],
       "./plugins/withFmtConstevalFix",
+      "./plugins/withAndroidLaunchMode",
       "expo-apple-authentication"
     ],
     "extra": {
