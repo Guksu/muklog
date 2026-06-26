@@ -25,7 +25,10 @@
         "foregroundImage": "./assets/muklog-app-icon.png",
         "backgroundColor": "#4775F0"
       },
-      "permissions": []
+      "permissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ]
     },
     "plugins": [
       "expo-dev-client",
