@@ -2,9 +2,9 @@
 // 로그인 화면 골격 — 킷 mk-auth.jsx:85-115 LoginScreen 번역.
 //   상단 비주얼(그라데이션 + AppMark 108 + 워드마크 + 카피) + 하단 소셜 버튼 + 약관 문구.
 //   비주얼/레이아웃만 담당 — onGoogle/onApple/authenticating/loginError는 props 계약(developer가 useAuth로 주입).
-//   web→RN 변환:
-//     · linear-gradient(160deg,#EAF0FF 0%,bg 70%) → expo-linear-gradient(authVisualGradient, 세로 근사 + locations[0,0.7]).
-//     · AppMark boxShadow(컬러 그림자 rgba(42,85,230,.26)) → RN 근사(accentShadow + offset). 컬러 섀도우는 iOS만 충실.
+//   web→RN 변환: (brand-coral §1 웜 코럴 전환)
+//     · linear-gradient(160deg,#FFF1EC 0%,bg 72%) → expo-linear-gradient(authVisualGradient 웜본, 세로 근사 + locations[0,0.72]).
+//     · AppMark boxShadow(코럴 그림자 rgba(255,77,109,.24)) → RN brandShadow 근사(킷 mk-auth:80). 컬러 섀도우는 iOS만 충실/Android elevation 근사.
 //     · <br/> 줄바꿈 → '\n'. <u> 밑줄 약관 → Text underline + onPress(expo-web-browser 인앱 브라우저로 약관/개인정보 열기, OAuth와 동일 패턴).
 //   showApple 기본값 = Platform.OS==='ios'(Android는 Apple 버튼 비노출 — plan E5).
 import React from 'react';
@@ -36,10 +36,10 @@ const LOGIN_COPY = '둘이 다녀온 맛집을\n오래오래 함께 기억해요
 // 인앱 브라우저로 열기(expo-web-browser, OAuth와 동일). 화살표 함수·props 무의존이라 모듈 레벨.
 const openTerms = () => void WebBrowser.openBrowserAsync(TERMS_URL);
 const openPrivacy = () => void WebBrowser.openBrowserAsync(PRIVACY_URL);
-// 킷 그라데이션 160deg(우상→좌하 대각) 근사 + stops 0%/70%(mk-auth:91).
+// 킷 그라데이션 160deg(우상→좌하 대각) 근사 + stops 0%/72%(mk-auth:78).
 const GRADIENT_START = { x: 0.15, y: 0 } as const;
 const GRADIENT_END = { x: 0.85, y: 1 } as const;
-const GRADIENT_LOCATIONS = [0, 0.7] as const;
+const GRADIENT_LOCATIONS = [0, 0.72] as const;
 
 export const LoginScreen = ({
   authenticating,
@@ -66,8 +66,8 @@ export const LoginScreen = ({
           size={108}
           radius={28}
           style={{
-            // 킷 boxShadow 0 14px 34px rgba(42,85,230,.26) 근사(컬러 그림자 — iOS 충실, Android elevation 근사).
-            shadowColor: theme.color.accentShadow,
+            // 킷 boxShadow 0 14px 34px rgba(255,77,109,.24) 근사(브랜드 코럴 그림자 — iOS 충실, Android elevation 근사, mk-auth:80).
+            shadowColor: theme.color.brandShadow,
             shadowOpacity: 1,
             shadowRadius: 17,
             shadowOffset: { width: 0, height: 7 },

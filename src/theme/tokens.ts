@@ -25,18 +25,27 @@ const palette = {
   red:     { 40:'#E52222', 50:'#FF4242', 95:'#FEECEC' },
   white:'#FFFFFF', surfaceAlt:'#F7F7F8', black:'#000000',
   // primary 버튼 그림자(--mk-accent-shadow rgba(51,102,255,.30)) · 카드 웜 섀도우 베이스.
+  //   ⚠️ accentShadow(블루)는 인앱 primary 버튼 전용 — brand-coral §1에서 건드리지 않음(인앱 액센트 블루 유지).
   accentShadow:'rgba(51,102,255,0.30)', shadowWarm:'#785A46',
+  // 브랜드 마크 전용 코럴 그림자 — 킷 mk-auth:48 boxShadow rgba(255,77,109,.26)(스플래시)·:80 rgba(255,77,109,.24)(로그인).
+  //   인앱 accentShadow(블루)와 의미 분리: 이건 브랜드 「먹 핀」 마크 그림자 한정(HANDOFF §1).
+  brandShadow:'rgba(255,77,109,0.26)',
+  // 스플래시 스피너 진행색 — 킷 mk-auth:66 borderTopColor #FF5A4D(코럴 레드). 인앱 primary 블루와 분리(HANDOFF §1).
+  splashSpinner:'#FF5A4D',
   // 별점 채움색 — 킷 mk-ui Stars 채운 별 #FFB23E (앰버, warning #FF9200과 구분).
   starFill:'#FFB23E',
-  // 브랜드 스플래시 배경 — 킷 muklog-splash.png 라이트블루→화이트 그라데이션의 상단 가장자리 톤(#EBF1FF, 픽셀 샘플).
-  //   RN/Expo는 네이티브 스플래시에 그라데이션을 못 그려 단색 근사 — 상단 톤 채택(중앙 로크업 주변 가장 두드러진 브랜드 라이트블루).
-  splashBg:'#EBF1FF',
-  // 인증 화면(social-auth) — 킷 mk-auth.jsx [확인].
-  //   브랜드 마크 그라데이션(AppMark rect): #5B85FF→#2A55E6(mk-auth:15-16). 포크/스푼 = #2A55E6(stop1).
-  //   스플래시/로그인 상단 비주얼 그라데이션: linear-gradient(160deg,#EAF0FF 0%,#FFF 60~70%)(mk-auth:57,91).
-  //   소셜 버튼: apple 검정 #000/흰 텍스트, google 흰 #FFF/잉크 #1F1F1F + --line-strong 보더(mk-auth:128-131).
-  brandBlueTop:'#5B85FF', brandBlueBottom:'#2A55E6',
-  authGradTop:'#EAF0FF', authGradBottom:'#FFFFFF',
+  // 브랜드 스플래시 배경 — 킷 mk-auth:45 SplashScreen linear-gradient(160deg,#FFF1EC 0%,#FFFFFF 62%) 웜 상단 톤(brand-coral §1).
+  //   RN/Expo는 네이티브 스플래시에 그라데이션을 못 그려 단색 근사 — 상단 웜 톤(#FFF1EC) 채택. (구 블루 #EBF1FF 폐기, HANDOFF-2026-06-30 §1)
+  splashBg:'#FFF1EC',
+  // 인증 화면(social-auth) — 킷 mk-auth.jsx [확인]. 2026-06-30 블루→코럴 「먹 핀」 전환(HANDOFF §1).
+  //   브랜드 마크 그라데이션(AppMark 스퀘어클): linear-gradient(180deg,#FF7E63→#FF4D6D)(mk-auth:13-16). "먹" 글자 = #FF5566(mk-auth:23).
+  //   스플래시/로그인 상단 비주얼 그라데이션: linear-gradient(160deg,#FFF1EC 0%,#FFF/bg 62~72%)(mk-auth:45,78).
+  //   소셜 버튼: apple 검정 #000/흰 텍스트, google 흰 #FFF/잉크 #1F1F1F + --line-strong 보더(mk-auth:114-116).
+  //   토큰명 brandGrad*(블루 함의 brandBlue* 폐기 — plan O2, 소비처 AppMark 동기화).
+  brandGradTop:'#FF7E63', brandGradBottom:'#FF4D6D',
+  // "먹" 글자색 — 킷 mk-auth:23 fill #FF5566(코럴 핑크, 스퀘어클 그라데이션보다 채도 높음).
+  brandMarkGlyph:'#FF5566',
+  authGradTop:'#FFF1EC', authGradBottom:'#FFFFFF',
   // 홈 빈 상태 히어로 비주얼 그라데이션 — 킷 mk-home:152 linear-gradient(150deg,#EAF0FF 0%,#FFE7DD 100%) verbatim.
   //   라이트블루(accentWeak 톤)→웜 살구. expo-linear-gradient로 150° ≈ start{0,0}→end로 근사(사용처에서 각도 지정).
   heroGradTop:'#EAF0FF', heroGradBottom:'#FFE7DD',
@@ -67,7 +76,7 @@ const palette = {
 
 // 그라데이션 stops(시맨틱 color 맵은 단일 string 토큰만 담으므로 배열은 별도 export).
 //   소비처: AppMark(브랜드 마크), SplashView·LoginScreen 상단 비주얼(expo-linear-gradient).
-export const brandGradient = [palette.brandBlueTop, palette.brandBlueBottom] as const;
+export const brandGradient = [palette.brandGradTop, palette.brandGradBottom] as const;
 export const authVisualGradient = [palette.authGradTop, palette.authGradBottom] as const;
 // 홈 빈 상태 히어로 그라데이션 stops(킷 mk-home:152). 소비처: EmptyLogs 히어로 박스(expo-linear-gradient).
 export const heroGradient = [palette.heroGradTop, palette.heroGradBottom] as const;
@@ -82,6 +91,10 @@ const lightColor = {
   primaryWeak: palette.blue.accentWeak, primaryFg: palette.white,
   accentStrong: palette.blue.accentStrong, accentLine: palette.blue.accentLine, accentShadow: palette.accentShadow,
   brand: palette.blue[50],
+  // 브랜드 「먹 핀」 마크 전용 코럴 토큰(brand-coral §1) — 인앱 액센트(블루)와 분리.
+  //   brandShadow=마크 그림자(스플래시/로그인), splashSpinner=스플래시 스피너 진행색, brandMarkGlyph="먹" 글자색.
+  //   라이트/다크 공통: 브랜드 마크는 웜 그라데이션 위/투명 위라 톤 고정(mapLocate 등 verbatim 패턴 동일).
+  brandShadow: palette.brandShadow, splashSpinner: palette.splashSpinner, brandMarkGlyph: palette.brandMarkGlyph,
   fg: palette.warm.ink, fgWeak: palette.warm.ink2, fgMuted: palette.neutral[70], fgAssistive: palette.neutral[80],
   fgDisabled: palette.labelDisable,
   bg: palette.white, surface: palette.white, surfaceAlt: palette.surfaceAlt,

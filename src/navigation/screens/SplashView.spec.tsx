@@ -15,9 +15,9 @@ describe('SplashView', () => {
     expect(screen.getByText('먹로그')).toBeTruthy();
   });
 
-  it('킷 태그라인 "둘이 함께 쌓는 맛집 지도"를 표시한다', () => {
+  it('킷 태그라인 "함께 다닌 맛집, 한 곳에"를 표시한다(brand-coral O1, 네이티브 스플래시 베이크값 정합)', () => {
     renderWithTheme(<SplashView />);
-    expect(screen.getByText('둘이 함께 쌓는 맛집 지도')).toBeTruthy();
+    expect(screen.getByText('함께 다닌 맛집, 한 곳에')).toBeTruthy();
   });
 
   it('로딩 스피너(ActivityIndicator)를 표시한다', () => {

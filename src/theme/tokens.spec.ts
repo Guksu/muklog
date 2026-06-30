@@ -110,9 +110,50 @@ describe('tokens — mapLocate (지도 현재위치 FAB 아이콘 블루, map-lo
   });
 });
 
-describe('tokens — splashBg (브랜드 스플래시 배경, brand-assets)', () => {
-  it('스플래시 배경 토큰이 킷 splash 상단 라이트블루 #EBF1FF다', () => {
-    expect(themes.light.color.splashBg).toBe('#EBF1FF');
+describe('tokens — splashBg (브랜드 스플래시 배경, brand-coral §1)', () => {
+  it('스플래시 배경 토큰이 킷 splash 상단 웜 톤 #FFF1EC다(구 블루 #EBF1FF 폐기, mk-auth:45)', () => {
+    expect(themes.light.color.splashBg).toBe('#FFF1EC');
+  });
+});
+
+describe('tokens — 브랜드 코럴 전환 (brand-coral §1, HANDOFF-2026-06-30, AC3)', () => {
+  it('인앱 액센트 primary는 #3366FF 블루 불변(코럴 전환은 브랜드 마크 한정)', () => {
+    expect(themes.light.color.primary).toBe('#3366FF');
+    expect(themes.light.color.accentStrong).toBe('#1F4FE0');
+    expect(themes.light.color.primaryWeak).toBe('#EAF0FF');
+  });
+
+  it('인앱 버튼 그림자 accentShadow는 블루 rgba(51,102,255,.30) 불변', () => {
+    expect(themes.light.color.accentShadow).toBe('rgba(51,102,255,0.30)');
+  });
+
+  it('brandGradient가 코럴 「먹 핀」 스퀘어클 [#FF7E63, #FF4D6D]이다(킷 mk-auth:14-15, 180deg)', () => {
+    expect(brandGradient).toEqual(['#FF7E63', '#FF4D6D']);
+  });
+
+  it('authVisualGradient가 웜 [#FFF1EC, #FFFFFF]이다(킷 스플래시/로그인 상단, mk-auth:45,78)', () => {
+    expect(authVisualGradient).toEqual(['#FFF1EC', '#FFFFFF']);
+  });
+
+  it('brandShadow가 브랜드 마크 전용 코럴 그림자 rgba(255,77,109,.26)다(킷 mk-auth:48)', () => {
+    expect(themes.light.color.brandShadow).toBe('rgba(255,77,109,0.26)');
+    // 인앱 버튼 그림자(블루)와 분리.
+    expect(themes.light.color.brandShadow).not.toBe(themes.light.color.accentShadow);
+  });
+
+  it('splashSpinner가 코럴 #FF5A4D다(킷 mk-auth:66, primary 블루와 분리)', () => {
+    expect(themes.light.color.splashSpinner).toBe('#FF5A4D');
+    expect(themes.light.color.splashSpinner).not.toBe(themes.light.color.primary);
+  });
+
+  it('brandMarkGlyph("먹" 글자색)가 코럴 핑크 #FF5566다(킷 mk-auth:23)', () => {
+    expect(themes.light.color.brandMarkGlyph).toBe('#FF5566');
+  });
+
+  it('브랜드 코럴 토큰은 라이트/다크 공통(브랜드 마크 톤 고정)', () => {
+    expect(themes.dark.color.brandShadow).toBe('rgba(255,77,109,0.26)');
+    expect(themes.dark.color.splashSpinner).toBe('#FF5A4D');
+    expect(themes.dark.color.brandMarkGlyph).toBe('#FF5566');
   });
 });
 
@@ -125,14 +166,7 @@ describe('tokens — shadow.card (muklog 소프트 웜 섀도우)', () => {
 });
 
 describe('tokens — 인증(social-auth) 토큰 (킷 mk-auth.jsx)', () => {
-  it('brandGradient가 킷 AppMark 블루 그라데이션 [#5B85FF, #2A55E6]이다', () => {
-    expect(brandGradient).toEqual(['#5B85FF', '#2A55E6']);
-  });
-
-  it('authVisualGradient가 킷 스플래시/로그인 상단 비주얼 [#EAF0FF, #FFFFFF]이다', () => {
-    expect(authVisualGradient).toEqual(['#EAF0FF', '#FFFFFF']);
-  });
-
+  // brandGradient/authVisualGradient의 코럴 실값 단언은 "브랜드 코럴 전환" describe로 이동(brand-coral §1).
   it('heroGradient가 킷 홈 빈 상태 히어로 [#EAF0FF, #FFE7DD]이다 (mk-home:152, home-fidelity)', () => {
     expect(heroGradient).toEqual(['#EAF0FF', '#FFE7DD']);
   });

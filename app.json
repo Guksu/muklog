@@ -23,7 +23,7 @@
       "package": "com.muklog.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/muklog-app-icon.png",
-        "backgroundColor": "#4775F0"
+        "backgroundColor": "#FF4D6D"
       },
       "permissions": [
         "android.permission.READ_MEDIA_IMAGES",
@@ -36,10 +36,9 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/muklog-app-icon.png",
-          "imageWidth": 200,
-          "backgroundColor": "#EBF1FF",
-          "resizeMode": "contain"
+          "image": "./assets/muklog-splash.png",
+          "backgroundColor": "#FFF1EC",
+          "resizeMode": "cover"
         }
       ],
       "expo-asset",

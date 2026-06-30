@@ -87,8 +87,8 @@ describe('AuthGate', () => {
   it('loading이면 SplashView(브랜드 스플래시)를 표시한다', () => {
     useAuthMock.mockReturnValue(authValue({ status: 'loading' }));
     renderWithTheme(<AuthGate />);
-    // 킷 SplashScreen 정합(social-auth ④): 워드마크 + 태그라인.
-    expect(screen.getByText('둘이 함께 쌓는 맛집 지도')).toBeTruthy();
+    // 킷 SplashScreen 정합(social-auth ④): 워드마크 + 태그라인(brand-coral O1 정합값).
+    expect(screen.getByText('함께 다닌 맛집, 한 곳에')).toBeTruthy();
   });
 
   it('error면 메시지와 "다시 시도"를 표시하고, 누르면 retry를 호출한다', () => {
