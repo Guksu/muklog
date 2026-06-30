@@ -101,9 +101,10 @@ describe('MuklogList — 카테고리 필터 (B2)', () => {
 
   it('ready면 "전체" + 리스트에 존재하는 카테고리 칩을 표시한다', () => {
     renderList({ state: mixed });
-    expect(screen.getByText('전체')).toBeTruthy();
-    expect(screen.getByText('파스타·양식')).toBeTruthy();
-    expect(screen.getByText('카페·디저트')).toBeTruthy();
+    // 칩 존재는 testID로 검증 — §2-2로 카드 배지도 라벨만 노출해 라벨 텍스트가 칩·배지 양쪽에 중복(getByText 모호) → 칩 식별자로 스코프.
+    expect(screen.getByTestId('chip-all')).toBeTruthy();
+    expect(screen.getByTestId('chip-pasta')).toBeTruthy();
+    expect(screen.getByTestId('chip-cafe')).toBeTruthy();
   });
 
   it('초기엔 "전체" 선택 + 모든 카드 표시, "우리 맛집 N"=전체 수', () => {

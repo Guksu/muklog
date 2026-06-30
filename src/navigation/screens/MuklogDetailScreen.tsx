@@ -31,7 +31,7 @@ import {
   authorAvatarUserId,
   deriveAuthorKind,
 } from '@/features/muklog/author';
-import { categoryEmoji, categoryLabel } from '@/features/muklog/categories';
+import { categoryLabel } from '@/features/muklog/categories';
 import { formatVisitedDate } from '@/features/muklog/formatVisitedDate';
 import { useTheme } from '@/theme';
 import type { ColorToken } from '@/theme';
@@ -218,7 +218,6 @@ export const MuklogDetailScreen = ({
   const hasPhotos = muklog.photos.length > 0;
   const showIndicator = muklog.photos.length > 1;
 
-  const chipEmoji = categoryEmoji({ key: muklog.category });
   const chipLabel = categoryLabel({ key: muklog.category });
   const hasChip = muklog.category !== null && chipLabel.length > 0;
 
@@ -372,7 +371,7 @@ export const MuklogDetailScreen = ({
               ]}
             >
               <Text variant="badge" color="accentStrong" style={styles.chipText}>
-                {chipEmoji} {chipLabel}
+                {chipLabel}
               </Text>
             </View>
           ) : null}

@@ -18,7 +18,7 @@ import { Button, Chip, Icon, IconName, Text } from '@/components';
 import { Routes, type AppStackParamList } from '@/navigation/routes';
 import { useTheme } from '@/theme';
 
-import { categoryEmoji, categoryLabel } from './categories';
+import { categoryLabel } from './categories';
 import { filterMuklogsByCategory, muklogCategoriesInUse } from './filterByCategory';
 import { MuklogCard } from './MuklogCard';
 import { type MuklogsState } from './types';
@@ -129,7 +129,6 @@ export const MuklogList = ({ roomId, meId, state, refresh, header }: MuklogListP
                   key={key}
                   testID={`chip-${key}`}
                   label={categoryLabel({ key })}
-                  emoji={categoryEmoji({ key })}
                   selected={category === key}
                   onPress={() => setCategory(key)}
                 />

@@ -18,7 +18,7 @@ import {
   authorAvatarUserId,
   deriveAuthorKind,
 } from './author';
-import { categoryEmoji, categoryLabel } from './categories';
+import { categoryLabel } from './categories';
 import { formatVisitedDate } from './formatVisitedDate';
 import { type Muklog } from './types';
 
@@ -38,7 +38,6 @@ const AUTHOR_AVATAR_SIZE = 22;
 export const MuklogCard = ({ muklog, meId, onPress }: MuklogCardProps) => {
   const theme = useTheme();
 
-  const chipEmoji = categoryEmoji({ key: muklog.category });
   const chipLabel = categoryLabel({ key: muklog.category });
   const hasChip = muklog.category !== null && chipLabel.length > 0;
 
@@ -75,7 +74,7 @@ export const MuklogCard = ({ muklog, meId, onPress }: MuklogCardProps) => {
           ]}
         >
           <Text variant="badge" color="fgWeak" style={styles.chipText}>
-            {chipEmoji} {chipLabel}
+            {chipLabel}
           </Text>
         </View>
       ) : null}

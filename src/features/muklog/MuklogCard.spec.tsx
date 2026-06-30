@@ -31,21 +31,13 @@ const flatStyle = (node: { props: { style: unknown } }) =>
   Object.assign({}, ...[].concat(node.props.style as never).filter(Boolean)) as Record<string, unknown>;
 
 describe('MuklogCard', () => {
-  it('장소명·카테고리 칩(emoji+label)·위치줄(area · 날짜)을 표시한다', () => {
+  it('장소명·카테고리 칩(라벨만, 이모지 없음)·위치줄(area · 날짜)을 표시한다', () => {
     renderCard();
     expect(screen.getByText('트라토리아 보나')).toBeTruthy();
-    expect(screen.getByText('🍝 파스타·양식')).toBeTruthy();
+    // 킷 §2-2: 작은 배지는 라벨 텍스트만(이모지 제거). 이모지 커버는 FoodCover가 담당.
+    expect(screen.getByText('파스타·양식')).toBeTruthy();
+    expect(screen.queryByText('🍝 파스타·양식')).toBeNull();
     expect(screen.getByText('연남동 · 2026.02.14')).toBeTruthy();
-  });
-
-  it('카테고리 칩 텍스트에 fontSize보다 큰 lineHeight를 줘 이모지 세로 클리핑을 막는다', () => {
-    renderCard();
-    const chipText = screen.getByText('🍝 파스타·양식');
-    const flat = Object.assign(
-      {},
-      ...[].concat(chipText.props.style as never).filter(Boolean),
-    ) as { fontSize: number; lineHeight: number };
-    expect(flat.lineHeight).toBeGreaterThan(flat.fontSize);
   });
 
   it('커버를 FoodCover로 그리고 aspectRatio 16/10이다 (B1)', () => {
