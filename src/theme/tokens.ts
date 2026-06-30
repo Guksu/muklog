@@ -46,9 +46,9 @@ const palette = {
   // "먹" 글자색 — 킷 mk-auth:23 fill #FF5566(코럴 핑크, 스퀘어클 그라데이션보다 채도 높음).
   brandMarkGlyph:'#FF5566',
   authGradTop:'#FFF1EC', authGradBottom:'#FFFFFF',
-  // 홈 빈 상태 히어로 비주얼 그라데이션 — 킷 mk-home:152 linear-gradient(150deg,#EAF0FF 0%,#FFE7DD 100%) verbatim.
-  //   라이트블루(accentWeak 톤)→웜 살구. expo-linear-gradient로 150° ≈ start{0,0}→end로 근사(사용처에서 각도 지정).
-  heroGradTop:'#EAF0FF', heroGradBottom:'#FFE7DD',
+  // 홈 빈 상태 히어로 비주얼 그라데이션 — 2026-06-30 블루→웜 전환(HANDOFF §3). 킷 mk-home:152 linear-gradient(150deg,#FFF1EC 0%,#FFE0D4 100%) verbatim.
+  //   웜 베이지(#FFF1EC, splashBg/authGradTop 톤)→웜 살구(#FFE0D4). expo-linear-gradient로 150° ≈ start{0,0}→end로 근사(사용처에서 각도 지정).
+  heroGradTop:'#FFF1EC', heroGradBottom:'#FFE0D4',
   lineStrong:'rgba(112,115,124,0.52)',
   socialAppleFg:'#FFFFFF', socialGoogleFg:'#1F1F1F',
   // 사진 위 어두운 글래스 배지 베이스 — 킷 MuklogCard 사진수 배지 rgba(0,0,0,.32)+blur(mk-log:94).

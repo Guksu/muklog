@@ -167,8 +167,8 @@ describe('tokens — shadow.card (muklog 소프트 웜 섀도우)', () => {
 
 describe('tokens — 인증(social-auth) 토큰 (킷 mk-auth.jsx)', () => {
   // brandGradient/authVisualGradient의 코럴 실값 단언은 "브랜드 코럴 전환" describe로 이동(brand-coral §1).
-  it('heroGradient가 킷 홈 빈 상태 히어로 [#EAF0FF, #FFE7DD]이다 (mk-home:152, home-fidelity)', () => {
-    expect(heroGradient).toEqual(['#EAF0FF', '#FFE7DD']);
+  it('heroGradient가 킷 홈 빈 상태 히어로 웜톤 [#FFF1EC, #FFE0D4]이다 (mk-home:152, HANDOFF §3 블루→웜)', () => {
+    expect(heroGradient).toEqual(['#FFF1EC', '#FFE0D4']);
   });
 
   it('lineStrong이 킷 SocialButton 보더(--line-strong rgba 112,115,124,.52)다', () => {

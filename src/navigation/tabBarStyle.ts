@@ -10,7 +10,17 @@
 //   inset이 0인 기기는 콘텐츠 높이만 → iOS 홈인디케이터·인셋 있는 기기는 그만큼 위로 자란다(회귀 0).
 import { type ViewStyle } from 'react-native';
 
+import { type MyLogsState } from '@/features/room';
 import { type Theme } from '@/theme/tokens';
+
+/**
+ * 첫 실행(데이터 없음) 상태에서 하단 탭바를 숨길지 판단한다(킷 §3 / index.html:120 showTabs).
+ * 로그가 0개일 때(ready & 빈 목록)만 숨겨 온보딩에 집중시킨다. 로딩·에러·로그 보유 시엔 노출.
+ * @param logsState useMyLogs/useMyLogsContext의 state
+ * @returns 탭바를 숨겨야 하면 true
+ */
+export const shouldHideTabBar = ({ logsState }: { logsState: MyLogsState }): boolean =>
+  logsState.status === 'ready' && logsState.logs.length === 0;
 
 // 탭바 콘텐츠(아이콘 25 + 라벨 11 + paddingTop)의 인셋 제외 높이.
 //   react-navigation 기본(~49)에 paddingTop(spacing[8])·라벨 여유를 더한 킷 정합 값.
