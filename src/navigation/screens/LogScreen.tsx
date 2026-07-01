@@ -1,6 +1,6 @@
 // src/navigation/screens/LogScreen.tsx
 // 로그 진입 화면 — 킷 mk-log.jsx:9-77 LogScreen 재현 (plan §5 B2 / §6.1).
-//   상단 헤더: 본인(+커플이면 익명 파트너) 아바타 겹침 + 로그명("{닉}의 기록"/"{닉} ♥ 짝꿍"). 멤버 배지 없음(킷 헤더 정합).
+//   상단 헤더: 본인(+커플이면 익명 파트너) 아바타 겹침 + 로그명("{닉}의 기록"/"{닉} · 짝꿍"). 멤버 배지 없음(킷 헤더 정합).
 //   초대 영역: 솔로=InviteCodeCard 강조 / 커플=컴팩트 1줄(link + "초대코드 XXXXXX" + 복사). (기존 "둘이 함께 기록 중" 교체)
 //   하단: MuklogList(맛집 리스트 + 카테고리 필터 칩 + "우리 맛집 N" 섹션 + FAB) — 칩/필터/섹션 배선은 developer(MuklogList).
 //
@@ -121,7 +121,7 @@ const CompactInviteRow = ({ code }: { code: string }) => {
 };
 
 // 솔로(미커플) 초대 배너 — 킷 mk-log:33-45. accent-weak(primaryWeak) 배경 카드 안에
-//   💌 + 헤딩("연인을 초대해보세요") + 설명문 + InviteCodeCard(코드+복사). 이모지는 별도 RNText(클리핑 방지).
+//   💌 + 헤딩("함께할 사람을 초대해요") + 설명문 + InviteCodeCard(코드+복사). 이모지는 별도 RNText(클리핑 방지).
 const SoloInviteBanner = ({ code }: { code: string }) => {
   const theme = useTheme();
   const banner: ViewStyle = {
@@ -135,11 +135,11 @@ const SoloInviteBanner = ({ code }: { code: string }) => {
       <View style={[styles.bannerHead, { gap: theme.spacing[8] }]}>
         <RNText style={styles.bannerEmoji}>💌</RNText>
         <Text variant="fieldLabel" color="fg" style={styles.bannerHeading}>
-          연인을 초대해보세요
+          함께할 사람을 초대해요
         </Text>
       </View>
       <Text variant="bodySm" color="fgWeak">
-        이 코드를 보내면 둘이 함께 기록하는 커플 로그가 돼요.
+        이 코드를 보내면 함께 기록할 수 있어요.
       </Text>
       <InviteCodeCard code={code} compact />
     </View>

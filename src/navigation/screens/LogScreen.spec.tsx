@@ -358,16 +358,16 @@ describe('LogScreen', () => {
     });
     renderWithTheme(<LogScreen />);
     expect(screen.getByText('ABCDEF')).toBeTruthy();
-    // 킷 배너: 헤딩 + 설명문(이전 "초대코드로 짝꿍을 초대하세요" 평문 교체).
-    expect(screen.getByText('연인을 초대해보세요')).toBeTruthy();
+    // 킷 배너: 헤딩 + 설명문(§4 voice — '연인/둘이/커플' 제거, 함께할 사람·함께 기록).
+    expect(screen.getByText('함께할 사람을 초대해요')).toBeTruthy();
     expect(
-      screen.getByText('이 코드를 보내면 둘이 함께 기록하는 커플 로그가 돼요.'),
+      screen.getByText('이 코드를 보내면 함께 기록할 수 있어요.'),
     ).toBeTruthy();
     expect(screen.getByText('💌')).toBeTruthy();
     expect(screen.getByText('민지의 기록')).toBeTruthy();
   });
 
-  it('커플(memberCount=2)이면 컴팩트 코드 행(코드+복사)과 "{닉} ♥ 짝꿍" 로그명을 표시한다 (B2)', () => {
+  it('커플(memberCount=2)이면 컴팩트 코드 행(코드+복사)과 "{닉} · 짝꿍" 로그명을 표시한다 (B2)', () => {
     setRoomState({
       status: 'ready',
       room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 2, mode: 'couple' },
@@ -376,7 +376,7 @@ describe('LogScreen', () => {
     // B2: 커플은 코드를 숨기지 않고 컴팩트 1줄로 노출(plan §118).
     expect(screen.getByText('초대코드 ABCDEF')).toBeTruthy();
     expect(screen.getByLabelText('초대코드 복사')).toBeTruthy();
-    expect(screen.getByText('민지 ♥ 짝꿍')).toBeTruthy();
+    expect(screen.getByText('민지 · 짝꿍')).toBeTruthy();
     expect(screen.queryByText('둘이 함께 기록 중이에요')).toBeNull();
   });
 
@@ -446,13 +446,13 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
     setRoomState(readyRoom({ name: '우리 맛집' }));
     renderWithTheme(<LogScreen />);
     expect(screen.getByText('우리 맛집')).toBeTruthy();
-    expect(screen.queryByText('민지 ♥ 짝꿍')).toBeNull();
+    expect(screen.queryByText('민지 · 짝꿍')).toBeNull();
   });
 
-  it('room.name=null이면 폴백 제목("{본인닉} ♥ 짝꿍")을 표시한다', () => {
+  it('room.name=null이면 폴백 제목("{본인닉} · 짝꿍")을 표시한다', () => {
     setRoomState(readyRoom({ name: null, memberCount: 2 }));
     renderWithTheme(<LogScreen />);
-    expect(screen.getByText('민지 ♥ 짝꿍')).toBeTruthy();
+    expect(screen.getByText('민지 · 짝꿍')).toBeTruthy();
   });
 
   it('⋯메뉴 "로그 이름 변경"을 탭하면 이름 편집 다이얼로그가 열린다(타이틀 탭 아님)', () => {
@@ -620,13 +620,13 @@ describe('LogScreen — 위시리스트 세그먼트(wishlist, TC-6/B7 · TC-1·
     setRoomState(readyRoom({ memberCount: 1 }));
     renderWithTheme(<LogScreen />);
     // log 세그(기본): 초대 배너 노출(세그 아래 본문 상단).
-    expect(screen.getByText('연인을 초대해보세요')).toBeTruthy();
+    expect(screen.getByText('함께할 사람을 초대해요')).toBeTruthy();
     // wish 세그: 초대 미렌더.
     fireEvent.press(screen.getByText('위시리스트 0'));
-    expect(screen.queryByText('연인을 초대해보세요')).toBeNull();
+    expect(screen.queryByText('함께할 사람을 초대해요')).toBeNull();
     // log 세그 복귀: 초대 재노출.
     fireEvent.press(screen.getByText('기록 0'));
-    expect(screen.getByText('연인을 초대해보세요')).toBeTruthy();
+    expect(screen.getByText('함께할 사람을 초대해요')).toBeTruthy();
   });
 
   it('커플 컴팩트 초대행도 \'wish\' 세그에선 미렌더한다 (I1)', () => {

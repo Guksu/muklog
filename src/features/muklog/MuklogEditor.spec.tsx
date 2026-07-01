@@ -640,14 +640,14 @@ describe('MuklogEditor — 장소검색 풀스크린 스왑 상태머신 (FLAG-1
 
 describe('MuklogEditor — 킷 정합 (editor-fidelity, mk-log:400·449·418)', () => {
   // AC1 — 저장 성공 시 토스트(신규/편집 분기, positive). 실패 시 토스트 없음.
-  it('작성 저장 성공 시 "맛집을 기록했어요! 🍽️" 토스트를 표시한다 (AC1)', async () => {
+  it('작성 저장 성공 시 "맛집을 기록했어요" 토스트를 표시한다 (AC1)', async () => {
     renderEditor();
     fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
     fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요');
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
-    await waitFor(() => expect(screen.getByText('맛집을 기록했어요! 🍽️')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('맛집을 기록했어요')).toBeTruthy());
   });
 
   it('편집 저장 성공 시 "기록을 수정했어요" 토스트를 표시한다 (AC1)', async () => {
@@ -675,7 +675,7 @@ describe('MuklogEditor — 킷 정합 (editor-fidelity, mk-log:400·449·418)', 
       fireEvent.press(screen.getByLabelText('저장'));
     });
     await waitFor(() => expect(createMuklog).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText('맛집을 기록했어요! 🍽️')).toBeNull();
+    expect(screen.queryByText('맛집을 기록했어요')).toBeNull();
     expect(screen.queryByText('기록을 수정했어요')).toBeNull();
   });
 

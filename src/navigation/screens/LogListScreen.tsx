@@ -312,7 +312,7 @@ const StartActionCard = ({
   );
 };
 
-// 빈 상태(킷 mk-home:136-181) — 인사 + 히어로 비주얼(그라데이션 + 아바타+💕+🙂 + 음식 핀 4) + 두 갈래 카드.
+// 빈 상태(킷 mk-home:136-181) — 인사 + 히어로 비주얼(그라데이션 + 아바타+'+'+🙂 + 음식 핀 4) + 두 갈래 카드.
 const EmptyLogs = ({
   self,
   onCreate,
@@ -331,14 +331,14 @@ const EmptyLogs = ({
         {/* 인사 */}
         <View style={styles.greeting}>
           <Text variant="emptyTitle" color="fg">
-            {`${self.nickname}님,\n먹로그를 시작해볼까요?`}
+            {`${self.nickname}님,\n맛집 기록을 시작해요`}
           </Text>
           <Text variant="sectionCaption" color="fgMuted" style={{ marginTop: theme.spacing[10] }}>
-            {'둘이 다녀온 맛집을 사진·메모·위치로\n함께 기록하는 우리만의 지도예요.'}
+            {'사진·메모·위치로 다녀온 곳을 정리하고\n함께할 사람을 초대하세요.'}
           </Text>
         </View>
 
-        {/* 히어로 비주얼 — 그라데이션 박스 + 음식 이모지 핀 4 + 아바타+💕+🙂. */}
+        {/* 히어로 비주얼 — 그라데이션 박스 + 음식 이모지 핀 4 + 아바타+'+'+🙂. */}
         <LinearGradient
           testID="empty-hero"
           colors={heroGradient}
@@ -352,8 +352,9 @@ const EmptyLogs = ({
           <HeroPill emoji="🍰" position={styles.pillBottomRight} />
           <View style={styles.heroCenter}>
             <Avatar url={self.avatarUrl} userId={self.userId} nickname={self.nickname} size={62} />
+            {/* 킷 mk-home:158-162 연결 칩 — '+' 커넥터(이전 하트 이모지 제거, §4 인앱 이모지 정리). */}
             <View style={[styles.heroHeart, { backgroundColor: theme.color.surface }]}>
-              <Text style={styles.heroHeartText}>💕</Text>
+              <Text style={styles.heroHeartText}>+</Text>
             </View>
             <View style={styles.heroPartner}>
               <Text style={styles.heroPartnerText}>🙂</Text>
@@ -366,14 +367,14 @@ const EmptyLogs = ({
           <StartActionCard
             emoji="🥢"
             title="새 로그 만들기"
-            desc="먼저 시작하고 연인을 초대해요"
+            desc="새로 시작하고 사람을 초대해요"
             onPress={onCreate}
             loading={creating}
           />
           <StartActionCard
             emoji="💌"
             title="초대코드로 입장"
-            desc="연인이 보낸 6자리 코드가 있어요"
+            desc="받은 초대코드로 들어가요"
             onPress={onJoin}
           />
         </View>
@@ -580,7 +581,7 @@ const styles = StyleSheet.create({
   // 히어로 박스(킷 mk-home:150-172).
   hero: { height: HERO_HEIGHT, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   heroCenter: { flexDirection: 'row', alignItems: 'center' },
-  // 💕 칩(킷 mk-home:162-166) — 두 아바타 사이 겹침, 흰 원형 + 그림자.
+  // '+' 연결 칩(킷 mk-home:158-162) — 두 아바타 사이 겹침, 흰 원형 + 그림자.
   heroHeart: {
     width: 30,
     height: 30,

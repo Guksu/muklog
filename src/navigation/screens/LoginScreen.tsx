@@ -30,8 +30,8 @@ export type LoginScreenProps = {
   showApple?: boolean;
 };
 
-// 킷 상단 비주얼 카피(mk-auth:96-98) — <br/> → '\n'.
-const LOGIN_COPY = '둘이 다녀온 맛집을\n오래오래 함께 기억해요.';
+// 킷 상단 비주얼 카피(mk-auth:86-87) — <br/> → '\n'.
+const LOGIN_COPY = '함께 다녀온 맛집을\n차곡차곡 모아봐요.';
 // 약관/개인정보 URL은 @/lib/legal 단일 출처(ProfileScreen과 공용).
 // 인앱 브라우저로 열기(expo-web-browser, OAuth와 동일). 화살표 함수·props 무의존이라 모듈 레벨.
 const openTerms = () => void WebBrowser.openBrowserAsync(TERMS_URL);

@@ -1,7 +1,7 @@
 // src/navigation/screens/JoinLogScreen.tsx
 // 초대코드 입력 화면 — mk-home JoinScreen + CodeInput 재현 (plan §6.5, AC10–AC15).
 //   6셀 코드 입력(정규화) → isInviteCodeComplete면 입장 활성 → joinRoom → refresh → 전역 토스트 + replace(LogScreen).
-//   성공 시 전역 토스트 "로그에 들어왔어요! 💕"(킷 SPEC §2-2) — 루트 ToastProvider라 replace 후 LogScreen 위에서 표시.
+//   성공 시 전역 토스트 "로그에 들어왔어요"(킷 mk-home:232) — 루트 ToastProvider라 replace 후 LogScreen 위에서 표시.
 //   실패 시 useJoinRoom.error(매핑 메시지)를 코드 입력 아래 인라인 에러로 표시(화면 유지, 토스트 없음).
 //   이모지(💌) 허용(킷 정책). 스타일은 토큰만(raw hex 0).
 //
@@ -38,8 +38,8 @@ export const JoinLogScreen = () => {
       const { roomId } = await joinRoom({ code });
       // 목록 갱신(+1/멱등) 후 그 로그로 replace(뒤로가기 시 코드 입력으로 안 돌아오게).
       await myLogs.refresh();
-      // 킷 SPEC §2-2 성공 토스트. 전역이라 replace로 화면이 바뀌어도 LogScreen 위에서 유지된다.
-      showToast({ message: '로그에 들어왔어요! 💕', tone: 'positive' });
+      // 킷 mk-home:232 성공 토스트(§4 토스트 이모지 제거). 전역이라 replace로 화면이 바뀌어도 LogScreen 위에서 유지된다.
+      showToast({ message: '로그에 들어왔어요', tone: 'positive' });
       navigation.replace(Routes.LogScreen, { roomId });
     } catch {
       // useJoinRoom이 error(매핑 메시지)를 세팅 → 아래 인라인 에러로 표시. 화면 유지.
@@ -66,14 +66,14 @@ export const JoinLogScreen = () => {
           {HEART_EMOJI}
         </Text>
         <Text variant="h2" color="fg" style={[styles.center, { marginTop: theme.spacing[8] }]}>
-          연인의 로그에 들어가기
+          초대받은 로그에 들어가기
         </Text>
         <Text
           variant="body"
           color="fgWeak"
           style={[styles.center, { marginTop: theme.spacing[8], marginBottom: theme.spacing[28] }]}
         >
-          {'연인이 보낸 6자리 코드를 입력하면\n같은 로그에서 함께 기록해요.'}
+          {'받은 6자리 코드를 입력하면\n같은 로그에서 함께 기록해요.'}
         </Text>
 
         <CodeInput value={code} onChangeText={setCode} />

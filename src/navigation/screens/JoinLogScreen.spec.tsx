@@ -69,7 +69,7 @@ describe('JoinLogScreen', () => {
     expect(mockReplace).toHaveBeenCalledWith('LogScreen', { roomId: 'r1' });
   });
 
-  it('입장 성공 시 전역 토스트 "로그에 들어왔어요! 💕"를 표시한다 (킷 SPEC §2-2)', async () => {
+  it('입장 성공 시 전역 토스트 "로그에 들어왔어요"를 표시한다 (킷 mk-home:232)', async () => {
     joinRoom.mockResolvedValueOnce({ roomId: 'r1' });
     renderWithTheme(<JoinLogScreen />);
 
@@ -77,7 +77,7 @@ describe('JoinLogScreen', () => {
     fireEvent.press(screen.getByLabelText('들어가기'));
 
     await waitFor(() => {
-      expect(screen.getByText('로그에 들어왔어요! 💕')).toBeTruthy();
+      expect(screen.getByText('로그에 들어왔어요')).toBeTruthy();
     });
   });
 

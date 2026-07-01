@@ -66,8 +66,8 @@ const PLACE_NAME_MAX = 60;
 const MEMO_MAX = 500;
 const PHOTO_MAX = 5;
 
-// 저장 성공 토스트 카피(킷 mk-log:400) — 신규(create) / 편집(edit) 분기, positive 톤.
-const SAVE_TOAST_CREATE = '맛집을 기록했어요! 🍽️';
+// 저장 성공 토스트 카피(킷 mk-log:397) — 신규(create) / 편집(edit) 분기, positive 톤. §4 토스트 이모지 제거.
+const SAVE_TOAST_CREATE = '맛집을 기록했어요';
 const SAVE_TOAST_EDIT = '기록을 수정했어요';
 
 // 편집 모드 submit 결과(developer useUpdateMuklog 반환과 정합). 성공 판정만 쓰므로 최소형.
@@ -578,7 +578,7 @@ export const MuklogEditor = ({
           maxLength={MEMO_MAX}
           multiline
           numberOfLines={4}
-          placeholder="무엇을 먹었고 어땠는지, 둘의 추억을 남겨보세요 💕"
+          placeholder="무엇을 먹었고 어땠는지 그날의 기록을 남겨보세요"
           placeholderTextColor={theme.color.fgMuted}
           style={[styles.input, styles.memo, fieldInput]}
         />

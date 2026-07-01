@@ -3,7 +3,7 @@
 //
 // ⚠️ 길이 단일 출처(C-LEN): LOG_NAME_MAX_LENGTH=20 ↔ DB rename_room char_length>20 ↔ 입력 maxLength=20.
 // ⚠️ 정규화 단일 출처: normalizeLogName(trim→빈 null) ↔ DB nullif(btrim()) (이중 정규화, 동일 규칙).
-// ⚠️ 폴백(결정2 B'): name 우선 / 솔로 "{닉}의 기록" / 커플 "{닉} ♥ 짝꿍"(파트너는 "짝꿍" 고정 — profiles RLS self-only).
+// ⚠️ 폴백(결정2 B'): name 우선 / 솔로 "{닉}의 기록" / 커플 "{닉} · 짝꿍"(파트너는 "짝꿍" 고정 — profiles RLS self-only).
 
 /** 로그 이름 최대 길이(코드포인트). DB·입력 maxLength 와 단일 출처. */
 export const LOG_NAME_MAX_LENGTH = 20;
@@ -43,7 +43,7 @@ export const isLogNameTooLong = ({ input }: { input: string }): boolean => {
  * 표시명 산출: name이 있으면 name, 없으면 본인 닉네임 기반 폴백(결정2 B').
  *   - name(비어있지 않음) → name
  *   - name 없음 & 솔로 & 닉 있음 → "{닉}의 기록"
- *   - name 없음 & 커플 & 닉 있음 → "{닉} ♥ 짝꿍"
+ *   - name 없음 & 커플 & 닉 있음 → "{닉} · 짝꿍"
  *   - name 없음 & 닉 없음 → 솔로 "내 로그" / 커플 "우리 로그"
  * @param name 로그 이름(nullable)
  * @param memberCount 멤버 수(1=솔로 / 2=커플)
@@ -68,5 +68,5 @@ export const displayLogName = ({
     return isCouple ? COUPLE_FALLBACK_LABEL : SOLO_FALLBACK_LABEL;
   }
 
-  return isCouple ? `${nick} ♥ ${PARTNER_PLACEHOLDER}` : `${nick}의 기록`;
+  return isCouple ? `${nick} · ${PARTNER_PLACEHOLDER}` : `${nick}의 기록`;
 };

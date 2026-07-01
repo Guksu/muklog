@@ -71,8 +71,8 @@ describe('displayLogName — name 우선, 없으면 본인 닉 기반 폴백 (�
     expect(displayLogName({ name: null, memberCount: 1, selfNickname: '민' })).toBe('민의 기록');
   });
 
-  it('name=null & 커플(memberCount>=2) & 닉="민" → "민 ♥ 짝꿍"(파트너는 "짝꿍" 고정)', () => {
-    expect(displayLogName({ name: null, memberCount: 2, selfNickname: '민' })).toBe('민 ♥ 짝꿍');
+  it('name=null & 커플(memberCount>=2) & 닉="민" → "민 · 짝꿍"(파트너는 "짝꿍" 고정)', () => {
+    expect(displayLogName({ name: null, memberCount: 2, selfNickname: '민' })).toBe('민 · 짝꿍');
   });
 
   it('name=null & 솔로 & 닉 null → 안전 폴백 "내 로그"', () => {
@@ -88,6 +88,6 @@ describe('displayLogName — name 우선, 없으면 본인 닉 기반 폴백 (�
   });
 
   it('name 빈 문자열("")도 방어적으로 폴백 처리한다', () => {
-    expect(displayLogName({ name: '', memberCount: 2, selfNickname: '민' })).toBe('민 ♥ 짝꿍');
+    expect(displayLogName({ name: '', memberCount: 2, selfNickname: '민' })).toBe('민 · 짝꿍');
   });
 });

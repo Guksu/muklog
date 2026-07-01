@@ -108,14 +108,14 @@ describe('NotifSettingsScreen — 로그별 (T5)', () => {
   it('로그 2건 → 행 2개, 로그명은 displayLogName 결과(name 우선/커플 폴백)', () => {
     setup({ logs: twoLogs });
     expect(screen.getByText('맛집노트')).toBeTruthy();
-    // r2: name null + 커플 + 닉 '민' → "민 ♥ 짝꿍"
-    expect(screen.getByText('민 ♥ 짝꿍')).toBeTruthy();
+    // r2: name null + 커플 + 닉 '민' → "민 · 짝꿍"
+    expect(screen.getByText('민 · 짝꿍')).toBeTruthy();
   });
 
   it('로그별 스위치 초기값 = resolveLogEnabled (영속 false면 off, 미존재면 on)', () => {
     setup({ logs: twoLogs, prefs: { master: true, perLog: { r1: false } } });
     expect(screen.getByLabelText('맛집노트 알림').props.accessibilityState.checked).toBe(false); // 명시 false
-    expect(screen.getByLabelText('민 ♥ 짝꿍 알림').props.accessibilityState.checked).toBe(true); // 미존재 → on
+    expect(screen.getByLabelText('민 · 짝꿍 알림').props.accessibilityState.checked).toBe(true); // 미존재 → on
   });
 
   it('로그별 스위치 탭 → setLogEnabled({roomId, enabled}) (해당 roomId만)', () => {

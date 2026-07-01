@@ -262,10 +262,10 @@ describe('LogListScreen — 상태 분기', () => {
 });
 
 describe('LogListScreen — 빈 상태(EmptyLogs 히어로 + 두 갈래, 킷 mk-home:136-181)', () => {
-  it('인사("{닉}님, 먹로그를 시작해볼까요?")와 두 갈래 카드를 보인다', () => {
+  it('인사("{닉}님, 맛집 기록을 시작해요")와 두 갈래 카드를 보인다', () => {
     useMyLogsContextMock.mockReturnValue({ state: { status: 'ready', logs: [] }, refresh });
     renderWithTheme(<LogListScreen />);
-    expect(screen.getByText('민지님,\n먹로그를 시작해볼까요?')).toBeTruthy();
+    expect(screen.getByText('민지님,\n맛집 기록을 시작해요')).toBeTruthy();
     expect(screen.getByText('새 로그 만들기')).toBeTruthy();
     expect(screen.getByText('초대코드로 입장')).toBeTruthy();
   });
@@ -360,16 +360,16 @@ describe('LogListScreen — 카드 헤더(아바타/배지/이름/날짜/chevron
     });
     renderWithTheme(<LogListScreen />);
     expect(screen.getByText('우리 맛집')).toBeTruthy();
-    expect(screen.queryByText('민지 ♥ 짝꿍')).toBeNull();
+    expect(screen.queryByText('민지 · 짝꿍')).toBeNull();
   });
 
-  it('log.name=null & 커플이면 "{본인닉} ♥ 짝꿍" 폴백 제목을 표시한다 (T7)', () => {
+  it('log.name=null & 커플이면 "{본인닉} · 짝꿍" 폴백 제목을 표시한다 (T7)', () => {
     useMyLogsContextMock.mockReturnValue({
       state: { status: 'ready', logs: [log({ roomId: 'r1', name: null, memberCount: 2 })] },
       refresh,
     });
     renderWithTheme(<LogListScreen />);
-    expect(screen.getByText('민지 ♥ 짝꿍')).toBeTruthy();
+    expect(screen.getByText('민지 · 짝꿍')).toBeTruthy();
   });
 
   it('카드 하단에 "새 로그 시작하기" CTA가 있고, 누르면 createRoom→refresh를 호출한다', async () => {

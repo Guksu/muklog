@@ -82,14 +82,14 @@ export const AddSheet = ({ visible, onClose, onCreate, onJoin, creating }: AddSh
         <SheetAction
           emoji="🥢"
           title="새 로그 만들기"
-          desc="먼저 시작하고 연인을 초대해요"
+          desc="새로 시작하고 사람을 초대해요"
           onPress={onCreate}
           disabled={creating}
         />
         <SheetAction
           emoji="💌"
           title="초대코드로 들어가기"
-          desc="연인이 보낸 6자리 코드가 있어요"
+          desc="받은 초대코드로 들어가요"
           onPress={onJoin}
         />
       </View>

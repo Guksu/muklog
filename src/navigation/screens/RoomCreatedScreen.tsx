@@ -49,7 +49,7 @@ export const RoomCreatedScreen = ({ inviteCode, onEnter, onLater }: RoomCreatedS
           color="fgMuted"
           style={[styles.center, { marginTop: theme.spacing[8], marginBottom: theme.spacing[28] }]}
         >
-          {'아래 코드를 연인에게 보내면\n둘이 함께 기록할 수 있어요.'}
+          {'아래 코드를 보내면\n함께 기록할 수 있어요.'}
         </Text>
 
         <InviteCodeCard code={inviteCode} />
