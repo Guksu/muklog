@@ -53,6 +53,7 @@ export const Avatar = ({ url, userId, nickname, size = 64, ring = true }: Avatar
         testID="avatar-image"
         accessibilityLabel={accessibilityLabel}
         source={{ uri: url }}
+        resizeMode="cover"
         style={imageStyle}
       />
     );
