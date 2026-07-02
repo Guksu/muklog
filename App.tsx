@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as Font from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 
+import { AppVersionGate } from '@/features/appVersion';
 import { AuthProvider } from '@/features/auth';
 import { AuthGate } from '@/navigation';
 import { ToastProvider } from '@/components';
@@ -77,7 +78,10 @@ const App = () => {
           <ToastProvider>
             <AuthProvider>
               <StatusBar style="dark" />
-              <AuthGate />
+              {/* 버전 게이트 — AuthGate 상위(로그인 전에도 강제 차단 노출). checking/none→자식, force→차단, suggest→+모달. */}
+              <AppVersionGate>
+                <AuthGate />
+              </AppVersionGate>
             </AuthProvider>
           </ToastProvider>
         </ThemeProvider>

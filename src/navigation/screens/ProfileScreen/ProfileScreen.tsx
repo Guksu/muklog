@@ -26,6 +26,8 @@ import {
   useToastController,
 } from '@/components';
 import { Routes, type AppStackParamList } from '../../routes';
+import { AppVersionRow } from '@/features/appVersion/AppVersionRow';
+import { getCurrentAppVersion } from '@/features/appVersion/currentAppVersion';
 import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { useAuth } from '@/features/auth';
 import {
@@ -213,6 +215,9 @@ const ProfileContent = ({ userId }: { userId: string }) => {
     }
   };
 
+  // 현재 앱 버전(expo-constants) — 미확보면 null → 버전 행 미렌더(fail-open 톤과 일관).
+  const appVersion = getCurrentAppVersion();
+
   return (
     <Screen edges={['left', 'right']} style={styles.flush}>
       {/* 킷 mk-log:428 SubBar "프로필"(좌측정렬). 네이티브 헤더는 AppNavigator에서 headerShown:false.
@@ -360,6 +365,9 @@ const ProfileContent = ({ userId }: { userId: string }) => {
             회원 탈퇴
           </Text>
         </Pressable>
+
+        {/* 앱 버전 행(app-version-gate T10) — 회원탈퇴 아래 약톤 표시. 미확보(expo-constants null)면 미렌더. */}
+        {appVersion ? <AppVersionRow version={appVersion} /> : null}
       </ScrollView>
 
       {/* 닉네임 편집 다이얼로그(킷 mk-extra:24-64 RenameDialog 공용화) — controlled(draft는 ProfileContent 소유).

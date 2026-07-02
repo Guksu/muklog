@@ -36,6 +36,8 @@ jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
 jest.mock('@/features/room', () => ({ useMyLogs: jest.fn() }));
 // 약관/개인정보 행 → 인앱 브라우저(openBrowserAsync) 모킹.
 jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn(() => Promise.resolve()) }));
+// app-version-gate T10: 앱 버전 행 — getCurrentAppVersion(expo-constants)을 결정적으로 고정.
+jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { version: '1.2.3' } } }));
 // SubBar(뒤로) + 설정 행 진입을 위한 navigation 모킹 — goBack/navigate.
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
@@ -402,5 +404,12 @@ describe('ProfileScreen — 닉네임 편집 시트', () => {
     expect(screen.queryByText('닉네임 미설정')).toBeNull();
     expect(screen.getByText(defaultNickname({ userId: 'u1' }))).toBeTruthy();
     expect(screen.getByTestId('avatar-default')).toBeTruthy();
+  });
+
+  // ── app-version-gate T10: 앱 버전 행 ────────────────────────────
+  it('회원탈퇴 아래에 현재 앱 버전 행("앱 버전 1.2.3")을 표시한다', () => {
+    renderWithTheme(<ProfileScreen />);
+    expect(screen.getByTestId('app-version-row')).toBeTruthy();
+    expect(screen.getByText('앱 버전 1.2.3')).toBeTruthy();
   });
 });

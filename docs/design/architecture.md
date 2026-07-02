@@ -120,6 +120,16 @@ device_tokens                    -- 푸시 발송용 디바이스 토큰 (push-n
   created_at      timestamptz  default now()
   updated_at      timestamptz  default now()    -- upsert(onConflict expo_push_token) 시 갱신
   -- index (user_id) — S2 발송 시 수신자 토큰 조회
+
+app_config                       -- 앱 버전 게이트용 원격 설정 (app-version-gate). 싱글턴(1행)
+  id                     int PK  default 1  CHECK (id = 1)   -- 1행 보장
+  min_supported_version  text                -- 강제 업데이트 하한 semver "x.y.z"(nullable → fail-open)
+  latest_version         text                -- 권유 기준 최신 semver(nullable → 권유 미발화)
+  store_url_ios          text                -- 미출시=NULL(버튼 숨김)
+  store_url_android      text                -- 미출시=NULL
+  updated_at             timestamptz  default now()
+  -- RLS: select 만 anon+authenticated 허용(비민감 공개 설정, 로그인 전 게이트 판정 필요).
+  --      insert/update/delete 정책 부재 → 앱 내 쓰기 경로 없음(운영자 service role/SQL만). 마이그레이션 20260702120000_app_config.sql
 ```
 
 > **미디어 구성**: 먹로그당 사진 0~5장(`muklog_photos`) + 2초 영상 0~1개(`muklogs.video_path`). 사진과 영상은 독립 슬롯이며 영상은 항상 옵션이다. 영상 버킷은 `muklog-media`(또는 `muklog-photos`와 분리 운영)로 두고 RLS는 사진과 동일하게 상위 방 멤버십으로 검증한다.
@@ -233,6 +243,7 @@ Profile (헤더 진입)
 | `push-notifications` S3 (prefs DB이전) | 알림 설정 prefs를 **로컬 AsyncStorage→서버 가독 `notification_prefs` DB**로 이전(`useNotifPrefs` 인터페이스 보존·내부만 교체, 기존 로컬값 1회 마이그레이션). S2 발송 gating(master/perLog)이 서버 prefs를 읽어야 하므로 **S2 직전 필요**. S1과 독립(병렬 가능). | 발송 gating 전제 | **예정 — 출시 후 후속 패치(2026-06-17)** |
 | `push-notifications` S2 (발송트리거) | 먹로그 insert(상대 작성) → 수신자 토큰(`list_room_push_targets` DEFINER RPC)·prefs(master/perLog) gating → **Expo Push API** 발송. **트리거 방식(DB트리거+pg_net vs DB트리거→Edge Function)은 착수 시 확정.** 무효토큰(DeviceNotRegistered) 정리 동반. **S1+S3 의존.** | #신규 | **예정 — 출시 후 후속 패치(2026-06-17)** |
 | `push-notifications` S4 (수신 UX) | 알림 탭 딥링크(해당 로그/먹로그 진입)·뱃지 카운트·무효 토큰 정리. **S2 의존.** | #신규 | **예정 — 출시 후 후속 패치(2026-06-17)** |
+| `app-version-gate` | **앱 버전 게이트**: (a) Profile 현재 버전 표시(`expo-constants`, JS-only) (b) 콜드스타트 1회 `app_config`(싱글턴, anon 읽기 RLS) 조회 (c) 판정 — `current < min_supported`=강제 업데이트 차단화면(닫기 불가·스토어 Linking) / `< latest`=권유 모달(닫기 가능·버전당 1회, AsyncStorage dismissal) / 조회실패·형불량=**fail-open**(미차단). 순수 유틸 `compareVersion`·`resolveVersionGate`, 훅 `useAppVersionGate`, 래퍼 `AppVersionGate`(AuthGate **상위**=로그인 전에도 차단). 신설 UI `ForceUpdateScreen`·`UpdateSuggestModal`(RenameDialog 셸 재사용, 킷 비종속). 폴링·Realtime 0·AWS 0. `expo-application`(네이티브) 미도입. 마이그레이션 `20260702120000_app_config.sql`. QA 2분할 통과. `docs/sprint/sprint-20260702-app-version-gate/`. | #신규(운영·안정성) | ✅ 완료(라이브 스모크 이월) |
 
 각 스프린트는 `planner → developer → qa` 순으로 진행하며, 오케스트레이터(`sprint-orchestrator` 스킬)가 조율한다.
 
