@@ -399,4 +399,109 @@ describe('MapTabScreen', () => {
     expect(recenter).toHaveLength(1);
     expect(recenter[0]).toContain('"lat":37.6'); // 첫 픽스만 따라감.
   });
+
+  // ── map-pin-select 증분 (plan §3.5·§5 T5·T6·T7) ─────────────────
+  const setSelectedScripts = () =>
+    injectedScripts.filter((s) => s.includes('"type":"SET_SELECTED"'));
+
+  it('T5: 핀 탭(MARKER_TAP) 시 SET_SELECTED(id)를 주입한다(활성 반영)', () => {
+    useMuklogPinsMock.mockReturnValue({
+      state: { status: 'ready', pins: [pin({ muklogId: 'm9' })] },
+      refresh: jest.fn(),
+    });
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) }); // mapReady → SET_SELECTED effect 활성
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', saved: true }) });
+
+    const sel = setSelectedScripts();
+    expect(sel[sel.length - 1]).toContain('"selectedId":"m9"');
+    expect(sel[sel.length - 1]).toContain('__muklogSetSelected');
+  });
+
+  it('T5: 다른 핀 탭 시 활성 id가 이동한다(SET_SELECTED 새 id 주입)', () => {
+    useMuklogPinsMock.mockReturnValue({
+      state: { status: 'ready', pins: [pin({ muklogId: 'm9' }), pin({ muklogId: 'm10' })] },
+      refresh: jest.fn(),
+    });
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', saved: true }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm10', saved: true }) });
+
+    const sel = setSelectedScripts();
+    expect(sel[sel.length - 1]).toContain('"selectedId":"m10"');
+  });
+
+  it('T5: 지도 빈 곳 탭(MAP_TAP) 시 선택 해제 — 카드 닫힘 + SET_SELECTED(null)', () => {
+    useMuklogPinsMock.mockReturnValue({
+      state: { status: 'ready', pins: [pin({ muklogId: 'm9', placeName: '스시 오마카세' })] },
+      refresh: jest.fn(),
+    });
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', saved: true }) });
+    expect(screen.getByTestId('selected-spot-card')).toBeTruthy();
+
+    emitMessage({ raw: JSON.stringify({ type: 'MAP_TAP' }) });
+    expect(screen.queryByTestId('selected-spot-card')).toBeNull();
+    const sel = setSelectedScripts();
+    expect(sel[sel.length - 1]).toContain('"selectedId":null');
+  });
+
+  it('T5: READY 전(mapReady false)에는 SET_SELECTED를 주입하지 않는다', () => {
+    useMuklogPinsMock.mockReturnValue({
+      state: { status: 'ready', pins: [pin({ muklogId: 'm9' })] },
+      refresh: jest.fn(),
+    });
+    renderWithTheme(<MapTabScreen />);
+    // READY 미발화 → mapReady false. 탭이 와도 SET_SELECTED inject 0.
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', saved: true }) });
+    expect(setSelectedScripts()).toHaveLength(0);
+  });
+
+  it('T6: nearby 갱신(SET_MARKERS 재주입)이 선택을 바꾸지 않는다(채널 독립)', () => {
+    useMuklogPinsMock.mockReturnValue({
+      state: { status: 'ready', pins: [pin({ muklogId: 'm9', placeName: '스시 오마카세' })] },
+      refresh: jest.fn(),
+    });
+    setNearby({ status: 'ready', markers: [] });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', saved: true }) });
+    expect(screen.getByTestId('selected-spot-card')).toBeTruthy();
+    const selBefore = setSelectedScripts().length;
+
+    // nearby 마커 갱신 → SET_MARKERS 재주입(markersKey 변경). 선택은 유지되어야 한다.
+    setNearby({
+      status: 'ready',
+      markers: [{ id: 'k1', lat: 38.0, lng: 128.0, emoji: '🍜', saved: false }],
+    });
+    rerender(<MapTabScreen />);
+
+    // 카드(선택) 유지 + SET_MARKERS에 k1 포함 + selection 채널은 재발화하지 않음(selectedId 불변).
+    expect(screen.getByTestId('selected-spot-card')).toBeTruthy();
+    expect(injectedScripts.some((s) => s.includes('"type":"SET_MARKERS"') && s.includes('"id":"k1"'))).toBe(true);
+    expect(setSelectedScripts().length).toBe(selBefore);
+  });
+
+  it('T7: 선택된 nearby 핀이 목록에서 사라지면 selected 정리(카드 닫힘 + SET_SELECTED(null))', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setNearby({
+      status: 'ready',
+      markers: [{ id: 'k7', lat: 37.5, lng: 127.0, emoji: '🍜', saved: false }],
+      items: [nearbyItem()],
+    });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k7', saved: false }) });
+    expect(screen.getByTestId('nearby-spot-card')).toBeTruthy();
+
+    // 선택된 nearby 핀이 viewport 이탈/dedup으로 소실.
+    setNearby({ status: 'ready', markers: [], items: [] });
+    rerender(<MapTabScreen />);
+
+    expect(screen.queryByTestId('nearby-spot-card')).toBeNull();
+    const sel = setSelectedScripts();
+    expect(sel[sel.length - 1]).toContain('"selectedId":null');
+  });
 });

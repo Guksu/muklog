@@ -27,6 +27,7 @@ import {
   buildInitScript,
   buildRecenterScript,
   buildSetMarkersScript,
+  buildSetSelectedScript,
 } from '@/features/map/mapMessages';
 import { formatDistance } from '@/features/map/formatDistance';
 import { initialRegion } from '@/features/map/initialRegion';
@@ -128,6 +129,11 @@ export const MapTabScreen = () => {
       nearby.setBounds({ sw: message.sw, ne: message.ne });
       return;
     }
+    if (message.type === MapInboundType.MapTap) {
+      // map-pin-select: 지도 빈 곳 탭 → 선택 해제(카드 닫힘 + 활성 강조 해제). SET_SELECTED(null)는 effect가 주입.
+      setSelected(null);
+      return;
+    }
     if (message.type === MapInboundType.Error) {
       setMapErrored(true);
     }
@@ -142,6 +148,29 @@ export const MapTabScreen = () => {
       webviewRef.current?.injectJavaScript(buildSetMarkersScript({ markers }));
     },
     [markersKey, mapReady],
+  );
+
+  // map-pin-select: 선택 변경 시 SET_SELECTED 주입(활성 핀 id·해제 시 null). markers 채널과 독립 —
+  //   selection 변경이 마커 재생성을 유발하지 않고(markersKey에 selection 미포함), HTML은 클래스만 토글(§3.6).
+  const selectedId = selected ? selected.id : null;
+  useEffect(
+    function syncSelectionToMap() {
+      if (!mapReady) return;
+      webviewRef.current?.injectJavaScript(buildSetSelectedScript({ selectedId }));
+    },
+    [selectedId, mapReady],
+  );
+
+  // map-pin-select(T7): 선택된 nearby 핀이 목록에서 사라지면(viewport 이탈/dedup) selected 정리 →
+  //   NearbySpotCard 자동 닫힘과 SET_SELECTED(null)를 일관되게 맞춘다. saved 핀은 항상 렌더라 해당 없음.
+  const nearbyItems = nearby.items;
+  useEffect(
+    function clearSelectionWhenNearbyGone() {
+      if (!selected || selected.saved) return;
+      const stillPresent = nearbyItems.some((it) => it.kakaoPlaceId === selected.id);
+      if (!stillPresent) setSelected(null);
+    },
+    [selected, nearbyItems],
   );
 
   // #4: READY 이후 현위치(coords)가 처음 도착하면 1회 자동 RECENTER(서울 폴백 고정 해제).

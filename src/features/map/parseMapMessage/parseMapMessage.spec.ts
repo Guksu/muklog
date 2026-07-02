@@ -93,4 +93,17 @@ describe('parseMapMessage', () => {
       }),
     ).toBeNull();
   });
+
+  // ── map-pin-select 증분: MAP_TAP(빈 곳 탭) ─────────────────────────
+  it('MAP_TAP(빈 곳 탭) 메시지를 파싱한다(페이로드 없음)', () => {
+    expect(parseMapMessage({ raw: JSON.stringify({ type: 'MAP_TAP' }) })).toEqual({
+      type: MapInboundType.MapTap,
+    });
+  });
+
+  it('MAP_TAP에 여분 필드가 있어도 무시하고 파싱한다(형 검증 불필요)', () => {
+    expect(
+      parseMapMessage({ raw: JSON.stringify({ type: 'MAP_TAP', foo: 1, id: 'x' }) }),
+    ).toEqual({ type: MapInboundType.MapTap });
+  });
 });

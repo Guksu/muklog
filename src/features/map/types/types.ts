@@ -80,6 +80,7 @@ export const MapInboundType = {
   MarkerTap: 'MARKER_TAP',
   Error: 'ERROR',
   BoundsChanged: 'BOUNDS_CHANGED', // slice2: idle 이벤트 viewport bbox 통지
+  MapTap: 'MAP_TAP', // map-pin-select: 지도 빈 곳 탭(선택 해제 신호, 페이로드 없음)
 } as const;
 export type MapInboundType = (typeof MapInboundType)[keyof typeof MapInboundType];
 
@@ -88,6 +89,7 @@ export const MapOutboundType = {
   Init: 'INIT',
   SetMarkers: 'SET_MARKERS',
   Recenter: 'RECENTER', // 현재위치로 panTo + me 마커 갱신(map-locate-button)
+  SetSelected: 'SET_SELECTED', // map-pin-select: 활성 핀 id 전달(null=해제, 클래스 토글만)
 } as const;
 export type MapOutboundType = (typeof MapOutboundType)[keyof typeof MapOutboundType];
 
@@ -97,4 +99,5 @@ export type MapInboundMessage =
   | { type: typeof MapInboundType.Ready }
   | { type: typeof MapInboundType.MarkerTap; id: string; saved: boolean }
   | { type: typeof MapInboundType.Error; reason: string }
-  | { type: typeof MapInboundType.BoundsChanged; sw: Coords; ne: Coords };
+  | { type: typeof MapInboundType.BoundsChanged; sw: Coords; ne: Coords }
+  | { type: typeof MapInboundType.MapTap }; // map-pin-select: 빈 곳 탭(페이로드 없음)

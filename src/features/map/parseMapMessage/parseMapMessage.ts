@@ -56,5 +56,10 @@ export const parseMapMessage = ({ raw }: { raw: string }): MapInboundMessage | n
     return { type: MapInboundType.BoundsChanged, sw, ne };
   }
 
+  if (message.type === MapInboundType.MapTap) {
+    // map-pin-select: 빈 곳 탭 신호 — 페이로드 없음(여분 필드는 무시). 선택 해제 트리거.
+    return { type: MapInboundType.MapTap };
+  }
+
   return null;
 };

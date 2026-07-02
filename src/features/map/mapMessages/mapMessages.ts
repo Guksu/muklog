@@ -44,3 +44,18 @@ export const buildRecenterScript = ({ me }: { me: Coords }): string => {
   const payload = JSON.stringify({ type: MapOutboundType.Recenter, me });
   return `window.__muklogRecenter && window.__muklogRecenter(${payload}); true;`;
 };
+
+/**
+ * 선택 반영(SET_SELECTED) 스크립트를 만든다(활성 핀 id 전달·null=해제).
+ *   마커를 재생성하지 않고 활성 클래스만 토글한다(id-only, plan §3.4 — 깜빡임·비용 최소).
+ * @param selectedId 활성 핀 id, 해제 시 null
+ * @returns injectJavaScript에 넣을 JS 문자열
+ */
+export const buildSetSelectedScript = ({
+  selectedId,
+}: {
+  selectedId: string | null;
+}): string => {
+  const payload = JSON.stringify({ type: MapOutboundType.SetSelected, selectedId });
+  return `window.__muklogSetSelected && window.__muklogSetSelected(${payload}); true;`;
+};

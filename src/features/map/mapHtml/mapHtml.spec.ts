@@ -115,4 +115,74 @@ describe('mapHtml', () => {
     expect(html).toContain('!mkMap');
     expect(html).toContain('!payload.me');
   });
+
+  // ── map-pin-select 증분: 선택(활성) 핀 비주얼(ui-publisher 소유 CSS) ──────────────
+  // 킷 Pin active 규칙(mk-home.jsx:401-416: size 36/26→44·drop-shadow 강화·icon 0.46 비례)과
+  //   MapScreen active zIndex 5(mk-home.jsx:350)를 원형 RN 핀으로 번역. CSS 실값만 검증(렌더는 스모크).
+  // .mk-pin--active { ... } 블록만 좁혀 단언(base .mk-pin 34px와 혼동 방지).
+  const cssBlock = ({ selector }: { selector: string }): string => {
+    const start = html.indexOf(selector + ' {');
+    if (start === -1) return '';
+    const end = html.indexOf('}', start);
+    return end === -1 ? '' : html.slice(start, end + 1);
+  };
+
+  it('활성 핀 클래스(.mk-pin--active)를 정의한다(선택 시 developer가 토글)', () => {
+    expect(html).toContain('.mk-pin--active');
+  });
+
+  it('활성 핀은 킷 Pin active=44 규칙으로 확대된다(원형 44px)', () => {
+    const active = cssBlock({ selector: '.mk-pin--active' });
+    expect(active).toContain('width: 44px');
+    expect(active).toContain('height: 44px');
+    expect(active).toContain('border-radius: 22px'); // 44/2 — 원형 유지
+  });
+
+  it('활성 핀 그림자는 킷 active drop-shadow(0 6px 10px rgba(0,0,0,.25))를 box-shadow로 번역한다', () => {
+    expect(cssBlock({ selector: '.mk-pin--active' })).toContain('box-shadow: 0 6px 10px rgba(0,0,0,0.25)');
+  });
+
+  it('활성 핀 이모지는 base 비례(18/34)로 확대된다(23px)', () => {
+    expect(cssBlock({ selector: '.mk-pin--active' })).toContain('font-size: 23px');
+  });
+
+  it('활성 핀은 킷 MapScreen active zIndex 5로 스택된다', () => {
+    expect(cssBlock({ selector: '.mk-pin--active' })).toContain('z-index: 5');
+  });
+
+  it('비활성 base 핀은 34px 유지 — 활성만 바꾼다(회귀 0)', () => {
+    const base = cssBlock({ selector: '.mk-pin' });
+    expect(base).toContain('width: 34px');
+    expect(base).toContain('height: 34px');
+    expect(html).toContain('.mk-pin--nearby { border-color: #B6ABA0; }'); // nearby border 불변
+  });
+
+  // ── map-pin-select 증분: 선택 브리지 JS(developer 소유) ──────────────
+  // id-only 선택 반영(SET_SELECTED): 마커 재생성 없이 활성 클래스만 토글 + 빈곳 탭(MAP_TAP) 발신.
+  //   문자열 계약만 검증(실제 이벤트 발화·렌더는 디바이스 스모크 — WebView JS는 단위 실행 아님).
+  it('__muklogSetSelected 핸들러를 정의한다(id-only 선택 반영)', () => {
+    expect(html).toContain('window.__muklogSetSelected');
+  });
+
+  it('선택 상태 모듈 변수(mkSelectedId)를 두고 renderMarkers에서 재적용한다(SET_MARKERS 유지)', () => {
+    expect(html).toContain('mkSelectedId');
+    // 마커를 id로 추적(dataset.pinId) — SET_SELECTED가 매칭 element만 토글.
+    expect(html).toContain('dataset.pinId');
+  });
+
+  it('지도 배경 click을 MAP_TAP으로 post한다(빈곳 탭 → 선택 해제 신호)', () => {
+    expect(html).toContain("addListener(mkMap, 'click'");
+    expect(html).toContain('MAP_TAP');
+  });
+
+  it('마커 element click은 stopPropagation으로 지도 click(MAP_TAP) 경합을 막는다', () => {
+    expect(html).toContain('stopPropagation');
+  });
+
+  it('활성 반영은 마커 재생성이 아니라 클래스 토글이다(mk-pin--active add/remove)', () => {
+    expect(html).toContain("classList.add('mk-pin--active')");
+    expect(html).toContain("classList.remove('mk-pin--active')");
+    // overlay stacking은 setZIndex로(active 5 / saved 3 / nearby 1) — element z-index 한계 보완.
+    expect(html).toContain('setZIndex');
+  });
 });

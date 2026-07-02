@@ -32,7 +32,17 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
       font-size: 18px; box-sizing: border-box;
     }
     .mk-pin--nearby { border-color: #B6ABA0; }
-  </style>
+    /* 선택된(활성) 핀 — 킷 Pin active 규칙 번역(mk-home.jsx:401-416): teardrop size 44 → 원형 44px,
+       filter drop-shadow(0 6px 10px rgba(0,0,0,.25)) → box-shadow 동값, 이모지 base 비례(18/34)로 23px,
+       킷 MapScreen active zIndex 5(mk-home.jsx:350) → z-index 5. saved/nearby 공통(border-color 미변경 →
+       각자 border 유지). developer가 선택 시 이 클래스를 토글(클래스 정의만 ui-publisher 소유). */
+    .mk-pin--active {
+      width: 44px; height: 44px; border-radius: 22px;
+      font-size: 23px;
+      box-shadow: 0 6px 10px rgba(0,0,0,0.25);
+      position: relative; z-index: 5;
+    }
+</style>
 </head>
 <body>
   <div id="map"></div>
@@ -46,6 +56,16 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     var mkMap = null;
     var mkOverlays = [];
     var mkMeOverlay = null; // INIT에서 생성한 현재위치(파란 점) 오버레이 참조 보관(재센터 시 위치 갱신용).
+    // map-pin-select: id→{el,overlay,saved} 추적(SET_SELECTED가 매칭 핀만 토글) + 현재 선택 id.
+    //   mkSelectedId는 renderMarkers(SET_MARKERS 재주입)에서 재적용돼 선택이 유지된다(§3.6).
+    var mkPins = {};
+    var mkSelectedId = null;
+
+    // 핀 stacking 값(킷 MapScreen L350 유도: active 5 / saved 3 / nearby 1). element z-index만으론
+    //   kakao 오버레이 간 stacking이 안 돼(각 오버레이가 별도 컨테이너) overlay.setZIndex로 적용(ui-spec §4).
+    function pinZIndex(saved, active) {
+      return active ? 5 : (saved ? 3 : 1);
+    }
 
     // 현재 viewport(bbox)를 RN에 통지(slice2). idle 다발/과호출 억제는 RN(useNearbyPlaces)이 전담.
     function emitBounds() {
@@ -63,6 +83,7 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     function clearMarkers() {
       for (var i = 0; i < mkOverlays.length; i++) { mkOverlays[i].setMap(null); }
       mkOverlays = [];
+      mkPins = {}; // id→핀 추적도 함께 비운다(mkSelectedId는 유지 — SET_MARKERS 재주입 시 재적용).
     }
 
     function renderMarkers(markers) {
@@ -73,8 +94,14 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
           var el = document.createElement('div');
           // saved 분기: 주변 음식점(saved:false)은 웜그레이 border(.mk-pin--nearby).
           el.className = m.saved ? 'mk-pin' : 'mk-pin mk-pin--nearby';
+          el.dataset.pinId = m.id; // map-pin-select: id로 추적(SET_SELECTED 토글 대상).
           el.textContent = m.emoji;
-          el.addEventListener('click', function () {
+          // map-pin-select: SET_MARKERS 재주입 후에도 선택 유지 — 현재 선택 id면 active 클래스 재적용.
+          var active = m.id === mkSelectedId;
+          if (active) el.classList.add('mk-pin--active');
+          el.addEventListener('click', function markerTap(event) {
+            // map-pin-select: 마커 탭이 지도 배경 click(MAP_TAP)으로 새어 즉시 해제되지 않게 경합 차단.
+            if (event && event.stopPropagation) event.stopPropagation();
             // slice2: saved 동봉(MapTabScreen이 SelectedSpotCard vs NearbySpotCard 분기).
             post({ type: 'MARKER_TAP', id: m.id, saved: m.saved });
           });
@@ -82,9 +109,11 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
             position: new kakao.maps.LatLng(m.lat, m.lng),
             content: el,
             yAnchor: 1,
+            zIndex: pinZIndex(m.saved, active), // active 5 / saved 3 / nearby 1.
           });
           overlay.setMap(mkMap);
           mkOverlays.push(overlay);
+          mkPins[m.id] = { el: el, overlay: overlay, saved: m.saved };
         })(markers[i]);
       }
     }
@@ -108,6 +137,10 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
           mkMeOverlay.setMap(mkMap);
         }
         renderMarkers(payload.markers);
+        // map-pin-select: 지도 빈 곳 탭 → MAP_TAP 발신(RN이 선택 해제). 마커 탭은 stopPropagation으로 여기 안 옴.
+        kakao.maps.event.addListener(mkMap, 'click', function mkMapBackgroundTap() {
+          post({ type: 'MAP_TAP' });
+        });
         // slice2: 드래그·줌 종료(idle)마다 현재 bbox 통지 → RN이 nearby 조회(디바운스/캐시/임계는 RN).
         //   이후 사용자 이동 전용 — INIT 직후 같은 센터 relayout/setCenter는 idle을 발화하지 않아
         //   첫 nearby 트리거를 여기에 의존하면 안 됨(nearby-first-load 버그). 첫 emit은 아래 명시 호출이 담당.
@@ -136,6 +169,20 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     // RN → WebView: 마커 갱신(refresh).
     window.__muklogSetMarkers = function (payload) {
       renderMarkers(payload.markers);
+    };
+
+    // RN → WebView: 선택 반영(SET_SELECTED). id-only — 마커 재생성 없이 활성 클래스만 토글(깜빡임·비용 최소).
+    //   selectedId=null이면 전 핀 비활성(해제). 매칭 핀만 active + zIndex 5, 나머지는 saved 3 / nearby 1로 원복.
+    window.__muklogSetSelected = function (payload) {
+      mkSelectedId = payload && payload.selectedId != null ? payload.selectedId : null;
+      for (var id in mkPins) {
+        if (!mkPins.hasOwnProperty(id)) continue;
+        var pin = mkPins[id];
+        var active = id === mkSelectedId;
+        if (active) pin.el.classList.add('mk-pin--active');
+        else pin.el.classList.remove('mk-pin--active');
+        pin.overlay.setZIndex(pinZIndex(pin.saved, active));
+      }
     };
 
     // RN → WebView: 현재위치로 재센터(panTo) + me 마커 갱신. 지도 재init 없음(경량 — 마커 깜빡임/중복 없음).
