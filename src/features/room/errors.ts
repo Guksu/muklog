@@ -8,7 +8,7 @@
 /** RPC가 발생시키는 에러 토큰 → 한국어 메시지. */
 export const ROOM_ERROR_MESSAGES: Record<string, string> = {
   INVALID_CODE: '초대코드를 다시 확인해 주세요.',
-  ROOM_FULL: '이미 2명이 모두 입장한 방이에요.',
+  ROOM_FULL: '로그 정원(5명)이 가득 찼어요.',
   ALREADY_IN_ROOM: '이미 참여 중인 방이 있어요.',
   CODE_GENERATION_FAILED: '코드 생성에 실패했어요. 잠시 후 다시 시도해 주세요.',
   NOT_AUTHENTICATED: '세션이 만료됐어요. 앱을 다시 시작해 주세요.',

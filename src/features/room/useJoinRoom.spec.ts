@@ -43,7 +43,7 @@ describe('useJoinRoom', () => {
     await act(async () => {
       await expect(result.current.joinRoom({ code: 'ABCDEF' })).rejects.toBeTruthy();
     });
-    expect(result.current.error).toBe('이미 2명이 모두 입장한 방이에요.');
+    expect(result.current.error).toBe('로그 정원(5명)이 가득 찼어요.');
   });
 
   it('bad-response(room_id 누락)는 reject하고 error는 기본 메시지', async () => {

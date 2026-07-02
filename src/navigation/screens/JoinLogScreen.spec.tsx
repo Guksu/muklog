@@ -101,9 +101,9 @@ describe('JoinLogScreen', () => {
   });
 
   it('useJoinRoom.error(ROOM_FULL 매핑)를 인라인 에러로 표시한다 (AC14)', () => {
-    setupHooks({ error: '이미 2명이 모두 입장한 방이에요.' });
+    setupHooks({ error: '로그 정원(5명)이 가득 찼어요.' });
     renderWithTheme(<JoinLogScreen />);
-    expect(screen.getByText('이미 2명이 모두 입장한 방이에요.')).toBeTruthy();
+    expect(screen.getByText('로그 정원(5명)이 가득 찼어요.')).toBeTruthy();
   });
 
   it('loading 중에는 입장 버튼이 busy라 joinRoom을 호출하지 않는다', () => {

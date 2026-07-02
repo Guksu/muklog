@@ -8,8 +8,12 @@ describe('mapRoomError — 토큰 정확 일치 (5종)', () => {
     expect(mapRoomError({ error: new Error('INVALID_CODE') })).toBe('초대코드를 다시 확인해 주세요.');
   });
 
-  it('ROOM_FULL', () => {
-    expect(mapRoomError({ error: new Error('ROOM_FULL') })).toBe('이미 2명이 모두 입장한 방이에요.');
+  it('ROOM_FULL — 정원 일반화 카피(정원 5, "2명" 하드코딩 제거)', () => {
+    expect(mapRoomError({ error: new Error('ROOM_FULL') })).toBe('로그 정원(5명)이 가득 찼어요.');
+  });
+
+  it('ROOM_FULL 카피에 "2명" 하드코딩이 없다 (정원 2→5, S5a)', () => {
+    expect(ROOM_ERROR_MESSAGES.ROOM_FULL).not.toContain('2명');
   });
 
   it('ALREADY_IN_ROOM', () => {
@@ -111,7 +115,7 @@ describe('mapRoomError — log-name 신규 토큰 (1종, rename_room, C2)', () =
 describe('mapRoomError — 포함 매칭 / 기본', () => {
   it('Postgres가 토큰을 텍스트로 감싸도 포함 매칭한다', () => {
     expect(mapRoomError({ error: new Error('ERROR: ROOM_FULL (SQLSTATE P0001)') })).toBe(
-      '이미 2명이 모두 입장한 방이에요.',
+      '로그 정원(5명)이 가득 찼어요.',
     );
   });
 
@@ -130,7 +134,7 @@ describe('mapRoomError — error 타입 추출 (extractMessage 분기)', () => {
   });
 
   it('{ message } 객체 입력', () => {
-    expect(mapRoomError({ error: { message: 'ROOM_FULL' } })).toBe('이미 2명이 모두 입장한 방이에요.');
+    expect(mapRoomError({ error: { message: 'ROOM_FULL' } })).toBe('로그 정원(5명)이 가득 찼어요.');
   });
 
   it('null은 throw 없이 기본 메시지', () => {

@@ -288,7 +288,7 @@ describe('LogListScreen — 빈 상태(EmptyLogs 히어로 + 두 갈래, 킷 mk-
 });
 
 describe('LogListScreen — 카드 헤더(아바타/배지/이름/날짜/chevron)', () => {
-  it('멤버 2명이면 "둘이" 배지, 1명이면 "혼자" 배지를 보인다 (C2 파생)', () => {
+  it('멤버 2명이면 "2명" 배지, 1명이면 "혼자" 배지를 보인다 (C2 파생 / 킷 §5 N명)', () => {
     useMyLogsContextMock.mockReturnValue({
       state: {
         status: 'ready',
@@ -300,7 +300,7 @@ describe('LogListScreen — 카드 헤더(아바타/배지/이름/날짜/chevron
       refresh,
     });
     renderWithTheme(<LogListScreen />);
-    expect(screen.getByText('둘이')).toBeTruthy();
+    expect(screen.getByText('2명')).toBeTruthy();
     expect(screen.getByText('혼자')).toBeTruthy();
   });
 

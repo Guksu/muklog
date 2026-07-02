@@ -56,14 +56,14 @@ profiles
 rooms
   id          uuid PK
   invite_code text UNIQUE        -- 6자리 영숫자 (대문자+숫자, 혼동문자 0/O/1/I 제외)
-  mode        text NOT NULL      -- 'solo' | 'couple' (생성 시 확정). solo=정원 1, couple=정원 2
+  mode        text NOT NULL      -- 'solo' | 'couple' (호환 보존). 정원은 모드 무관 5 (members-capacity S5a). 구 solo=1/couple=2는 stale
   created_by  uuid → profiles
   created_at  timestamptz
   -- 예약 삭제 라이프사이클 (구현은 room-lifecycle 스프린트, 추후)
   delete_scheduled_at  timestamptz   -- NULL=삭제 예약 없음. 설정 시 이 시각 이후 cron이 방 삭제
   delete_requested_by  uuid → profiles  -- 나가기를 누른 사람(=취소 권한자). #5
 
-room_members                     -- 방당 최대 인원 = 모드별 (solo 1 / couple 2)
+room_members                     -- 방당 최대 인원 = 5 (모드 무관, members-capacity S5a. 구 solo 1/couple 2 stale)
   room_id     uuid → rooms
   user_id     uuid → profiles
   joined_at   timestamptz
@@ -126,7 +126,7 @@ device_tokens                    -- 푸시 발송용 디바이스 토큰 (push-n
 
 **제약 / 정책**
 - **멀티 로그 멤버십**: 한 사용자가 **여러 로그에 동시 소속** 가능(`room_members`는 user당 다수 행 허용). 앱은 "내 로그 목록"을 조회한다(구 `useMembership`의 단일 `maybeSingle` 폐기). "1인 1방" 불변식 제거.
-- **로그 정원 = 2 (고정)**: 모든 로그는 최대 2명(생성자 + 초대로 합류한 1명). `room_members` INSERT 트리거로 현재 인원 < 2 검증. **솔로/커플은 멤버 수에서 파생**(1명=솔로, 2명=커플)하며 생성 시 선택하지 않는다. → 구 `room-modes`의 모드별 정원(solo 1) 로직은 정원 2로 통일, `join_room`의 솔로 거부(`SOLO_ROOM_NOT_JOINABLE`)는 **제거**(솔로 로그도 초대코드로 조인해 커플화). `rooms.mode` 컬럼은 호환을 위해 보존하되 신규 생성은 기본값 처리.
+- **로그 정원 = 5 (고정, members-capacity S5a)**: 모든 로그는 최대 5명(생성자 + 초대로 합류한 최대 4명). `room_members` INSERT 트리거 `enforce_room_capacity()`·`join_room` RPC가 현재 인원 `< 5` 검증(정원 초과 시 `ROOM_FULL`). **솔로/커플은 멤버 수에서 파생**(1명=혼자, 2명+=함께)하며 생성 시 선택하지 않는다. → 정원은 모드 무관 5로 통일(구 solo 1/couple 2는 stale, `20260701120000_members_up_to_5.sql`에서 2→5 상향). 클라 `ROOM_CAPACITY=5`가 트리거 정원식과 단일 출처(C6). `join_room`의 솔로 거부(`SOLO_ROOM_NOT_JOINABLE`)는 이미 제거됨(솔로 로그도 조인 가능). `rooms.mode` 컬럼은 호환 보존, 신규 생성은 기본값. MemberBadge는 "혼자/N명"(§5). *(멤버 실명·아바타 노출·참여자 블록은 S5b.)*
 - **사진 5장 제한**: 앱에서 1차 차단 + `muklog_photos` INSERT 트리거로 2차 검증(`order_index 0~4`).
 - **영상 제한**: 먹로그당 1개 + 길이 ≤ 2000ms. 앱에서 1차 차단(촬영 2초 컷·압축) + `muklogs` 트리거로 `video_duration_ms ≤ 2000` 2차 검증.
 - **방 나가기 — 즉시판(출시: `room-leave` 스프린트)**: `leave_room()` RPC가 호출자 멤버십을 **즉시 해지**한다(예약/유예/cron 없음). 나간 뒤 방 멤버가 **0명이면 방+하위 데이터 삭제**, **1명 이상이면 방 보존**(남은 멤버 데이터 손실 0, invite_code 유지로 재입장 가능). 진입점은 **Profile 화면**(솔로·커플 공통). 상세는 `docs/sprint/sprint-20260610-room-leave/plan.md`.
@@ -162,7 +162,7 @@ HomeTabs (Tab Navigator, 디폴트 = 먹로그)
   ├─ 헤더 우측: [+ 버튼] · [프로필 버튼]
   │     └─ + 버튼 → 액션시트 "로그 생성 / 로그 입장"
   │           ├─ 로그 생성 → 솔로 로그 생성(create_room, 1명) → **[RoomCreatedScreen 축하화면]**(🎉 + 초대코드 + "로그 열기"=LogScreen replace / "나중에"=목록) → 목록에 추가 (ui-fidelity-audit: 킷 CreatedScreen 복원)
-  │           └─ 로그 입장 → 초대코드 입력 → 해당 로그 조인(정원 2 미만) → 목록에 추가
+  │           └─ 로그 입장 → 초대코드 입력 → 해당 로그 조인(정원 5 미만) → 목록에 추가
   ├─ Tab1: 먹로그 (LogList)  ── 내가 속한 로그들을 카드 리스트로 표시
   │     · 카드: 로그 이름/대표 + 멤버 수(솔로/커플) + 생성일 등
   │     · 빈 상태: "아직 로그가 없어요" + 가이드(+ 버튼 안내)
