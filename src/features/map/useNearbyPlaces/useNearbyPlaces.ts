@@ -6,9 +6,11 @@
 //     - 양자화 bbox 캐시: 소수 4자리 키로 정규화 → 동일 영역 재방문 시 invoke 0회(인메모리 Map).
 //     - 최소 이동 임계: 직전 조회 bbox와 중심 이동·폭 변화가 임계 미만이면 미호출(미세 흔들림/관성 흡수).
 //     - 레이스 가드: requestSeqRef 증가 → 늦게 온 stale 응답 폐기.
-//   에러는 status='error' + markers 비움(핀만 영향, 지도/saved/카드 불변 — 차단 아님).
+//   nearby-accumulate: 수신 핀은 세션 내 누적(kakaoPlaceId dedup·LRU·cap) — 교체 아님(팝인/소실 해소).
+//     에러는 status='error'만(누적 유지 — 한 area 실패가 확인된 다른 핀을 지우지 않음, §3.4). silent(차단 아님).
 import { useEffect, useRef, useState } from 'react';
 
+import { accumulateNearbyItems } from '../accumulateNearbyItems';
 import { boundsToRect } from '../boundsToRect';
 import { nearbyToMapMarkers } from '../nearbyToMapMarkers';
 import { searchNearby } from '../searchNearby';
@@ -30,6 +32,12 @@ export const NEARBY_FIRST_DELAY_MS = 0;
 const NEARBY_QUANTIZE_DECIMALS = 4;
 /** 최소 이동 임계(도 단위) — 직전 조회 bbox의 중심에서 이 거리 미만 이동·폭 변화는 미호출(쿼터 보호). */
 export const NEARBY_MIN_MOVE = 1e-3;
+/**
+ * 세션 내 nearby 핀 누적 상한(nearby-accumulate §3.3). 뷰포트당 최대 15건 × ~7뷰포트 고유 가게.
+ * 초과 시 LRU로 오래된 것부터 퇴출 — WebView CustomOverlay 수를 팬 지연 우려 수준 아래로 bound.
+ * 디바이스 스모크에서 flicker/팬 지연 관측 시 하향 튜닝 가능.
+ */
+export const NEARBY_ACCUM_CAP = 100;
 
 type Bounds = { sw: Coords; ne: Coords };
 
@@ -96,11 +104,11 @@ export const useNearbyPlaces = (): UseNearbyPlacesResult => {
       // 동일 양자화 키 → 이미 적용된 영역(캐시/직전과 동일). 추가 작업 0.
       if (last && last.key === key) return;
 
-      // 캐시 히트 → invoke 미호출(비용 가드레일). 결과 즉시 반영.
+      // 캐시 히트 → invoke 미호출(비용 가드레일). 결과를 누적에 병합(교체 아님 — §3.2).
       const cached = cacheRef.current.get(key);
       if (cached) {
         lastQueriedRef.current = { key, bounds };
-        setItems(cached);
+        setItems((prev) => accumulateNearbyItems({ prev, next: cached, cap: NEARBY_ACCUM_CAP }));
         setStatus('ready');
         return;
       }
@@ -117,14 +125,15 @@ export const useNearbyPlaces = (): UseNearbyPlacesResult => {
         searchNearby(boundsToRect({ sw: bounds.sw, ne: bounds.ne }))
           .then(function onResults(nextItems) {
             if (seq !== requestSeqRef.current) return; // stale 폐기.
-            cacheRef.current.set(key, nextItems);
+            cacheRef.current.set(key, nextItems); // 캐시는 area별 원본 15컷 저장(누적과 독립·불변).
             lastQueriedRef.current = { key, bounds };
-            setItems(nextItems);
+            // 교체가 아니라 누적 병합 — 같은 위치 줌/이동 시 이전 핀 유지(팝인/소실 해소, §3.2).
+            setItems((prev) => accumulateNearbyItems({ prev, next: nextItems, cap: NEARBY_ACCUM_CAP }));
             setStatus('ready');
           })
           .catch(function onError() {
             if (seq !== requestSeqRef.current) return; // stale 폐기.
-            setItems([]); // 핀/카드 데이터만 비움(지도/saved 불변).
+            // 에러 정책 전환(§3.4): 누적 유지(items 미변경) — 한 area 실패가 확인된 다른 핀을 지우지 않음.
             setStatus('error');
           });
       }, delay);

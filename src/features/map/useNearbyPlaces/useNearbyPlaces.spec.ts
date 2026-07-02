@@ -5,7 +5,7 @@ import { act, renderHook } from '@testing-library/react-native';
 
 jest.mock('../searchNearby', () => ({ searchNearby: jest.fn() }));
 import { searchNearby } from '../searchNearby';
-import { NEARBY_DEBOUNCE_MS, useNearbyPlaces } from './useNearbyPlaces';
+import { NEARBY_ACCUM_CAP, NEARBY_DEBOUNCE_MS, useNearbyPlaces } from './useNearbyPlaces';
 
 const searchMock = searchNearby as jest.Mock;
 
@@ -238,14 +238,79 @@ describe('useNearbyPlaces', () => {
     expect(result.current.markers.map((m) => m.id)).toEqual(['second']);
   });
 
-  it('에러: searchNearby reject → status=error, markers 비움', async () => {
-    searchMock.mockRejectedValueOnce(new Error('KAKAO_REQUEST_FAILED'));
+  // ── nearby-accumulate 증분 (plan §5 T2·T3·T4·T5) ──────────────────
+  it('T2: 성공 응답을 교체가 아니라 누적 합집합으로 반영한다(kakaoPlaceId dedup)', async () => {
+    searchMock.mockResolvedValueOnce([item('1'), item('2')]);
     const { result } = renderHook(() => useNearbyPlaces());
-    act(() => result.current.setBounds(bounds()));
+    act(() => result.current.setBounds(bounds({ lat: 37.5 })));
+    await act(async () => {
+      jest.advanceTimersByTime(0);
+    });
+    expect(result.current.markers.map((m) => m.id).sort()).toEqual(['1', '2']);
+
+    // area B: 겹치는 id(2) + 신규(3) → 합집합 [1,2,3](2 미증가, 1 유지)
+    searchMock.mockResolvedValueOnce([item('2'), item('3')]);
+    act(() => result.current.setBounds(bounds({ lat: 38.0 })));
+    await act(async () => {
+      jest.advanceTimersByTime(NEARBY_DEBOUNCE_MS);
+    });
+    expect(result.current.markers.map((m) => m.id).sort()).toEqual(['1', '2', '3']);
+  });
+
+  it('T3: 캐시 히트도 누적에 합류한다(재방문 area가 기존 누적을 지우지 않음)', async () => {
+    searchMock.mockResolvedValueOnce([item('a')]);
+    const { result } = renderHook(() => useNearbyPlaces());
+    act(() => result.current.setBounds(bounds({ lat: 37.5 })));
+    await act(async () => {
+      jest.advanceTimersByTime(0);
+    });
+    searchMock.mockResolvedValueOnce([item('b')]);
+    act(() => result.current.setBounds(bounds({ lat: 38.0 })));
+    await act(async () => {
+      jest.advanceTimersByTime(NEARBY_DEBOUNCE_MS);
+    });
+    expect(result.current.markers.map((m) => m.id).sort()).toEqual(['a', 'b']);
+
+    // area A 재방문 → 캐시 히트(invoke 추가 0), 누적 유지(b 안 사라짐 — 구 교체 정책이면 [a]로 소실).
+    act(() => result.current.setBounds(bounds({ lat: 37.5 })));
+    await act(async () => {
+      jest.advanceTimersByTime(NEARBY_DEBOUNCE_MS);
+    });
+    expect(searchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.markers.map((m) => m.id).sort()).toEqual(['a', 'b']);
+  });
+
+  it('T4: 에러 시 누적을 유지한다(비우지 않음) + status=error', async () => {
+    // 먼저 성공 응답으로 누적을 쌓는다.
+    searchMock.mockResolvedValueOnce([item('a'), item('b')]);
+    const { result } = renderHook(() => useNearbyPlaces());
+    act(() => result.current.setBounds(bounds({ lat: 37.5 })));
+    await act(async () => {
+      jest.advanceTimersByTime(0);
+    });
+    expect(result.current.markers.map((m) => m.id).sort()).toEqual(['a', 'b']);
+
+    // 다른 area 조회가 실패 → 누적 유지, status만 error(구 정책의 setItems([]) 팝아웃 제거 — 의도적 변경 §3.4).
+    searchMock.mockRejectedValueOnce(new Error('KAKAO_REQUEST_FAILED'));
+    act(() => result.current.setBounds(bounds({ lat: 38.0 })));
     await act(async () => {
       jest.advanceTimersByTime(NEARBY_DEBOUNCE_MS);
     });
     expect(result.current.status).toBe('error');
-    expect(result.current.markers).toEqual([]);
+    expect(result.current.markers.map((m) => m.id).sort()).toEqual(['a', 'b']);
+  });
+
+  it('T5: 누적이 cap(NEARBY_ACCUM_CAP) 초과 시 오래된 것부터 퇴출한다(길이=cap)', async () => {
+    const many = Array.from({ length: NEARBY_ACCUM_CAP + 5 }, (_, i) => item(`p${i}`));
+    searchMock.mockResolvedValueOnce(many);
+    const { result } = renderHook(() => useNearbyPlaces());
+    act(() => result.current.setBounds(bounds()));
+    await act(async () => {
+      jest.advanceTimersByTime(0);
+    });
+    expect(result.current.items).toHaveLength(NEARBY_ACCUM_CAP);
+    const accumIds = result.current.items.map((it) => it.kakaoPlaceId);
+    expect(accumIds).not.toContain('p0'); // 최고참 퇴출
+    expect(accumIds).toContain(`p${NEARBY_ACCUM_CAP + 4}`); // 최신 유지
   });
 });
