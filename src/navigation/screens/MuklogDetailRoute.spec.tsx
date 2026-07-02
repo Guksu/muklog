@@ -38,6 +38,10 @@ jest.mock('@/features/auth', () => ({ useAuth: () => mockUseAuth() }));
 const mockUseProfile = jest.fn();
 jest.mock('@/features/profile', () => ({ useProfileContext: () => mockUseProfile() }));
 
+// members-display S5b — useRoomMembers 배선(작성자 실명 매핑용). 배럴 전체(supabase 전이 import) 회피 위해 모킹.
+const mockUseRoomMembers = jest.fn();
+jest.mock('@/features/room', () => ({ useRoomMembers: (arg: unknown) => mockUseRoomMembers(arg) }));
+
 // 전역 토스트 컨트롤러 — 삭제 성공 토스트 호출(message/tone) 검증용.
 const mockShowToast = jest.fn();
 jest.mock('@/components', () => ({ useToastController: () => ({ showToast: mockShowToast }) }));
@@ -54,6 +58,7 @@ jest.mock('./MuklogDetailScreen', () => {
           <Text>{`status:${(props.state as { status: string }).status}`}</Text>
           <Text>{`meId:${props.meId}`}</Text>
           <Text>{`avatar:${props.meAvatarUrl}`}</Text>
+          <Text>{`members:${(props.members as unknown[])?.length ?? 'undef'}`}</Text>
           <Text>{`canManage:${props.canManage}`}</Text>
           <Pressable accessibilityLabel="probe-back" onPress={props.onBack as () => void} />
           <Pressable accessibilityLabel="probe-retry" onPress={props.onRetry as () => void} />
@@ -100,6 +105,7 @@ beforeEach(() => {
   mockUseMuklog.mockReturnValue({ state: { status: 'loading' }, refresh });
   mockUseAuth.mockReturnValue({ state: { status: 'authenticated', userId: 'me-uid' } });
   mockUseProfile.mockReturnValue({ state: { status: 'ready', profile: { nickname: '나', avatarUrl: 'http://a' } } });
+  mockUseRoomMembers.mockReturnValue({ state: { status: 'loading' }, refresh: jest.fn() });
   mockDeleteMuklog.mockResolvedValue(undefined);
 });
 
@@ -113,6 +119,42 @@ describe('MuklogDetailRoute', () => {
     mockRouteParams = undefined;
     render(<MuklogDetailRoute />);
     expect(mockUseMuklog).toHaveBeenCalledWith({ muklogId: '' });
+  });
+
+  // members-display S5b — 작성자 실명 매핑용 멤버 목록 배선(멤버 소스: 상세 자체 페치, plan §3.3).
+  it('먹로그 로드 전엔 useRoomMembers를 빈 roomId로 호출한다(폴백 [])', () => {
+    mockUseMuklog.mockReturnValue({ state: { status: 'loading' }, refresh });
+    render(<MuklogDetailRoute />);
+    expect(mockUseRoomMembers).toHaveBeenCalledWith({ roomId: '' });
+  });
+
+  it('먹로그 ready면 muklog.roomId로 useRoomMembers를 호출한다(진입 1회 페치)', () => {
+    mockUseMuklog.mockReturnValue({ state: readyMuklog(), refresh });
+    render(<MuklogDetailRoute />);
+    expect(mockUseRoomMembers).toHaveBeenCalledWith({ roomId: 'r1' });
+  });
+
+  it('멤버 ready면 members 배열을 화면에 전달한다(작성자 매핑용)', () => {
+    mockUseMuklog.mockReturnValue({ state: readyMuklog(), refresh });
+    mockUseRoomMembers.mockReturnValue({
+      state: {
+        status: 'ready',
+        members: [
+          { userId: 'me-uid', nickname: '나', avatarUrl: null },
+          { userId: 'p', nickname: '짝', avatarUrl: null },
+        ],
+      },
+      refresh: jest.fn(),
+    });
+    render(<MuklogDetailRoute />);
+    expect(screen.getByText('members:2')).toBeTruthy();
+  });
+
+  it('멤버 loading/error면 빈 배열([])을 전달한다(best-effort 폴백)', () => {
+    mockUseMuklog.mockReturnValue({ state: readyMuklog(), refresh });
+    mockUseRoomMembers.mockReturnValue({ state: { status: 'loading' }, refresh: jest.fn() });
+    render(<MuklogDetailRoute />);
+    expect(screen.getByText('members:0')).toBeTruthy();
   });
 
   it('useMuklog state를 화면에 그대로 전달한다(ready 통과)', () => {

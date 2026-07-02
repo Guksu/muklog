@@ -1,6 +1,21 @@
 // src/features/room/logName.spec.ts
 // 로그 이름 정규화/검증/폴백 유틸 — 순수 단위 (plan §3.4·§5-1, 결정2·결정4).
-import { displayLogName, isLogNameTooLong, LOG_NAME_MAX_LENGTH, normalizeLogName } from './logName';
+import { defaultNickname } from '@/features/profile/defaultNickname';
+
+import {
+  displayLogName,
+  isLogNameTooLong,
+  LOG_NAME_MAX_LENGTH,
+  logTitleFromMembers,
+  normalizeLogName,
+  type RoomMember,
+} from './logName';
+
+const member = (over: Partial<RoomMember> & { userId: string }): RoomMember => ({
+  nickname: null,
+  avatarUrl: null,
+  ...over,
+});
 
 describe('LOG_NAME_MAX_LENGTH', () => {
   it('20 — DB rename_room char_length·입력 maxLength 와 단일 출처(C-LEN)', () => {
@@ -89,5 +104,61 @@ describe('displayLogName — name 우선, 없으면 본인 닉 기반 폴백 (�
 
   it('name 빈 문자열("")도 방어적으로 폴백 처리한다', () => {
     expect(displayLogName({ name: '', memberCount: 2, selfNickname: '민' })).toBe('민 · 짝꿍');
+  });
+});
+
+describe('logTitleFromMembers — 킷 mkLogTitle(mk-ui:272) 멤버-기반 제목 파생 (plan §4.2·§5 T4)', () => {
+  const meId = 'me-uid';
+
+  it('name 지정 시 멤버 수 무관하게 name 우선(현행 rooms.name 유지)', () => {
+    const members = [member({ userId: meId, nickname: '민' }), member({ userId: 'p', nickname: '지' })];
+    expect(logTitleFromMembers({ name: '우리 맛집', members, meId, selfNickname: '민' })).toBe('우리 맛집');
+  });
+
+  it('1명(솔로) → "{나}의 기록"(selfNickname 우선)', () => {
+    const members = [member({ userId: meId, nickname: '민' })];
+    expect(logTitleFromMembers({ name: null, members, meId, selfNickname: '민' })).toBe('민의 기록');
+  });
+
+  it('2명 → "A · B"(joined_at asc 순서 그대로)', () => {
+    const members = [member({ userId: meId, nickname: '민' }), member({ userId: 'p', nickname: '지' })];
+    expect(logTitleFromMembers({ name: null, members, meId, selfNickname: '민' })).toBe('민 · 지');
+  });
+
+  it('3명 → "A 외 2명"(첫 멤버 + (N-1))', () => {
+    const members = [
+      member({ userId: meId, nickname: '민' }),
+      member({ userId: 'p', nickname: '지' }),
+      member({ userId: 'q', nickname: '수' }),
+    ];
+    expect(logTitleFromMembers({ name: null, members, meId, selfNickname: '민' })).toBe('민 외 2명');
+  });
+
+  it('5명(만석) → "A 외 4명"', () => {
+    const members = [
+      member({ userId: meId, nickname: '민' }),
+      member({ userId: 'p2', nickname: '지' }),
+      member({ userId: 'p3', nickname: '수' }),
+      member({ userId: 'p4', nickname: '아' }),
+      member({ userId: 'p5', nickname: '별' }),
+    ];
+    expect(logTitleFromMembers({ name: null, members, meId, selfNickname: '민' })).toBe('민 외 4명');
+  });
+
+  it('닉 null 멤버는 defaultNickname({ userId }) 폴백으로 표시', () => {
+    const members = [member({ userId: meId, nickname: null }), member({ userId: 'p', nickname: null })];
+    const expected = `${defaultNickname({ userId: meId })} · ${defaultNickname({ userId: 'p' })}`;
+    expect(logTitleFromMembers({ name: null, members, meId, selfNickname: null })).toBe(expected);
+  });
+
+  it('1명 & selfNickname null → defaultNickname(meId) 기반 "{동물}의 기록"', () => {
+    const members = [member({ userId: meId, nickname: null })];
+    expect(logTitleFromMembers({ name: null, members, meId, selfNickname: null })).toBe(
+      `${defaultNickname({ userId: meId })}의 기록`,
+    );
+  });
+
+  it('멤버 미로드(빈 배열) → displayLogName 폴백으로 회귀(회귀 0)', () => {
+    expect(logTitleFromMembers({ name: null, members: [], meId, selfNickname: '민' })).toBe('민의 기록');
   });
 });

@@ -35,7 +35,6 @@ import { Routes, type AppStackParamList } from '../routes';
 import { formatLogDate } from './formatLogDate';
 import { relativeTimeLabel } from './relativeTimeLabel';
 
-const CARD_AVATAR_SIZE = 42;
 // 사진 스트립 칸 수(킷 mk-home:31 slice(0,4) / 88 4칸 채움). +N 임계도 이 값 기준(more=spotCount-PHOTO_STRIP_SLOTS).
 const PHOTO_STRIP_SLOTS = 4;
 // 빈 상태 히어로 박스 높이(킷 mk-home:151 height:172).
@@ -199,26 +198,11 @@ const LogCard = ({
   previewUrls: Record<string, string>;
 }) => {
   const theme = useTheme();
-  const isCouple = log.memberCount >= 2;
   const isEmpty = log.spotCount === 0;
   return (
     <Card accessibilityLabel="로그 열기" onPress={onPress}>
-      {/* 상단: 아바타 + 이름/배지/날짜 + chevron */}
+      {/* 상단: 이름/배지/날짜 + chevron (S5b §4.3 — 카드 아바타 겹침 제거. LogList는 멤버 프로필 미보유). */}
       <View style={styles.cardHeader}>
-        <View style={styles.avatarStack}>
-          <Avatar
-            url={self.avatarUrl}
-            userId={self.userId}
-            nickname={self.nickname}
-            size={CARD_AVATAR_SIZE}
-          />
-          {isCouple ? (
-            // 짝꿍 실데이터 미존재 → 익명 아바타(🙂)를 겹쳐 커플 골격만 재현(plan §3.3 익명 파트너).
-            <View style={{ marginLeft: -theme.spacing[12] }}>
-              <Avatar url={null} userId={null} nickname={null} size={CARD_AVATAR_SIZE} />
-            </View>
-          ) : null}
-        </View>
         <View style={styles.cardHeaderBody}>
           <Text variant="cardTitle" color="fg" numberOfLines={1}>
             {displayLogName({
@@ -534,7 +518,6 @@ const styles = StyleSheet.create({
   center: { textAlign: 'center' },
   listScreen: { padding: 0 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatarStack: { flexDirection: 'row', alignItems: 'center' },
   cardHeaderBody: { flex: 1, minWidth: 0 },
   cardMeta: { flexDirection: 'row', alignItems: 'center' },
 

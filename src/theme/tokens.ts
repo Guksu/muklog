@@ -247,6 +247,10 @@ export const typography = {
   notifSectionLabel:makeTypography({ size: 13, ratio: 1.3, family: 'SUIT-Bold' }),      // 800/13 → lh 17 "로그별 알림" 섹션 라벨(킷 mk-extra:151, text-alternative, 한글 클리핑 해소)
   notifLogName:     makeTypography({ size: 14.5, ratio: 1.3, family: 'SUIT-SemiBold' }),// 600/14.5 로그별 행 로그명(킷 mk-extra:162, 1줄 ellipsis)
   notifHint:        makeTypography({ size: 12, ratio: 1.6, family: 'SUIT-Medium' }),    // 500/12 하단 안내 카피(킷 mk-extra:168, text-assistive)
+  // ── 참여자 블록(members-display S5b)로 추가한 킷 정합 역할 토큰 (킷 mk-log:83-98) ──
+  participantHeader:makeTypography({ size: 14, ratio: 1.2, family: 'SUIT-Bold' }),      // 800/14 → lh 17 "참여자 N"(킷 mk-log:83, mk-ink. 한글 클리핑 해소 — 킷 lh1)
+  participantMeta:  makeTypography({ size: 12, ratio: 1.2, family: 'SUIT-SemiBold' }),  // 600/12 "· 최대 5명"(킷 mk-log:84, text-alternative) · 멤버 닉(킷 mk-log:90, mk-ink2 1줄 ellipsis)
+  participantInvite:makeTypography({ size: 12, ratio: 1.2, family: 'SUIT-Bold' }),      // 700/12 초대 버튼 라벨(킷 mk-log:98, accent-strong)
 } as const;
 
 export const themes = {

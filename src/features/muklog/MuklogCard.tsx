@@ -1,23 +1,17 @@
 // src/features/muklog/MuklogCard.tsx
-// 맛집 카드 — 킷 mk-log.jsx:80-118 MuklogCard 재현 (plan §5 B1 / §6.2, AC9·AC10).
+// 맛집 카드 — 킷 mk-log.jsx:180-213 MuklogCard 재현 (plan §5 B1 / §6.2, AC9).
 //   커버(FoodCover: 카테고리 그라데이션+이모지, aspectRatio 16/10) + 카테고리 칩 오버레이
-//   → 본문(장소명+별점, 위치줄, 메모 2줄, 작성자 행: 22px Avatar(createdBy 디폴트)+라벨).
-//   OUT(plan §44): 사진수 배지(데이터 없음)·좌표/미니맵·카드 탭 navigate(onPress 미연결).
+//   → 본문(장소명+별점, 위치줄, 메모 2줄). 킷 MuklogCard 에는 작성자 줄이 없다(S5b §4.4 — 작성자 표시는 상세로 이관).
+//   OUT(plan §44): 좌표/미니맵.
 //
-// 소비: useMuklogs → Muklog. meId(현 사용자 uid)로 "내가 기록 / 짝꿍이 기록" 파생(파트너 프로필 OUT).
-//   작성자 아바타는 Avatar userId={createdBy} → defaultAvatar 결정적 익명(파트너도 안정적 이모지).
+// 소비: useMuklogs → Muklog. 작성자 라벨/아바타는 카드에서 제거(멤버 실명 매핑은 MuklogDetail 소관, plan §3.3).
+//   meId 는 리스트 배선 계약 유지를 위해 props 로 받되 카드는 소비하지 않는다(작성자 줄 제거).
 import React from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 
-import { Avatar, FoodCover, Icon, IconName, Stars, Text } from '@/components';
+import { FoodCover, Icon, IconName, Stars, Text } from '@/components';
 import { useTheme } from '@/theme';
 
-import {
-  AuthorKind,
-  DELETED_AUTHOR_LABEL,
-  authorAvatarUserId,
-  deriveAuthorKind,
-} from './author';
 import { categoryLabel } from './categories';
 import { formatVisitedDate } from './formatVisitedDate';
 import { type Muklog } from './types';
@@ -25,17 +19,16 @@ import { type Muklog } from './types';
 export type MuklogCardProps = {
   /** 표시할 먹로그 1건. */
   muklog: Muklog;
-  /** 현재 사용자 uid — 작성자 라벨("내가 기록"/"짝꿍이 기록") 파생용. */
+  /** 현재 사용자 uid — 카드는 미소비(작성자 줄 제거). MuklogDetail 작성자 매핑용으로 리스트 배선 계약만 유지. */
   meId: string;
   /** 카드 탭 콜백(상세 진입 배선, plan §4.3). 없으면 카드는 비활성(기존 사용처 안전). */
   onPress?: () => void;
 };
 
-// 킷 FC2 커버 이모지 56, 작성자 아바타 22(ring 없음).
+// 킷 FC2 커버 이모지 56.
 const COVER_EMOJI_SIZE = 56;
-const AUTHOR_AVATAR_SIZE = 22;
 
-export const MuklogCard = ({ muklog, meId, onPress }: MuklogCardProps) => {
+export const MuklogCard = ({ muklog, onPress }: MuklogCardProps) => {
   const theme = useTheme();
 
   const chipLabel = categoryLabel({ key: muklog.category });
@@ -43,15 +36,6 @@ export const MuklogCard = ({ muklog, meId, onPress }: MuklogCardProps) => {
 
   const dateText = formatVisitedDate({ visitedAt: muklog.visitedAt });
   const locationText = muklog.area ? `${muklog.area} · ${dateText}` : dateText;
-
-  // 작성자 파생(데이터 레벨, plan §5/AC6) — createdBy NULL(탈퇴자 익명화)은 "탈퇴한 사용자"로 graceful.
-  const authorKind = deriveAuthorKind({ createdBy: muklog.createdBy, meId });
-  const authorLabel =
-    authorKind === AuthorKind.Me
-      ? '내가 기록'
-      : authorKind === AuthorKind.Deleted
-        ? DELETED_AUTHOR_LABEL
-        : '짝꿍이 기록';
 
   // 커버 오버레이 — 킷 mk-log.jsx:91-97. 카테고리 칩(좌상)·사진 장수 배지(우상).
   //   썸네일(Image)·FoodCover 어느 쪽에도 동일하게 얹는다(인라인 중복 방지).
@@ -158,18 +142,6 @@ export const MuklogCard = ({ muklog, meId, onPress }: MuklogCardProps) => {
             {muklog.memo}
           </Text>
         ) : null}
-
-        {/* 작성자 행 — 22px 디폴트 아바타(createdBy 파생) + 라벨. 킷 gap 6, marginTop 11. */}
-        <View style={[styles.authorRow, { marginTop: theme.spacing[12] }]}>
-          <Avatar
-            userId={authorAvatarUserId({ createdBy: muklog.createdBy })}
-            size={AUTHOR_AVATAR_SIZE}
-            ring={false}
-          />
-          <Text variant="meta" color="fgMuted">
-            {authorLabel}
-          </Text>
-        </View>
       </View>
     </>
   );
@@ -210,5 +182,4 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { flex: 1 },
   locationRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });

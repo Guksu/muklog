@@ -23,6 +23,7 @@ import { useToastController } from '@/components';
 import { useAuth } from '@/features/auth';
 import { useProfileContext } from '@/features/profile';
 import { useDeleteMuklog, useMuklog } from '@/features/muklog';
+import { useRoomMembers } from '@/features/room';
 
 import { Routes, type AppStackParamList } from '../routes';
 import { MuklogDetailScreen } from './MuklogDetailScreen';
@@ -42,6 +43,14 @@ export const MuklogDetailRoute = () => {
   // #2: 공유 프로필 context — 아바타 변경이 내 작성 먹로그 상세에도 즉시 전파.
   const { state: profileState } = useProfileContext();
   const meAvatarUrl = profileState.status === 'ready' ? profileState.profile.avatarUrl : null;
+
+  // 작성자 실 닉/아바타 매핑용 멤버 목록(members-display S5b). roomId는 먹로그 로드 후 확정 → 그 전엔 '' (빈 배열 폴백).
+  //   상세 진입 1회 조회(폴링 0). 미로드/에러면 [] → resolveAuthor가 me/partner 폴백 카피(회귀 0, plan §3.3).
+  //   ⚠️ 멤버 소스 택1(plan §3.3): 리스트 전달 대신 상세가 useRoomMembers 자체 호출 —
+  //     상세는 리스트 외(지도·딥링크)에서도 진입해 members context 가 없을 수 있어 자체 페치가 안전(+1 RPC/진입, useRoom 정책).
+  const detailRoomId = state.status === 'ready' ? state.muklog.roomId : '';
+  const { state: membersState } = useRoomMembers({ roomId: detailRoomId });
+  const members = membersState.status === 'ready' ? membersState.members : [];
 
   const { deleteMuklog, loading: deleting, error: deleteError } = useDeleteMuklog();
   // 삭제 성공 토스트 — 전역 컨트롤러(루트 단일 <Toast>). goBack 직전에 show → 복귀한 LogScreen 위에서 표시(킷 SPEC §5).
@@ -96,6 +105,7 @@ export const MuklogDetailRoute = () => {
       state={state}
       meId={meId}
       meAvatarUrl={meAvatarUrl}
+      members={members}
       onBack={handleBack}
       onRetry={handleRetry}
       canManage={canManage}

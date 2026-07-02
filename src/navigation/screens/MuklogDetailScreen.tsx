@@ -25,12 +25,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar, Button, FoodCover, Icon, IconButton, IconName, Sheet, Stars, Text } from '@/components';
 // 직접 경로 import — 배럴(@/features/map/components)은 다른 지도 컴포넌트(expo-location 등) 의존을 함께 끌어옴.
 import { MuklogMiniMap } from '@/features/map/components/MuklogMiniMap';
-import {
-  AuthorKind,
-  DELETED_AUTHOR_LABEL,
-  authorAvatarUserId,
-  deriveAuthorKind,
-} from '@/features/muklog/author';
+import { AuthorKind, resolveAuthor } from '@/features/muklog/author';
+import { type RoomMember } from '@/features/room/logName';
 import { categoryLabel } from '@/features/muklog/categories';
 import { formatVisitedDate } from '@/features/muklog/formatVisitedDate';
 import { useTheme } from '@/theme';
@@ -69,8 +65,10 @@ export type MuklogDetailScreenProps = {
   state: MuklogDetailState;
   /** 현재 사용자 uid — 작성자 라벨("내가 기록"/"짝꿍이 기록") 파생용(plan §3.4). */
   meId: string;
-  /** 본인 프로필 아바타 URL(useProfile). 작성자가 나일 때 사용, 없으면 결정적 아바타. */
+  /** 본인 프로필 아바타 URL(useProfile). 작성자가 나이고 멤버 아바타 미로드일 때 폴백. */
   meAvatarUrl: string | null;
+  /** 로그 멤버 목록(useRoomMembers.ready) — 작성자 실 닉/아바타 매핑용(S5b, plan §3.3). 미로드=[] → me/partner 폴백 카피. */
+  members?: RoomMember[];
   /** 뒤로가기 콜백(developer: navigation.goBack). */
   onBack: () => void;
   /** error 상태 "다시 시도" 콜백(developer: useMuklog refresh). */
@@ -147,6 +145,7 @@ export const MuklogDetailScreen = ({
   state,
   meId,
   meAvatarUrl,
+  members = [],
   onBack,
   onRetry,
   canManage = false,
@@ -239,15 +238,13 @@ export const MuklogDetailScreen = ({
         : '위치 정보가 아직 없어요';
   const dateText = formatVisitedDate({ visitedAt: muklog.visitedAt });
 
-  // 작성자 파생(데이터 레벨, plan §5/AC6) — createdBy NULL(탈퇴자 익명화)은 deleted 로 갈라 "탈퇴한 사용자".
-  const authorKind = deriveAuthorKind({ createdBy: muklog.createdBy, meId });
-  const authorIsMe = authorKind === AuthorKind.Me;
-  const authorLabel =
-    authorKind === AuthorKind.Me
-      ? '내가 기록'
-      : authorKind === AuthorKind.Deleted
-        ? DELETED_AUTHOR_LABEL
-        : '짝꿍이 기록';
+  // 작성자 파생(데이터 레벨, plan §3.3/§5) — members 매핑으로 실 닉/아바타(3명+ 정확). 미매칭/미로드는 me/partner 폴백 카피.
+  //   createdBy NULL(탈퇴자 익명화)은 Deleted → "탈퇴한 사용자"(members 무관 graceful, 회귀 0).
+  const author = resolveAuthor({ createdBy: muklog.createdBy, meId, members });
+  const authorIsMe = author.kind === AuthorKind.Me;
+  const authorLabel = author.label;
+  // 아바타 url: 멤버 매핑 avatarUrl 우선 → (나이고 미로드면) 본인 프로필 아바타 폴백 → 결정적 디폴트(avatarUserId).
+  const authorAvatarUrl = author.avatarUrl ?? (authorIsMe ? meAvatarUrl : null);
 
   // 캐러셀 스냅 인덱스 갱신(킷 mk-log:134). 외부(RN) 콜백 → named-args 예외.
   const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -421,8 +418,8 @@ export const MuklogDetailScreen = ({
               ]}
             >
               <Avatar
-                url={authorIsMe ? meAvatarUrl : null}
-                userId={authorAvatarUserId({ createdBy: muklog.createdBy })}
+                url={authorAvatarUrl}
+                userId={author.avatarUserId}
                 size={AUTHOR_AVATAR_SIZE}
                 ring={false}
               />

@@ -310,13 +310,13 @@ describe('MuklogDetailScreen — more 메뉴 / 편집·삭제 (muklog-edit §5 �
   });
 });
 
-describe('MuklogDetailScreen — 작성자 라벨 (AC e)', () => {
-  it('createdBy === meId면 "내가 기록"', () => {
+describe('MuklogDetailScreen — 작성자 라벨 (AC e, members 미로드 폴백)', () => {
+  it('createdBy === meId & members 미로드([])면 "내가 기록" 폴백', () => {
     renderReady({ createdBy: 'me-uid' });
     expect(screen.getByText('내가 기록')).toBeTruthy();
   });
 
-  it('createdBy !== meId면 "짝꿍이 기록"', () => {
+  it('createdBy !== meId & members 미로드면 "짝꿍이 기록" 폴백', () => {
     renderReady({ createdBy: 'partner-uid' });
     expect(screen.getByText('짝꿍이 기록')).toBeTruthy();
   });
@@ -327,5 +327,48 @@ describe('MuklogDetailScreen — 작성자 라벨 (AC e)', () => {
     expect(screen.getByText('탈퇴한 사용자')).toBeTruthy();
     expect(screen.queryByText('내가 기록')).toBeNull();
     expect(screen.queryByText('짝꿍이 기록')).toBeNull();
+  });
+});
+
+describe('MuklogDetailScreen — 작성자 실명 매핑 (S5b, T9)', () => {
+  const members = [
+    { userId: 'me-uid', nickname: '민지', avatarUrl: null },
+    { userId: 'partner-uid', nickname: '지현', avatarUrl: 'https://cdn/p.jpg' },
+    { userId: 'u3', nickname: '수달', avatarUrl: null },
+  ];
+  const renderWithMembers = (over?: Partial<MuklogDetailViewData>) =>
+    renderWithTheme(
+      <MuklogDetailScreen
+        state={{ status: 'ready', muklog: data(over) }}
+        meId="me-uid"
+        meAvatarUrl={null}
+        members={members}
+        onBack={onBack}
+        onRetry={onRetry}
+      />,
+    );
+
+  it('멤버 매핑 시 작성자 라벨이 실 닉네임(내 글 → 내 닉)', () => {
+    renderWithMembers({ createdBy: 'me-uid' });
+    expect(screen.getByText('민지')).toBeTruthy();
+    expect(screen.queryByText('내가 기록')).toBeNull();
+  });
+
+  it('짝꿍(3명+ 로그) 작성 글 → 실 닉(지현)·아바타 이미지 매핑', () => {
+    renderWithMembers({ createdBy: 'partner-uid' });
+    expect(screen.getByText('지현')).toBeTruthy();
+    expect(screen.queryByText('짝꿍이 기록')).toBeNull();
+    // avatarUrl 있음 → 이미지 아바타.
+    expect(screen.getByTestId('avatar-image')).toBeTruthy();
+  });
+
+  it('세 번째 멤버(u3) 작성 글도 정확 매핑(수달) — me/partner 이분법 탈피', () => {
+    renderWithMembers({ createdBy: 'u3' });
+    expect(screen.getByText('수달')).toBeTruthy();
+  });
+
+  it('createdBy NULL은 members 무관 "탈퇴한 사용자"(회귀 0)', () => {
+    renderWithMembers({ createdBy: null });
+    expect(screen.getByText('탈퇴한 사용자')).toBeTruthy();
   });
 });

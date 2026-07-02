@@ -6,6 +6,8 @@ export {
   DELETED_AUTHOR_LABEL,
   authorAvatarUserId,
   deriveAuthorKind,
+  resolveAuthor,
+  type ResolvedAuthor,
 } from './author';
 export {
   useMuklog,

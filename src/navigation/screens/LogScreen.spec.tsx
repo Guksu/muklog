@@ -80,12 +80,25 @@ jest.mock('@/features/room', () => {
       h(Text, null, `requester:${props.isRequester}|canceling:${props.canceling}|label:${props.countdownLabel}`),
       h(Pressable, { accessibilityLabel: 'probe-cancel-deletion', onPress: props.onCancel as () => void }),
     );
+  // 참여자 블록 probe(members-display S5b) — members 수/meId/canInvite props + onInvite 콜백 검증(비주얼은 ParticipantBlock.spec).
+  const ParticipantBlock = (props: Record<string, unknown>) =>
+    h(
+      View,
+      { accessibilityLabel: 'participant-block' },
+      h(
+        Text,
+        null,
+        `참여자 ${(props.members as unknown[]).length}|canInvite:${props.canInvite}|meId:${props.meId}`,
+      ),
+      h(Pressable, { accessibilityLabel: 'probe-invite', onPress: props.onInvite as () => void }),
+    );
   return {
     ...code,
     ...logName,
     ...countdown,
     ...errors,
     useRoom: jest.fn(),
+    useRoomMembers: jest.fn(),
     useRenameRoom: jest.fn(),
     useLeaveRoom: () => ({
       leaveRoom: mockLeaveRoom,
@@ -100,6 +113,7 @@ jest.mock('@/features/room', () => {
     LogTitleButton,
     LeaveLogSheets,
     ScheduledDeletionBanner,
+    ParticipantBlock,
   };
 });
 
@@ -273,19 +287,31 @@ jest.mock('@/features/wishlist', () => {
 
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 
-import { useRoom, useRenameRoom } from '@/features/room';
+import { useRoom, useRoomMembers, useRenameRoom } from '@/features/room';
 import { useProfileContext } from '@/features/profile';
 import { LogScreen } from './LogScreen';
 
 const useRoomMock = useRoom as jest.Mock;
+const useRoomMembersMock = useRoomMembers as jest.Mock;
 const useRenameRoomMock = useRenameRoom as jest.Mock;
 const useProfileMock = useProfileContext as jest.Mock;
 const refresh = jest.fn();
+const membersRefresh = jest.fn();
 const renameRoom = jest.fn();
 
 const setRoomState = (state: unknown) => {
   useRoomMock.mockReturnValue({ state, refresh });
 };
+
+// members-display S5b — useRoomMembers 상태 주입. 기본: ready + 나(me-uid) 1명(솔로).
+const setMembersState = (state: unknown) => {
+  useRoomMembersMock.mockReturnValue({ state, refresh: membersRefresh });
+};
+const memberRow = (userId: string, nickname: string | null = null) => ({
+  userId,
+  nickname,
+  avatarUrl: null,
+});
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -298,6 +324,9 @@ beforeEach(() => {
   mockTopInset.current = 0;
   mockParams.current = { roomId: 'r1' };
   setRoomState({ status: 'loading' });
+  // 기본 멤버 상태: ready + 나 1명(솔로). 개별 테스트에서 setMembersState로 오버라이드.
+  membersRefresh.mockReset();
+  setMembersState({ status: 'ready', members: [memberRow('me-uid', '민지')] });
   useRenameRoomMock.mockReturnValue({ renameRoom, loading: false, error: null });
   useProfileMock.mockReturnValue({
     state: { status: 'ready', profile: { nickname: '민지', avatarUrl: null } },
@@ -351,33 +380,89 @@ describe('LogScreen', () => {
     expect(screen.getByLabelText('다시 시도')).toBeTruthy();
   });
 
-  it('솔로(memberCount=1)면 💌 초대 배너(헤딩+설명+InviteCode 코드)와 "{닉}의 기록" 로그명을 표시한다 (AC1·B2·킷 mk-log:33-45)', () => {
+  it('솔로(members 1명)면 참여자 블록(초대 버튼 O)과 "{닉}의 기록" 로그명을 표시한다 (S5b·킷 mk-log:79-103)', () => {
     setRoomState({
       status: 'ready',
       room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 1, mode: 'couple' },
     });
+    setMembersState({ status: 'ready', members: [memberRow('me-uid', '민지')] });
     renderWithTheme(<LogScreen />);
-    expect(screen.getByText('ABCDEF')).toBeTruthy();
-    // 킷 배너: 헤딩 + 설명문(§4 voice — '연인/둘이/커플' 제거, 함께할 사람·함께 기록).
-    expect(screen.getByText('함께할 사람을 초대해요')).toBeTruthy();
-    expect(
-      screen.getByText('이 코드를 보내면 함께 기록할 수 있어요.'),
-    ).toBeTruthy();
-    expect(screen.getByText('💌')).toBeTruthy();
+    // 참여자 블록: "참여자 1" + canInvite(1<5=true). 구 솔로 배너/💌 미렌더(대체됨).
+    expect(screen.getByLabelText('participant-block')).toBeTruthy();
+    expect(screen.getByText('참여자 1|canInvite:true|meId:me-uid')).toBeTruthy();
+    expect(screen.queryByText('함께할 사람을 초대해요')).toBeNull();
+    expect(screen.queryByText('💌')).toBeNull();
+    // 로그명 = logTitleFromMembers(1명 → "{나}의 기록").
     expect(screen.getByText('민지의 기록')).toBeTruthy();
   });
 
-  it('커플(memberCount=2)이면 컴팩트 코드 행(코드+복사)과 "{닉} · 짝꿍" 로그명을 표시한다 (B2)', () => {
+  it('커플(members 2명)이면 참여자 블록("참여자 2")과 "A · B" 로그명을 표시하고 구 컴팩트 코드행은 미렌더한다 (S5b)', () => {
     setRoomState({
       status: 'ready',
       room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 2, mode: 'couple' },
     });
+    setMembersState({
+      status: 'ready',
+      members: [memberRow('me-uid', '민지'), memberRow('p-uid', '지현')],
+    });
     renderWithTheme(<LogScreen />);
-    // B2: 커플은 코드를 숨기지 않고 컴팩트 1줄로 노출(plan §118).
-    expect(screen.getByText('초대코드 ABCDEF')).toBeTruthy();
-    expect(screen.getByLabelText('초대코드 복사')).toBeTruthy();
-    expect(screen.getByText('민지 · 짝꿍')).toBeTruthy();
-    expect(screen.queryByText('둘이 함께 기록 중이에요')).toBeNull();
+    expect(screen.getByText('참여자 2|canInvite:true|meId:me-uid')).toBeTruthy();
+    // 구 컴팩트 코드행/복사 버튼 미렌더(참여자 블록으로 통합).
+    expect(screen.queryByText('초대코드 ABCDEF')).toBeNull();
+    expect(screen.queryByLabelText('초대코드 복사')).toBeNull();
+    // 로그명 = logTitleFromMembers(2명 → "A · B", joined_at asc).
+    expect(screen.getByText('민지 · 지현')).toBeTruthy();
+  });
+
+  it('만석(members 5명)이면 참여자 블록에 canInvite=false(초대 버튼 숨김)를 전달한다 (S5b·엣지 5명)', () => {
+    setRoomState({
+      status: 'ready',
+      room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 5, mode: 'couple' },
+    });
+    setMembersState({
+      status: 'ready',
+      members: [
+        memberRow('me-uid', '민지'),
+        memberRow('u2', '지현'),
+        memberRow('u3', '수'),
+        memberRow('u4', '아'),
+        memberRow('u5', '별'),
+      ],
+    });
+    renderWithTheme(<LogScreen />);
+    expect(screen.getByText('참여자 5|canInvite:false|meId:me-uid')).toBeTruthy();
+  });
+
+  it('멤버 loading/error면 참여자 블록을 미렌더하되 리스트는 정상 마운트한다 (best-effort, plan §4.1)', () => {
+    setRoomState({
+      status: 'ready',
+      room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 2, mode: 'couple' },
+    });
+    setMembersState({ status: 'loading' });
+    const { unmount } = renderWithTheme(<LogScreen />);
+    expect(screen.queryByLabelText('participant-block')).toBeNull();
+    expect(screen.getByLabelText('muklog-list')).toBeTruthy();
+    unmount();
+
+    setMembersState({ status: 'error', message: '이 로그에 접근할 권한이 없어요.' });
+    renderWithTheme(<LogScreen />);
+    expect(screen.queryByLabelText('participant-block')).toBeNull();
+    expect(screen.getByLabelText('muklog-list')).toBeTruthy();
+  });
+
+  it('참여자 블록 "초대" 탭 → 초대코드 클립보드 복사 + positive 토스트("초대코드를 복사했어요 · {code}")', async () => {
+    const Clipboard = require('expo-clipboard');
+    setRoomState({
+      status: 'ready',
+      room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 1, mode: 'couple' },
+    });
+    setMembersState({ status: 'ready', members: [memberRow('me-uid', '민지')] });
+    renderWithTheme(<LogScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('probe-invite'));
+    });
+    expect(Clipboard.setStringAsync).toHaveBeenCalledWith('ABCDEF');
+    await waitFor(() => expect(screen.getByText('초대코드를 복사했어요 · ABCDEF')).toBeTruthy());
   });
 
   it('ready면 placeholder 대신 MuklogList(roomId·meId 전달)를 마운트한다 (T11 통합)', () => {
@@ -442,17 +527,43 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
     room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 2, mode: 'couple', name: null, ...over },
   });
 
-  it('room.name이 있으면 헤더 제목으로 이름을 표시한다 (displayLogName)', () => {
+  it('room.name이 있으면 헤더 제목으로 이름을 표시한다 (name 우선, logTitleFromMembers)', () => {
     setRoomState(readyRoom({ name: '우리 맛집' }));
+    setMembersState({
+      status: 'ready',
+      members: [memberRow('me-uid', '민지'), memberRow('p-uid', '지현')],
+    });
     renderWithTheme(<LogScreen />);
     expect(screen.getByText('우리 맛집')).toBeTruthy();
-    expect(screen.queryByText('민지 · 짝꿍')).toBeNull();
+    expect(screen.queryByText('민지 · 지현')).toBeNull();
   });
 
-  it('room.name=null이면 폴백 제목("{본인닉} · 짝꿍")을 표시한다', () => {
+  it('room.name=null & 멤버 2명이면 멤버-기반 제목("A · B")을 표시한다 (S5b logTitleFromMembers)', () => {
     setRoomState(readyRoom({ name: null, memberCount: 2 }));
+    setMembersState({
+      status: 'ready',
+      members: [memberRow('me-uid', '민지'), memberRow('p-uid', '지현')],
+    });
     renderWithTheme(<LogScreen />);
-    expect(screen.getByText('민지 · 짝꿍')).toBeTruthy();
+    expect(screen.getByText('민지 · 지현')).toBeTruthy();
+  });
+
+  it('room.name=null & 멤버 3명이면 "A 외 2명" 제목을 표시한다 (S5b 3명+)', () => {
+    setRoomState(readyRoom({ name: null, memberCount: 3 }));
+    setMembersState({
+      status: 'ready',
+      members: [memberRow('me-uid', '민지'), memberRow('u2', '지현'), memberRow('u3', '수')],
+    });
+    renderWithTheme(<LogScreen />);
+    expect(screen.getByText('민지 외 2명')).toBeTruthy();
+  });
+
+  it('멤버 미로드(loading)면 제목이 displayLogName 폴백으로 회귀한다 (회귀 0)', () => {
+    setRoomState(readyRoom({ name: null, memberCount: 1 }));
+    setMembersState({ status: 'loading' });
+    renderWithTheme(<LogScreen />);
+    // 빈 배열 → logTitleFromMembers 내부 displayLogName 폴백(솔로 "{닉}의 기록").
+    expect(screen.getByText('민지의 기록')).toBeTruthy();
   });
 
   it('⋯메뉴 "로그 이름 변경"을 탭하면 이름 편집 다이얼로그가 열린다(타이틀 탭 아님)', () => {
@@ -616,25 +727,18 @@ describe('LogScreen — 위시리스트 세그먼트(wishlist, TC-6/B7 · TC-1·
     expect(screen.queryByLabelText('wishlist-view')).toBeNull();
   });
 
-  it('초대 영역(💌 솔로 배너)은 \'log\' 세그 본문에만 렌더, \'wish\' 세그에선 미렌더한다 (I1, 킷 mk-log:74-90)', () => {
+  it('참여자 블록은 \'log\' 세그 본문에만 렌더, \'wish\' 세그에선 미렌더한다 (I1, 킷 mk-log:79-103)', () => {
     setRoomState(readyRoom({ memberCount: 1 }));
+    setMembersState({ status: 'ready', members: [memberRow('me-uid', '민지')] });
     renderWithTheme(<LogScreen />);
-    // log 세그(기본): 초대 배너 노출(세그 아래 본문 상단).
-    expect(screen.getByText('함께할 사람을 초대해요')).toBeTruthy();
-    // wish 세그: 초대 미렌더.
+    // log 세그(기본): 참여자 블록 노출(세그 아래 본문 상단).
+    expect(screen.getByLabelText('participant-block')).toBeTruthy();
+    // wish 세그: 미렌더.
     fireEvent.press(screen.getByText('위시리스트 0'));
-    expect(screen.queryByText('함께할 사람을 초대해요')).toBeNull();
-    // log 세그 복귀: 초대 재노출.
+    expect(screen.queryByLabelText('participant-block')).toBeNull();
+    // log 세그 복귀: 재노출.
     fireEvent.press(screen.getByText('기록 0'));
-    expect(screen.getByText('함께할 사람을 초대해요')).toBeTruthy();
-  });
-
-  it('커플 컴팩트 초대행도 \'wish\' 세그에선 미렌더한다 (I1)', () => {
-    setRoomState(readyRoom({ memberCount: 2 }));
-    renderWithTheme(<LogScreen />);
-    expect(screen.getByText('초대코드 ABCDEF')).toBeTruthy();
-    fireEvent.press(screen.getByText('위시리스트 0'));
-    expect(screen.queryByText('초대코드 ABCDEF')).toBeNull();
+    expect(screen.getByLabelText('participant-block')).toBeTruthy();
   });
 
   it('"위시리스트" 세그 탭 → WishlistView 마운트 + MuklogList(+FAB) 언마운트(위시 세그 FAB 숨김) (TC-6/B7)', () => {

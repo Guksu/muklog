@@ -46,9 +46,12 @@ describe('MuklogCard', () => {
     expect(flatStyle(cover).aspectRatio).toBe(16 / 10);
   });
 
-  it('작성자 행에 createdBy 디폴트 아바타(22px)를 렌더한다 (B1)', () => {
+  it('작성자 행을 렌더하지 않는다 — 아바타/작성자 라벨 부재(S5b §4.4, 킷 MuklogCard 작성자 줄 없음)', () => {
     renderCard({ createdBy: 'author-uid' });
-    expect(screen.getByTestId('avatar-default')).toBeTruthy();
+    // 킷 mk-log:180-213 MuklogCard 에는 작성자 줄이 없다 → 카드에서 아바타·라벨 제거.
+    expect(screen.queryByTestId('avatar-default')).toBeNull();
+    expect(screen.queryByTestId('avatar-anonymous')).toBeNull();
+    expect(screen.queryByTestId('avatar-image')).toBeNull();
   });
 
   it('별점 5개를 채운다 (AC9 표시)', () => {
@@ -62,21 +65,20 @@ describe('MuklogCard', () => {
     expect(memo.props.numberOfLines).toBe(2);
   });
 
-  it('내 기록이면 "내가 기록", 아니면 "짝꿍이 기록" 라벨을 표시한다 (AC10)', () => {
+  it('작성자 라벨("내가 기록"/"짝꿍이 기록")을 표시하지 않는다 (S5b §4.4)', () => {
     renderCard({ createdBy: 'me-uid' }, 'me-uid');
-    expect(screen.getByText('내가 기록')).toBeTruthy();
+    expect(screen.queryByText('내가 기록')).toBeNull();
     screen.unmount();
     renderCard({ createdBy: 'partner-uid' }, 'me-uid');
-    expect(screen.getByText('짝꿍이 기록')).toBeTruthy();
+    expect(screen.queryByText('짝꿍이 기록')).toBeNull();
   });
 
-  it('createdBy가 null(탈퇴자 익명화)이면 "탈퇴한 사용자" 라벨 + 익명 아바타로 안전 표시한다 (AC6, 크래시 0)', () => {
+  it('createdBy가 null(탈퇴자 익명화)이어도 크래시 없이 렌더하고 작성자 라벨은 없다 (S5b §4.4, AC6)', () => {
+    // 작성자 표시는 상세(MuklogDetail)로 이관 — 카드는 작성자 줄 자체가 없다.
     renderCard({ createdBy: null }, 'me-uid');
-    expect(screen.getByText('탈퇴한 사용자')).toBeTruthy();
-    // userId null → Avatar 익명 폴백(기본 아바타). 짝꿍/내 기록으로 오표시되지 않는다.
-    expect(screen.getByTestId('avatar-anonymous')).toBeTruthy();
-    expect(screen.queryByText('짝꿍이 기록')).toBeNull();
-    expect(screen.queryByText('내가 기록')).toBeNull();
+    expect(screen.getByText('트라토리아 보나')).toBeTruthy();
+    expect(screen.queryByText('탈퇴한 사용자')).toBeNull();
+    expect(screen.queryByTestId('avatar-anonymous')).toBeNull();
   });
 
   it('category가 null이면 칩을 숨긴다(데이터 결측)', () => {

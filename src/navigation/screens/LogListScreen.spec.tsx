@@ -304,23 +304,30 @@ describe('LogListScreen — 카드 헤더(아바타/배지/이름/날짜/chevron
     expect(screen.getByText('혼자')).toBeTruthy();
   });
 
-  it('커플 로그면 본인 디폴트 아바타 + 익명 파트너 아바타(🙂)를 겹쳐 보인다 (B4)', () => {
+  it('LogCard 헤더에 아바타 겹침이 없다 — 제목+배지+시작일+chevron만(S5b §4.3, 아바타 제거)', () => {
+    // members-display S5b: LogList는 list_my_rooms만 쓰고 멤버 프로필을 안 받으므로 카드 아바타 제거.
+    //   커플/솔로 무관하게 카드 본인·익명 파트너 아바타 3종 testID 부재(제목·MemberBadge만).
     useMyLogsContextMock.mockReturnValue({
       state: { status: 'ready', logs: [log({ roomId: 'r1', memberCount: 2 })] },
       refresh,
     });
     renderWithTheme(<LogListScreen />);
-    expect(screen.getByTestId('avatar-default')).toBeTruthy();
-    expect(screen.getByTestId('avatar-anonymous')).toBeTruthy();
+    expect(screen.queryByTestId('avatar-default')).toBeNull();
+    expect(screen.queryByTestId('avatar-image')).toBeNull();
+    expect(screen.queryByTestId('avatar-anonymous')).toBeNull();
+    // 제목·배지는 유지.
+    expect(screen.getByText('2명')).toBeTruthy();
   });
 
-  it('솔로 로그면 파트너 아바타가 없다 (B4)', () => {
+  it('솔로 로그도 카드 아바타가 없다 (S5b §4.3)', () => {
     useMyLogsContextMock.mockReturnValue({
       state: { status: 'ready', logs: [log({ roomId: 'r1', memberCount: 1 })] },
       refresh,
     });
     renderWithTheme(<LogListScreen />);
+    expect(screen.queryByTestId('avatar-default')).toBeNull();
     expect(screen.queryByTestId('avatar-anonymous')).toBeNull();
+    expect(screen.getByText('혼자')).toBeTruthy();
   });
 
   it('"YYYY.MM.DD 시작" 고정 포맷이다(sinceLabel Date.now 비결정 회피)', () => {

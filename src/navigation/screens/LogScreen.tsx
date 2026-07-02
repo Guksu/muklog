@@ -6,14 +6,7 @@
 //
 // 생산자(소비): useRoom(get_room)→RoomDetail / useProfile(본인 닉/아바타) / useAuth(meId). 스타일=토큰만(raw hex 0).
 import React from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text as RNText,
-  View,
-  type ViewStyle,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import {
   useFocusEffect,
   useNavigation,
@@ -25,9 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 
 import {
-  Avatar,
   Button,
-  Icon,
   IconButton,
   IconName,
   InviteCodeCard,
@@ -44,12 +35,15 @@ import {
   displayLogName,
   LeaveLogSheets,
   LogTitleButton,
+  logTitleFromMembers,
   mapRoomError,
+  ParticipantBlock,
   ScheduledDeletionBanner,
   useCancelRoomDeletion,
   useLeaveRoom,
   useRenameRoom,
   useRoom,
+  useRoomMembers,
 } from '@/features/room';
 import {
   MuklogList,
@@ -69,82 +63,14 @@ import { useTheme } from '@/theme';
 
 import { Routes, type AppStackParamList } from '../routes';
 
-const HEADER_AVATAR_SIZE = 28;
-const COPIED_FEEDBACK_MS = 2000;
-
 // 로그 내부 세그먼트 키(enum-style 단일 출처) — 'log'(기록)/'wish'(위시리스트). 기본 'log'.
 const LogSeg = { Log: 'log', Wish: 'wish' } as const;
 
 // 위시 추가 성공 토스트 카피(킷 mk-log:33).
 const WISH_ADDED_TOAST = '위시리스트에 담았어요 📍';
 
-// 커플 컴팩트 초대코드 행 — link 아이콘 + "초대코드 XXXXXX" + 복사(클립보드).
-const CompactInviteRow = ({ code }: { code: string }) => {
-  const theme = useTheme();
-  const [copied, setCopied] = React.useState(false);
-
-  React.useEffect(
-    function clearCompactCopied() {
-      if (!copied) return;
-      const reset = () => setCopied(false);
-      const id = setTimeout(reset, COPIED_FEEDBACK_MS);
-      return function stopCompactTimer() {
-        clearTimeout(id);
-      };
-    },
-    [copied],
-  );
-
-  const handleCopy = async () => {
-    await Clipboard.setStringAsync(code);
-    setCopied(true);
-  };
-
-  return (
-    <View style={[styles.compactRow, { gap: theme.spacing[8] }]}>
-      <Icon name={IconName.Link} size={15} color="fgMuted" />
-      <Text variant="meta" color="fgMuted" style={styles.compactCode}>
-        {`초대코드 ${code}`}
-      </Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="초대코드 복사"
-        onPress={() => void handleCopy()}
-        hitSlop={8}
-      >
-        <Text variant="badge" color="accentStrong">
-          {copied ? '복사됨' : '복사'}
-        </Text>
-      </Pressable>
-    </View>
-  );
-};
-
-// 솔로(미커플) 초대 배너 — 킷 mk-log:33-45. accent-weak(primaryWeak) 배경 카드 안에
-//   💌 + 헤딩("함께할 사람을 초대해요") + 설명문 + InviteCodeCard(코드+복사). 이모지는 별도 RNText(클리핑 방지).
-const SoloInviteBanner = ({ code }: { code: string }) => {
-  const theme = useTheme();
-  const banner: ViewStyle = {
-    backgroundColor: theme.color.primaryWeak,
-    borderRadius: theme.radius.sheet,
-    padding: theme.spacing[16],
-    gap: theme.spacing[12],
-  };
-  return (
-    <View style={banner}>
-      <View style={[styles.bannerHead, { gap: theme.spacing[8] }]}>
-        <RNText style={styles.bannerEmoji}>💌</RNText>
-        <Text variant="fieldLabel" color="fg" style={styles.bannerHeading}>
-          함께할 사람을 초대해요
-        </Text>
-      </View>
-      <Text variant="bodySm" color="fgWeak">
-        이 코드를 보내면 함께 기록할 수 있어요.
-      </Text>
-      <InviteCodeCard code={code} compact />
-    </View>
-  );
-};
+// 초대코드 복사 토스트 카피(킷 mk-log:94, tone positive). {code}는 배선 시 치환.
+const INVITE_COPIED_TOAST = (code: string) => `초대코드를 복사했어요 · ${code}`;
 
 // 위시 세그 본문 — useWishlist 상태 분기(loading/error/ready→WishlistView). 빈 상태는 WishlistView 내부 담당.
 //   데이터/핸들러는 LogScreen이 소유·주입(presentational). 비주얼은 WishlistView(ui-publisher).
@@ -215,6 +141,9 @@ export const LogScreen = () => {
 
   // ⚠️ 훅은 조건부 호출 불가 → roomId/meId 없을 때도 안전한 값으로 호출하고 렌더에서 분기.
   const { state, refresh } = useRoom({ roomId: roomId ?? '' });
+  // 참여자 블록/제목 파생용 멤버 목록(members-display S5b, list_room_members). 진입 1회(비용 §8, 폴링 0).
+  //   loading/error는 best-effort — 리스트/화면을 막지 않고 참여자 블록만 미렌더(plan §4.1).
+  const { state: membersState } = useRoomMembers({ roomId: roomId ?? '' });
   // #2: 공유 프로필 context — ProfileScreen 변경이 이 화면 헤더/이름 폴백에도 즉시 전파.
   const { state: profileState } = useProfileContext();
   const { renameRoom, loading: renaming, error: renameError } = useRenameRoom();
@@ -416,10 +345,15 @@ export const LogScreen = () => {
   const { room } = state;
   const isCouple = room.memberCount >= 2;
 
-  // 헤더/시트 표시명·placeholder 단일 출처(displayLogName, 결정2 B'). selfNickname=본인 닉(파트너 닉 미사용).
-  const title = displayLogName({
+  // 멤버 목록(members-display S5b) — ready면 실 멤버, 아니면 빈 배열(제목/블록 폴백 회귀).
+  const members = membersState.status === 'ready' ? membersState.members : [];
+
+  // 헤더 표시명 — name 우선(현행), 없으면 멤버-기반 파생(logTitleFromMembers, 킷 mkLogTitle).
+  //   멤버 미로드(빈 배열)면 유틸 내부에서 displayLogName 폴백으로 회귀(회귀 0, plan §4.2).
+  const title = logTitleFromMembers({
     name: room.name,
-    memberCount: room.memberCount,
+    members,
+    meId,
     selfNickname: meNickname,
   });
   // 시트 placeholder = 이름 없을 때의 폴백명(displayLogName name:null). 입력 초기값은 이름 있으면 name·없으면 빈 문자열.
@@ -482,18 +416,12 @@ export const LogScreen = () => {
     }
   };
 
-  // 헤더 아바타 겹침 슬롯(LogTitleButton.avatarSlot로 주입). 데이터(아바타 url·커플 여부)는 여기서 구성.
-  const avatarSlot = (
-    <View style={styles.avatarStack}>
-      <Avatar url={meAvatarUrl} userId={meId} size={HEADER_AVATAR_SIZE} />
-      {isCouple ? (
-        // 파트너 실데이터 미보유 → 익명 아바타(🙂) 겹침(marginLeft -9, 킷 23).
-        <View style={{ marginLeft: -9 }}>
-          <Avatar url={null} userId={null} nickname={null} size={HEADER_AVATAR_SIZE} />
-        </View>
-      ) : null}
-    </View>
-  );
+  // 참여자 블록 "초대" 버튼(members-display S5b, 킷 mk-log:94) — 초대코드 클립보드 복사 + positive 토스트.
+  //   초대코드는 상위(room.inviteCode) 소유. members<5일 때만 블록이 버튼을 렌더(canInvite).
+  const handleInvite = async () => {
+    await Clipboard.setStringAsync(room.inviteCode);
+    showToast({ message: INVITE_COPIED_TOAST(room.inviteCode), tone: 'positive' });
+  };
 
   return (
     <Screen edges={['left', 'right']} style={styles.screen}>
@@ -521,8 +449,9 @@ export const LogScreen = () => {
           accessibilityLabel="뒤로 가기"
           onPress={() => navigation.goBack()}
         />
-        {/* 아바타 겹침 + 로그명 표시(display-only). 이름 변경은 ⋯메뉴 "로그 이름 변경"으로 이전(사용자 요청) — 타이틀 탭 동작 없음. */}
-        <LogTitleButton title={title} avatarSlot={avatarSlot} />
+        {/* 로그명 표시(display-only). 헤더 아바타 겹침은 참여자 블록으로 이동(members-display S5b, plan §4.2).
+            이름 변경은 ⋯메뉴 "로그 이름 변경"으로 이전(사용자 요청) — 타이틀 탭 동작 없음. */}
+        <LogTitleButton title={title} />
         {/* ⋯ 더보기 — 나가기 메뉴 시트 open(LogTitleButton flex:1로 우측 끝 정렬, ui-spec §3.3-1). */}
         <IconButton
           name={IconName.MoreHorizontal}
@@ -574,19 +503,23 @@ export const LogScreen = () => {
             onRetry={() => void refreshWishlist()}
           />
         ) : (
-          // 초대 영역(킷 mk-log:74-90)을 MuklogList 스크롤 헤더로 주입 — 고정이 아니라 리스트와 함께 스크롤돼
-          //   위로 사라진다(사용자 요청). wish 세그엔 미렌더(I1). 비주얼(솔로 배너/커플 컴팩트 행)은 불변.
+          // 참여자 블록(members-display S5b, 킷 mk-log:79-103)을 MuklogList 스크롤 헤더로 주입 — 리스트와 함께 스크롤돼
+          //   위로 사라진다(사용자 요청). wish 세그엔 미렌더(I1). 구 솔로 배너/커플 컴팩트 행/헤더 익명 아바타는 이 블록으로 대체.
+          //   멤버 ready일 때만 렌더(loading/error는 best-effort 미렌더 — 리스트를 막지 않음, plan §4.1).
           <MuklogList
             roomId={roomId}
             meId={meId}
             state={muklogsState}
             refresh={refreshMuklogs}
             header={
-              isCouple ? (
-                <CompactInviteRow code={room.inviteCode} />
-              ) : (
-                <SoloInviteBanner code={room.inviteCode} />
-              )
+              membersState.status === 'ready' ? (
+                <ParticipantBlock
+                  members={membersState.members}
+                  meId={meId}
+                  canInvite={membersState.members.length < 5}
+                  onInvite={() => void handleInvite()}
+                />
+              ) : null
             }
           />
         )}
@@ -639,13 +572,6 @@ const styles = StyleSheet.create({
   center: { textAlign: 'center' },
   // 킷 mk-log:18 — paddingBottom 6, 좌우는 인라인(8/12). 뒤로가기↔본문 간격은 LogTitleButton marginLeft.
   header: { flexDirection: 'row', alignItems: 'center', paddingBottom: 6 },
-  avatarStack: { flexDirection: 'row', alignItems: 'center' },
-  compactRow: { flexDirection: 'row', alignItems: 'center' },
-  compactCode: { flex: 1 },
-  // 솔로 배너(킷 mk-log:36-42) — 헤딩 행(💌+텍스트), 이모지는 클리핑 헤드룸 위해 lineHeight 지정.
-  bannerHead: { flexDirection: 'row', alignItems: 'center' },
-  bannerEmoji: { fontSize: 20, lineHeight: 26 },
-  bannerHeading: { flex: 1 },
   // 세그 컨테이너(킷 mk-log:57 패딩 "6px 20px 2px") + 본문 영역(남은 높이 채움).
   segWrap: { paddingTop: 6, paddingHorizontal: 20, paddingBottom: 2 },
   body: { flex: 1 },
