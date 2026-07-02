@@ -279,3 +279,4 @@ Profile (헤더 진입)
   - **Realtime**: 다수 로그 동시 구독 비용/방식 — 콘텐츠 스프린트 시 검토(비용 가드레일).
   - **나가기 진입점**: **확정 — Profile 나가기 버튼 제거**, 로그별 나가기는 차기 LogScreen 내부(`leave_room(p_room_id)` 재설계 동반)로 이전. `leave_room()` RPC는 dormant 유지.
   - 기존 `room-modes` 산출물(mode 컬럼/모드별 정원/솔로 조인 거부)의 정원 2 통일·솔로 조인 허용 마이그레이션 — **`multi-log-home`에서 처리 완료**(`20260610150000_multi_log_home.sql`). `rooms.mode`/`ROOM_CAPACITY.solo`는 stale·미사용으로 잔존(무해).
+- **앱 버전 게이트 운영 절차(`app-version-gate` 2026-07-02)**: `app_config`(싱글턴) 값은 **Supabase SQL/대시보드로만 갱신**한다 — 앱 내 쓰기 경로 없음(select만 anon/authenticated, insert/update/delete 정책 부재 → service role만). **`min_supported_version` 상향은 그 미만 전 사용자를 즉시 차단**하므로 최고 위험 작업. 안전판: **dormant 시드**(min `0.0.0`=전원 미차단·latest `1.0.0`=권유 미발화)로 출시하고, 판정 유틸이 **형불량·결측·조회실패를 fail-open**(미차단)으로 흡수. **배포 순서**: ① 새 빌드 스토어 심사 통과 → ② `latest_version` 상향(권유 모달만 노출, 비차단) → ③ 충분한 유예 후에만 `min_supported_version` 상향(강제 차단). 스토어 URL(`store_url_ios/android`)은 출시 후 채우며, 빈 값이면 차단화면 버튼이 숨겨진다.

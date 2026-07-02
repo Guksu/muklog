@@ -60,7 +60,7 @@
 - 테스트 유의미(load-bearing): compareVersion 수치비교·resolveVersionGate/훅 fail-open이 결함 시 red, AppVersionGate 렌더분기·Linking null-guard가 배선 결함 시 red.
 
 ## 6. 경미 관찰 (비차단)
-1. **App.tsx 배선 회귀 테스트 부재** — 1차 패스에서 권장한 "App 트리에 AppVersionGate 존재" 스모크 테스트가 추가되지 않음(App.spec 부재). 배선 자체는 정확하나(App.tsx:82-84), 향후 이 래핑이 실수로 제거돼도 테스트로 안 걸림. App-level 스모크 1개 추가 권장(T7 배선 인수조건 회귀 방지).
+1. ~~**App.tsx 배선 회귀 테스트 부재**~~ **[해소됨]** — 권장한 배선 가드 테스트를 developer가 추가함. 신규 `App.spec.tsx`가 무거운 leaf(폰트·스플래시·프로바이더·게이트·AuthGate)를 스텁하고 `within(gate).getByTestId('auth-gate')`로 **AppVersionGate가 AuthGate를 감싸 트리에 마운트되는지** 검증 — 래핑 제거 시 red. 유의미한 회귀 가드로 확인(App.spec 1 suite green). T7 배선 사각지대 닫힘.
 2. **ProfileScreen null→미렌더 분기 미검증(화면 레벨)** — 코드 guard(`appVersion ? ... : null`)는 명확하고 `getCurrentAppVersion` null은 모듈 레벨에서 검증됨. 화면 레벨 null 케이스 테스트는 없음(무해).
 3. **resolveVersionGate latest null → unknown(ok 아님)** — 다운스트림 동일(둘 다 none/fail-open)이고 plan+테스트와 일치하는 의도된 동작. 라벨 착오 우려만 기록.
 4. **currentAppVersion 파일명/심볼 접두 불일치** — 파일 `currentAppVersion` vs export `getCurrentAppVersion`(get- 접두). 폴더=개념 일치라 사소, 관례상 트리비얼.
@@ -73,4 +73,4 @@
 > 전부 "통과" 아닌 "이월"로 분류. plan §9 라이브 검증 항목과 일치.
 
 ## 결론
-버전 비교 엣지(semver·결측·형불량)·조회 실패 fail-open 전 경로·RLS 설계·강제/권유 분기·버전당 1회 dismiss·비용 가드레일·컨벤션·TDD·**1차 블로커(App.tsx 미배선) 해소** 전 항목 **통과**. 종료 게이트(tsc 0 · jest 1565 green) 직접 실행 확인. 블로커 없음 — 스프린트 "로직 완료" 처리 가능. 경미 관찰 4건은 비차단(회귀 테스트 보강 권장), 미검증 4건은 라이브/디바이스 스모크로 적절히 이월.
+버전 비교 엣지(semver·결측·형불량)·조회 실패 fail-open 전 경로·RLS 설계·강제/권유 분기·버전당 1회 dismiss·비용 가드레일·컨벤션·TDD·**1차 블로커(App.tsx 미배선) 해소** 전 항목 **통과**. 종료 게이트(tsc 0 · jest 1565 green) 직접 실행 확인. 블로커 없음 — 스프린트 "로직 완료" 처리 가능. 경미 관찰 중 #1(App.tsx 배선 회귀 테스트)은 developer가 `App.spec.tsx` 추가로 **해소**, 나머지 3건은 비차단 트리비얼, 미검증 4건은 라이브/디바이스 스모크로 적절히 이월.
