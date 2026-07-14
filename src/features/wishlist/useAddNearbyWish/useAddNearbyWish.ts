@@ -37,9 +37,10 @@ export type NearbyWishChoosing = {
 
 /**
  * 주변 음식점 카드의 "위시에 담기" 흐름을 오케스트레이션한다.
+ * @param onAdded 담기 성공(insert 완료) 직후 콜백 — map-wish-pins에서 위시 핀 즉시 refresh 배선(선택).
  * @returns requestAdd(액션 진입)·chooseLog(시트 선택)·dismiss(시트 취소)·choosing(시트 상태)·submitting(로딩 가드)
  */
-export const useAddNearbyWish = () => {
+export const useAddNearbyWish = ({ onAdded }: { onAdded?: () => void } = {}) => {
   const { state } = useMyLogsContext();
   const { showToast } = useToastController();
   const { addWishlist } = useAddWishlist();
@@ -64,6 +65,7 @@ export const useAddNearbyWish = () => {
       }
       await addWishlist({ input: nearbyToWishlistInput({ item, roomId }) });
       showToast({ message: NEARBY_WISH_COPY.success, tone: 'positive' });
+      onAdded?.(); // map-wish-pins: 담기 성공 직후 위시 핀 즉시 refresh(같은 화면 반영). 미전달이면 no-op(스프린트1 회귀 0).
     } catch (err) {
       showToast({ message: mapWishlistError({ error: err }), tone: 'neutral' });
     } finally {

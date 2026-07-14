@@ -2,7 +2,15 @@
 // WebView onMessage 원문(nativeEvent.data) → MapInboundMessage 파싱 (plan §3.5·§7 경계면).
 //   생산자: 지도뷰 WebView postMessage(READY/MARKER_TAP/ERROR). 소비자: 지도뷰/ MapTabScreen 디스패치.
 //   비JSON·미지 타입·필드 누락은 조용히 null로 흡수한다(throw 금지 — WebView 잡음 메시지 방어).
-import { MapInboundType, type Coords, type MapInboundMessage } from '../types';
+import { MapInboundType, MapPinKind, type Coords, type MapInboundMessage } from '../types';
+
+/** 문자열이 3종 핀 kind('saved'|'nearby'|'wish') 중 하나인지 검사(미지 값은 잡음으로 흡수). */
+const asPinKind = ({ value }: { value: unknown }): MapPinKind | null => {
+  if (value === MapPinKind.Saved || value === MapPinKind.Nearby || value === MapPinKind.Wish) {
+    return value;
+  }
+  return null;
+};
 
 /** 임의 값이 { lat:number, lng:number } 형태인지 검사한다(잡음 메시지 방어). */
 const asCoords = ({ value }: { value: unknown }): Coords | null => {
@@ -35,10 +43,11 @@ export const parseMapMessage = ({ raw }: { raw: string }): MapInboundMessage | n
   }
 
   if (message.type === MapInboundType.MarkerTap) {
-    // slice2: saved 필수 boolean(HTML이 항상 동봉). 누락/비boolean은 null로 흡수.
+    // map-wish-pins: kind 필수(HTML이 항상 동봉). 누락/미지 kind는 null로 흡수(카드 오분기 방어).
     if (typeof message.id !== 'string') return null;
-    if (typeof message.saved !== 'boolean') return null;
-    return { type: MapInboundType.MarkerTap, id: message.id, saved: message.saved };
+    const kind = asPinKind({ value: message.kind });
+    if (!kind) return null;
+    return { type: MapInboundType.MarkerTap, id: message.id, kind };
   }
 
   if (message.type === MapInboundType.Error) {

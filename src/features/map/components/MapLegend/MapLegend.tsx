@@ -12,9 +12,12 @@ import { Text } from '@/components';
 import { useTheme } from '@/theme';
 import type { ColorToken } from '@/theme';
 
-// 범례 2종(킷 mk-home:282-283) — enum-style 상수로 고정.
+// 범례 3종 — 킷 mk-home:282-283은 우리 맛집·주변 음식점 2종뿐(위시 핀은 킷에 없음, map-wish-pins 신설).
+//   위시 항목은 킷 위시 보이스("가보고 싶은 곳", mk-extra:195)를 주변/맛집과 평행한 짧은 명사구로 축약한 "가고 싶은 곳".
+//   dot 색은 mapWishPin(앰버 #FFB23E) — 핀 색과 단일 출처. enum-style 상수로 고정.
 const LEGEND_ITEMS: ReadonlyArray<{ dotColor: ColorToken; label: string }> = [
   { dotColor: 'primary', label: '우리 맛집' },
+  { dotColor: 'mapWishPin', label: '가고 싶은 곳' },
   { dotColor: 'mapNearbyPin', label: '주변 음식점' },
 ];
 

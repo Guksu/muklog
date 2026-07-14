@@ -2,6 +2,7 @@
 //   비주얼 전담(데이터는 props로만). 상태 오케스트레이션은 MapTabScreen(developer)에서 조립.
 export { SelectedSpotCard, type SelectedSpotCardProps } from './SelectedSpotCard';
 export { NearbySpotCard, type NearbySpotCardProps } from './NearbySpotCard';
+export { WishSpotCard, type WishSpotCardProps } from './WishSpotCard';
 export {
   LogPickerSheet,
   type LogPickerItem,

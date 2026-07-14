@@ -2,7 +2,7 @@
 // WebView onMessage 원문 → MapInboundMessage 파싱 단위 테스트 (plan §3.5·§5-1 onMessage 핸들러).
 //   READY / MARKER_TAP(id) / ERROR(reason) 파싱 / 비JSON·미지 타입·필드 누락은 조용히 null(throw 안 함).
 import { parseMapMessage } from './parseMapMessage';
-import { MapInboundType } from '../types';
+import { MapInboundType, MapPinKind } from '../types';
 
 describe('parseMapMessage', () => {
   it('READY 메시지를 파싱한다', () => {
@@ -11,23 +11,33 @@ describe('parseMapMessage', () => {
     });
   });
 
-  it('MARKER_TAP(id, saved:true) 메시지를 파싱한다', () => {
+  it('MARKER_TAP(id, kind:saved) 메시지를 파싱한다', () => {
     expect(
-      parseMapMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', saved: true }) }),
+      parseMapMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', kind: 'saved' }) }),
     ).toEqual({
       type: MapInboundType.MarkerTap,
       id: 'm9',
-      saved: true,
+      kind: MapPinKind.Saved,
     });
   });
 
-  it('MARKER_TAP(id, saved:false) 주변 핀 탭을 파싱한다', () => {
+  it('MARKER_TAP(id, kind:nearby) 주변 핀 탭을 파싱한다', () => {
     expect(
-      parseMapMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k1', saved: false }) }),
+      parseMapMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k1', kind: 'nearby' }) }),
     ).toEqual({
       type: MapInboundType.MarkerTap,
       id: 'k1',
-      saved: false,
+      kind: MapPinKind.Nearby,
+    });
+  });
+
+  it('MARKER_TAP(id, kind:wish) 위시 핀 탭을 파싱한다', () => {
+    expect(
+      parseMapMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'w1', kind: 'wish' }) }),
+    ).toEqual({
+      type: MapInboundType.MarkerTap,
+      id: 'w1',
+      kind: MapPinKind.Wish,
     });
   });
 
@@ -47,13 +57,13 @@ describe('parseMapMessage', () => {
   });
 
   it('MARKER_TAP에 id가 없으면 null을 반환한다(필드 누락 방어)', () => {
-    expect(parseMapMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', saved: true }) })).toBeNull();
+    expect(parseMapMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', kind: 'saved' }) })).toBeNull();
   });
 
-  it('MARKER_TAP에 saved가 없거나 boolean이 아니면 null을 반환한다(HTML이 항상 동봉)', () => {
+  it('MARKER_TAP에 kind가 없거나 미지 값이면 null을 반환한다(HTML이 항상 동봉, 카드 오분기 방어)', () => {
     expect(parseMapMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9' }) })).toBeNull();
     expect(
-      parseMapMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', saved: 'yes' }) }),
+      parseMapMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', kind: 'bogus' }) }),
     ).toBeNull();
   });
 

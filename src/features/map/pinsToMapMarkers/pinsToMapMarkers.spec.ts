@@ -4,7 +4,7 @@
 import { MUKLOG_CATEGORIES } from '@/features/muklog/categories';
 
 import { pinsToMapMarkers, PIN_FALLBACK_EMOJI } from './pinsToMapMarkers';
-import { type MuklogPin } from '../types';
+import { MapPinKind, type MuklogPin } from '../types';
 
 const pin = (over?: Partial<MuklogPin>): MuklogPin => ({
   muklogId: 'm1',
@@ -19,10 +19,10 @@ const pin = (over?: Partial<MuklogPin>): MuklogPin => ({
 });
 
 describe('pinsToMapMarkers', () => {
-  it('각 핀을 {id,lat,lng,emoji,saved:true} 마커로 변환한다 (id=muklogId)', () => {
+  it('각 핀을 {id,lat,lng,emoji,kind:saved} 마커로 변환한다 (id=muklogId)', () => {
     const markers = pinsToMapMarkers({ pins: [pin({ muklogId: 'mX', lat: 1, lng: 2 })] });
     expect(markers).toEqual([
-      { id: 'mX', lat: 1, lng: 2, emoji: MUKLOG_CATEGORIES.pasta.emoji, saved: true },
+      { id: 'mX', lat: 1, lng: 2, emoji: MUKLOG_CATEGORIES.pasta.emoji, kind: MapPinKind.Saved },
     ]);
   });
 

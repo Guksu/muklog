@@ -65,6 +65,12 @@ const palette = {
   //   기존 셸이 fgMuted(#9B9B9B 쿨뉴트럴)로 근사했으나 킷은 웜그레이라 톤 불일치 → 전용 토큰으로 정합(map-tab 슬라이스 1).
   //   슬라이스 1엔 주변 음식점 핀이 없어 범례 dot에만 쓰이나, 슬라이스 2(map-tab-nearby)의 주변 핀 색을 미리 고정한다.
   mapNearbyPin:'#B6ABA0',
+  // 지도 "가고 싶은 곳"(위시) 핀/범례 dot — 킷 warm 앰버 #FFB23E(= starFill, mk-ui Stars 채움색).
+  //   킷 MapScreen 범례는 우리 맛집(blue)·주변 음식점(gray) 2종뿐이라 위시 핀 전용색이 킷에 없음 → 패턴 조합(map-wish-pins).
+  //   saved(#3366FF blue)·nearby(#B6ABA0 warm gray)와 3-way로 명확히 구분되는 제3의 웜 포인트색으로 앰버 채택
+  //   ("가보고 싶은 곳"=따뜻한 지향, 킷 위시 톤 정합). 값은 starFill과 같으나 의미가 달라 전용 토큰으로 분리(calendarSun 선례).
+  //   WebView(mapHtml)는 격리 HTML이라 이 hex(#FFB23E)를 .mk-pin--wish에 직박음 — RN 범례 dot와 값 일치.
+  mapWishPin:'#FFB23E',
   // 지도 현재위치 FAB 아이콘색 — 킷 mk-home.jsx:270·298 locate 전용 블루 #3B82F6(SSOT, --mk-* 변수 아닌 인라인 실값).
   //   브랜드 primary(#3366FF)와 미세 차이지만 킷이 verbatim으로 #3B82F6를 쓰므로(킷=디자인 기준) 전용 토큰으로 정합.
   //   me 마커(파란 점)도 킷에서 같은 계열이나 그 비주얼은 WebView 격리 영역(mapHtml, developer)이라 별도.
@@ -126,6 +132,8 @@ const lightColor = {
   negativeWeak: 'rgba(229,72,77,0.10)',
   // 지도 "주변 음식점" 핀/범례 dot 웜그레이(킷 #B6ABA0). 라이트/다크 공통(지도 위 마커라 톤 고정).
   mapNearbyPin: palette.mapNearbyPin,
+  // 지도 "가고 싶은 곳"(위시) 핀/범례 dot 앰버(#FFB23E). 라이트/다크 공통(지도 위 마커라 톤 고정, mapNearbyPin 동일 패턴).
+  mapWishPin: palette.mapWishPin,
   // 지도 현재위치 FAB 아이콘 블루(킷 #3B82F6). 라이트/다크 공통(흰 surface FAB 위 고정 톤).
   mapLocate: palette.mapLocate,
   // 캘린더 시트 요일 헤더 색(킷 mk-extra:100). 일=빨강·토=파랑. 지도 위 마커처럼 톤 고정이 아니라

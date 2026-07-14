@@ -5,7 +5,7 @@
 //   slice1은 saved=true 고정(모두 "우리 맛집") — 주변 음식점 핀은 슬라이스 2.
 import { categoryEmoji } from '@/features/muklog/categories';
 
-import { type MapMarker, type MuklogPin } from '../types';
+import { MapPinKind, type MapMarker, type MuklogPin } from '../types';
 
 /** category 미매핑/null 시 폴백 마커 이모지(킷 Pin 기본 음식 톤). */
 export const PIN_FALLBACK_EMOJI = '🍽️';
@@ -24,6 +24,6 @@ export const pinsToMapMarkers = ({ pins }: { pins: MuklogPin[] }): MapMarker[] =
       lat: p.lat,
       lng: p.lng,
       emoji: emoji === '' ? PIN_FALLBACK_EMOJI : emoji,
-      saved: true,
+      kind: MapPinKind.Saved,
     };
   });

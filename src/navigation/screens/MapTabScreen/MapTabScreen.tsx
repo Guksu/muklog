@@ -11,6 +11,7 @@
 //   ⚠️ 비주얼은 ui-publisher 컴포넌트로만(임의 변경 금지). 상태→tone/message 판단만 여기서 한다.
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 import {
   LogPickerSheet,
@@ -21,6 +22,7 @@ import {
   MapWebView,
   NearbySpotCard,
   SelectedSpotCard,
+  WishSpotCard,
   type LogPickerItem,
   type MapWebViewHandle,
   type MapWebViewMessageEvent,
@@ -39,10 +41,18 @@ import { mergeMapMarkers } from '@/features/map/mergeMapMarkers';
 import { nearbyCategoryEmoji } from '@/features/map/nearbyCategoryEmoji';
 import { parseMapMessage } from '@/features/map/parseMapMessage';
 import { pinsToMapMarkers } from '@/features/map/pinsToMapMarkers';
-import { LocationPermissionStatus, MapInboundType, type MuklogPin } from '@/features/map/types';
+import {
+  LocationPermissionStatus,
+  MapInboundType,
+  MapPinKind,
+  type MuklogPin,
+  type WishPin,
+} from '@/features/map/types';
 import { useLocationPermission } from '@/features/map/useLocationPermission';
 import { useMuklogPins } from '@/features/map/useMuklogPins';
 import { useNearbyPlaces } from '@/features/map/useNearbyPlaces';
+import { useWishPins } from '@/features/map/useWishPins';
+import { wishPinEmoji, wishToMapMarkers } from '@/features/map/wishToMapMarkers';
 import { displayLogName } from '@/features/room/logName';
 import { useAddNearbyWish } from '@/features/wishlist';
 import { env } from '@/lib/env';
@@ -62,12 +72,15 @@ export const MapTabScreen = () => {
   const { state, refresh } = useMuklogPins();
   const permission = useLocationPermission();
   const nearby = useNearbyPlaces();
+  // map-wish-pins: 내 모든 로그의 좌표 있는 위시 핀(크로스-로그, RLS 스코프). 마운트 1회 + 포커스/add-후 refresh.
+  const wishPins = useWishPins();
   // map-nearby-wish: 주변 카드 "위시에 담기" 오케스트레이션(로그 0/1/2+ 분기·중복 가드·토스트는 훅 내부).
   //   화면은 액션→requestAdd·시트(choosing) 렌더·선택→chooseLog 배선만 하고 비주얼은 컴포넌트가 소유(임의 변경 금지).
-  const nearbyWish = useAddNearbyWish();
+  //   onAdded: 담기 성공 직후 위시 핀 즉시 refresh(같은 화면 반영 — map-wish-pins §4.3).
+  const nearbyWish = useAddNearbyWish({ onAdded: wishPins.refresh });
 
-  // 선택 상태는 {id, saved} 쌍 — saved(muklogId) vs nearby(kakaoPlaceId) id 충돌 방지(plan §4·§6).
-  const [selected, setSelected] = useState<{ id: string; saved: boolean } | null>(null);
+  // 선택 상태는 {id, kind} 쌍 — kind(saved|nearby|wish)로 id 네임스페이스 충돌 방지 + 카드 3분기(map-wish-pins §3.4).
+  const [selected, setSelected] = useState<{ id: string; kind: MapPinKind } | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapErrored, setMapErrored] = useState(false);
   const webviewRef = useRef<MapWebViewHandle>(null);
@@ -77,9 +90,12 @@ export const MapTabScreen = () => {
 
   // 현재 핀 목록(ready일 때만, 아니면 빈 배열 — 지도/INIT는 항상 유효하게 유지).
   const pins: MuklogPin[] = state.status === 'ready' ? state.pins : [];
-  // saved 핀(내 맛집) + nearby 핀(주변 음식점) 머지(좌표 근접 dedup) → 지도뷰 전체 마커(plan §3.4·§3.6).
+  // 위시 핀 목록(ready일 때만 — 조회 실패/로딩이어도 지도·먹로그·주변은 정상, 위시 핀만 생략 best-effort §4.2).
+  const wishPinsList: WishPin[] = wishPins.state.status === 'ready' ? wishPins.state.pins : [];
+  // saved(내 맛집) + wish(위시) + nearby(주변) 3-way 머지(좌표 근접 dedup, 우선순위 saved>wish>nearby) → 지도뷰 전체 마커.
   const savedMarkers = pinsToMapMarkers({ pins });
-  const markers = mergeMapMarkers({ saved: savedMarkers, nearby: nearby.markers });
+  const wishMarkers = wishToMapMarkers({ pins: wishPinsList });
+  const markers = mergeMapMarkers({ saved: savedMarkers, wish: wishMarkers, nearby: nearby.markers });
   const center = initialRegion({ coords: permission.coords, pins });
   // HTML은 1회 생성(키 주입). INIT/SET_MARKERS는 injectJavaScript로 주입(SDK 재로드 없음).
   const html = mapHtml({ jsKey: env.KAKAO_JS_KEY });
@@ -93,6 +109,16 @@ export const MapTabScreen = () => {
     },
     [permission.status],
   );
+
+  // map-wish-pins: 지도 탭 포커스마다 위시 핀 재조회(LogScreen 위시 추가/삭제 후 복귀 반영). 폴링 아님 — 포커스 단위.
+  //   useFocusEffect는 콜백 참조 안정성이 필수 → ref + 빈 deps useCallback(컨벤션 허용 예외, LogScreen 선례).
+  //   첫 포커스는 useWishPins 마운트 조회와 중복이나 refresh가 loading으로 되돌리지 않아 무해(§4.3).
+  const wishRefreshRef = useRef(wishPins.refresh);
+  wishRefreshRef.current = wishPins.refresh;
+  const handleWishFocus = React.useCallback(function refreshWishOnFocus() {
+    void wishRefreshRef.current();
+  }, []);
+  useFocusEffect(handleWishFocus);
 
   const sendInit = () => {
     // INIT center가 이미 현위치면(coords 존재) 자동 RECENTER 불필요 — 1회 가드를 소진한 것으로 본다(#4).
@@ -127,8 +153,8 @@ export const MapTabScreen = () => {
       return;
     }
     if (message.type === MapInboundType.MarkerTap) {
-      // saved 플래그로 카드 분기(id 단독 lookup 금지 — 좌표 충돌 방어).
-      setSelected({ id: message.id, saved: message.saved });
+      // kind로 카드 분기(id 단독 lookup 금지 — id 네임스페이스 충돌 방어, map-wish-pins §6).
+      setSelected({ id: message.id, kind: message.kind });
       return;
     }
     if (message.type === MapInboundType.BoundsChanged) {
@@ -148,7 +174,7 @@ export const MapTabScreen = () => {
 
   // nearby 마커 변경(또는 saved 핀 변경) 시 SET_MARKERS 재주입 — READY 이후에만(SDK 준비 전 무의미).
   //   slice1 경로(SET_MARKERS) 재사용 — 신규 outbound 메시지 불필요(plan §3.6). markers 키로 발화.
-  const markersKey = markers.map((m) => `${m.id}:${m.saved ? 1 : 0}`).join('|');
+  const markersKey = markers.map((m) => `${m.id}:${m.kind}`).join('|');
   useEffect(
     function reinjectMarkersOnChange() {
       if (!mapReady) return;
@@ -168,16 +194,22 @@ export const MapTabScreen = () => {
     [selectedId, mapReady],
   );
 
-  // map-pin-select(T7): 선택된 nearby 핀이 목록에서 사라지면(viewport 이탈/dedup) selected 정리 →
-  //   NearbySpotCard 자동 닫힘과 SET_SELECTED(null)를 일관되게 맞춘다. saved 핀은 항상 렌더라 해당 없음.
+  // map-pin-select(T7)+map-wish-pins: 선택된 nearby/wish 핀이 목록에서 사라지면(viewport 이탈·dedup·삭제 refresh)
+  //   selected 정리 → 카드 자동 닫힘 + SET_SELECTED(null) 일관. saved 핀은 항상 렌더라 해당 없음.
   const nearbyItems = nearby.items;
   useEffect(
-    function clearSelectionWhenNearbyGone() {
-      if (!selected || selected.saved) return;
-      const stillPresent = nearbyItems.some((it) => it.kakaoPlaceId === selected.id);
-      if (!stillPresent) setSelected(null);
+    function clearSelectionWhenPinGone() {
+      if (!selected) return;
+      if (selected.kind === MapPinKind.Nearby) {
+        const present = nearbyItems.some((it) => it.kakaoPlaceId === selected.id);
+        if (!present) setSelected(null);
+      } else if (selected.kind === MapPinKind.Wish) {
+        const present = wishPinsList.some((w) => w.id === selected.id);
+        if (!present) setSelected(null);
+      }
     },
-    [selected, nearbyItems],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- wishPinsList는 매 렌더 새 참조라 deps 제외(effect 본문은 setSelected(null) 가드로 루프 없음).
+    [selected, nearbyItems, wishPins.state],
   );
 
   // #4: READY 이후 현위치(coords)가 처음 도착하면 1회 자동 RECENTER(서울 폴백 고정 해제).
@@ -202,12 +234,18 @@ export const MapTabScreen = () => {
     sendInit();
   };
 
-  // saved 핀 선택 → SelectedSpotCard. nearby 핀 선택 → NearbySpotCard(item lookup + 거리 포맷).
+  // kind 3분기: saved → SelectedSpotCard / nearby → NearbySpotCard / wish → WishSpotCard(각 컬렉션 lookup).
   const selectedPin =
-    selected && selected.saved ? pins.find((p) => p.muklogId === selected.id) ?? null : null;
+    selected?.kind === MapPinKind.Saved
+      ? pins.find((p) => p.muklogId === selected.id) ?? null
+      : null;
   const selectedNearby =
-    selected && !selected.saved
+    selected?.kind === MapPinKind.Nearby
       ? nearby.items.find((it) => it.kakaoPlaceId === selected.id) ?? null
+      : null;
+  const selectedWish =
+    selected?.kind === MapPinKind.Wish
+      ? wishPinsList.find((w) => w.id === selected.id) ?? null
       : null;
   // 로그 2+개 담기 분기 시트 항목 — choosing.logs(MyLog[])를 LogPickerItem으로 매핑.
   //   label은 displayLogName으로 산출(퍼블리셔 미소유). selfNickname은 미주입(null) — 표시명 폴백은
@@ -303,6 +341,17 @@ export const MapTabScreen = () => {
           distanceText={formatDistance({ distance: selectedNearby.distance })}
           onAddWish={() => nearbyWish.requestAdd({ item: selectedNearby })}
           adding={nearbyWish.submitting}
+        />
+      ) : null}
+
+      {/* 위시 스팟 카드 — wish 핀 탭 시 하단 도킹(이름·카테고리·area, 별점/heart/거리/액션 없음).
+          coverEmoji는 핀(wishToMapMarkers)과 동일한 wishPinEmoji로 산출·주입(카드↔핀 단일 출처, plan §7-6). */}
+      {selectedWish ? (
+        <WishSpotCard
+          placeName={selectedWish.placeName}
+          category={selectedWish.category}
+          coverEmoji={wishPinEmoji({ category: selectedWish.category })}
+          area={selectedWish.area}
         />
       ) : null}
 

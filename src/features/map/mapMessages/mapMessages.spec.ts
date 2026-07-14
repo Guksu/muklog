@@ -8,10 +8,10 @@ import {
   buildSetMarkersScript,
   buildSetSelectedScript,
 } from './mapMessages';
-import { type MapMarker, type Region } from '../types';
+import { MapPinKind, type MapMarker, type Region } from '../types';
 
 const center: Region = { lat: 37.5, lng: 127.0, zoom: 5 };
-const marker: MapMarker = { id: 'm1', lat: 37.5, lng: 127.0, emoji: '🍝', saved: true };
+const marker: MapMarker = { id: 'm1', lat: 37.5, lng: 127.0, emoji: '🍝', kind: MapPinKind.Saved };
 
 describe('buildInitScript', () => {
   it('INIT 페이로드(center/markers/me)를 JSON으로 담은 핸들러 호출 스크립트를 만든다', () => {

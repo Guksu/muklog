@@ -44,7 +44,7 @@ describe('useNearbyPlaces', () => {
     expect(searchMock).toHaveBeenCalledTimes(1);
     expect(result.current.status).toBe('ready');
     expect(result.current.markers.map((m) => m.id)).toEqual(['1']);
-    expect(result.current.markers[0].saved).toBe(false);
+    expect(result.current.markers[0].kind).toBe('nearby');
   });
 
   // 첫 조회 즉시성 (nearby-first-load) — 첫 조회는 0틱 leading-edge, 2회차+는 500ms 트레일링.
@@ -57,7 +57,7 @@ describe('useNearbyPlaces', () => {
     expect(searchMock).toHaveBeenCalledTimes(1);
     expect(result.current.status).toBe('ready');
     expect(result.current.markers.map((m) => m.id)).toEqual(['1']);
-    expect(result.current.markers[0].saved).toBe(false);
+    expect(result.current.markers[0].kind).toBe('nearby');
   });
 
   it('T1-b 첫 조회는 동기 즉시가 아니라 0틱 — 타이머 미경과 시 아직 미호출', async () => {

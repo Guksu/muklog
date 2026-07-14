@@ -197,4 +197,47 @@ describe('useAddNearbyWish', () => {
 
     expect(mockAddWishlist).toHaveBeenCalledTimes(1);
   });
+
+  // ── map-wish-pins: 담기 성공 후 onAdded 콜백(위시 핀 즉시 refresh 배선 지점) ──
+  it('담기 성공 후 onAdded 콜백을 호출한다 (map-wish-pins add-후 refresh)', async () => {
+    setLogs([{ roomId: 'only', name: '단독', memberCount: 1 }]);
+    const onAdded = jest.fn();
+    const { result } = renderHook(() => useAddNearbyWish({ onAdded }));
+
+    await act(async () => {
+      result.current.requestAdd({ item });
+    });
+
+    await waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
+  });
+
+  it('중복이면 onAdded를 호출하지 않는다(insert 미발생 → refresh 불필요)', async () => {
+    setLogs([{ roomId: 'only', name: '단독', memberCount: 1 }]);
+    existsMock.mockResolvedValue(true);
+    const onAdded = jest.fn();
+    const { result } = renderHook(() => useAddNearbyWish({ onAdded }));
+
+    await act(async () => {
+      result.current.requestAdd({ item });
+    });
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith({ message: NEARBY_WISH_COPY.duplicate, tone: 'neutral' }),
+    );
+    expect(onAdded).not.toHaveBeenCalled();
+  });
+
+  it('실패면 onAdded를 호출하지 않는다', async () => {
+    setLogs([{ roomId: 'only', name: '단독', memberCount: 1 }]);
+    mockAddWishlist.mockRejectedValue(new Error('boom'));
+    const onAdded = jest.fn();
+    const { result } = renderHook(() => useAddNearbyWish({ onAdded }));
+
+    await act(async () => {
+      result.current.requestAdd({ item });
+    });
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalled());
+    expect(onAdded).not.toHaveBeenCalled();
+  });
 });

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>작업 보고서 — map-wish-pins (위시 핀 지도 표시)</title>
+<style>
+  :root {
+    --ink: #1c1c1c; --sub: #595959; --line: #e3e3e3; --bg: #f6f6f4; --card: #ffffff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.6; font-size: 15px;
+    padding: 40px 16px;
+  }
+  .page { max-width: 860px; margin: 0 auto; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 44px 48px; }
+  header { border-bottom: 2px solid var(--ink); padding-bottom: 18px; margin-bottom: 26px; }
+  .doc-label { font-size: 12px; letter-spacing: .14em; color: var(--sub); text-transform: uppercase; }
+  h1 { font-size: 24px; font-weight: 700; margin: 6px 0 12px; }
+  .status { display: inline-block; font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 4px; border: 1px solid; }
+  .status[data-status="done"]    { color: #1a7f37; background: #ebf7ee; border-color: #9fd6ad; }
+  .status[data-status="partial"] { color: #9a6700; background: #fff8e5; border-color: #e6c86e; }
+  .status[data-status="stopped"] { color: #b42318; background: #fdf0ee; border-color: #f0a9a0; }
+  table.meta { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13.5px; }
+  table.meta th { text-align: left; color: var(--sub); font-weight: 600; width: 110px; padding: 3px 0; vertical-align: top; }
+  table.meta td { padding: 3px 0; }
+  h2 { font-size: 16.5px; font-weight: 700; margin: 34px 0 12px; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+  p.summary { color: var(--ink); }
+  table.grid { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 4px; }
+  table.grid th { background: #f2f2ef; text-align: left; padding: 8px 12px; border: 1px solid var(--line); font-weight: 600; }
+  table.grid td { padding: 8px 12px; border: 1px solid var(--line); vertical-align: top; }
+  .ok { color: #1a7f37; font-weight: 700; }
+  .fail { color: #b42318; font-weight: 700; }
+  .item { border: 1px solid var(--line); border-left: 4px solid #8a8a8a; border-radius: 6px; padding: 14px 16px; margin: 10px 0; background: #fcfcfb; }
+  .review .item { border-left-color: #d4a72c; background: #fffdf5; }
+  .followup .item { border-left-color: #4477aa; background: #f8fbfd; }
+  .item b.title { display: block; font-size: 14.5px; margin-bottom: 4px; }
+  .item .why { color: var(--sub); font-size: 13.5px; }
+  .none { color: var(--sub); font-size: 14px; }
+  footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--sub); font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+  code { font-family: ui-monospace, 'D2Coding', Consolas, monospace; font-size: .92em; background: #f2f2ef; padding: 1px 5px; border-radius: 3px; }
+  @media print { body { background: #fff; padding: 0; } .page { border: none; padding: 24px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="doc-label">Work Report · muklog</div>
+    <h1>map-wish-pins — 위시 핀 지도 표시 (로드맵 루프 2/6)</h1>
+    <span class="status" data-status="done">완료</span>
+    <table class="meta">
+      <tr><th>날짜</th><td>2026-07-14</td></tr>
+      <tr><th>작성</th><td>sprint-orchestrator (planner → ui-publisher → developer → qa-visual ∥ qa-logic)</td></tr>
+      <tr><th>브랜치</th><td><code>main</code> (커밋은 사용자 직접 수행)</td></tr>
+      <tr><th>워크로그</th><td><code>docs/sprint/sprint-20260714-map-wish-pins/</code> — 정본 기록 (plan / ui-spec / dev-notes / qa-report ×2)</td></tr>
+    </table>
+  </header>
+
+  <h2>1. 요약</h2>
+  <p class="summary">로드맵 "지도 고도화"의 두 번째 슬라이스로, 위시리스트에 담아둔 장소(좌표 보유)를 지도에 앰버색(<code>#FFB23E</code>, 킷 Stars 토큰) 핀으로 표시한다. 핀을 탭하면 최소 정보 카드(WishSpotCard)가 뜨고, 범례에 "가고 싶은 곳"이 추가돼 지도에서 먹로그(파랑)·위시(앰버)·주변(회색) 3종이 구분된다. 내부적으로 <code>MapMarker</code>의 판별자를 <code>saved: boolean</code>에서 <code>kind: 'saved'|'nearby'|'wish'</code> enum으로 교체해 컴파일러가 전 소비지점의 lockstep 갱신을 강제했고, 기존 동작의 회귀 가드는 mutation 표본으로 유효성을 확인했다. 백엔드 변경 0(크로스-로그 위시 조회는 RLS 스코프에 의존하는 일반 select), 두 QA 모두 이슈 0 통과, 전체 1,635 테스트 green으로 종료됐다. 스프린트 1에서 담은 위시가 즉시 지도에 나타나는 refresh 연결(add-후·탭 포커스)도 포함됐다.</p>
+
+  <h2>2. 작업 내용</h2>
+  <table class="grid">
+    <tr><th style="width:130px">구분</th><th style="width:280px">경로</th><th>내용</th></tr>
+    <tr><td>수정</td><td><code>src/features/map/types/</code> 외 소비지점 전체</td><td><code>MapMarker.saved: boolean</code> → <code>kind: 'saved'|'nearby'|'wish'</code> 판별자 교체 — pinsToMapMarkers·nearbyToMapMarkers·parseMapMessage·mapHtml·MapTabScreen+스펙 lockstep 갱신, saved/nearby 런타임 불변</td></tr>
+    <tr><td>추가</td><td><code>src/features/map/toWishPin/</code>, <code>useWishPins/</code>, <code>wishToMapMarkers/</code></td><td>위시 핀 트리오(먹로그 핀 트리오 미러) — 크로스-로그 select(room 필터 없음 = RLS 스코프), lat/lng not null, 마운트 1회 + 탭 포커스 + add-후 refresh</td></tr>
+    <tr><td>수정</td><td><code>src/features/map/mergeMapMarkers/</code></td><td>3-way 머지 — 우선순위 saved &gt; wish &gt; nearby, 좌표근접(epsilon) dedup</td></tr>
+    <tr><td>수정</td><td><code>src/features/map/mapHtml/mapHtml.ts</code></td><td><code>.mk-pin--wish</code>(#FFB23E) 클래스·kind 분기·pinZIndex(active5/saved3/wish2/nearby1)·MARKER_TAP kind</td></tr>
+    <tr><td>추가</td><td><code>src/features/map/components/WishSpotCard/</code></td><td>위시 핀 탭 카드 — SelectedSpotCard 셸 미러(이름·카테고리·coverEmoji, 액션 없음). 카드↔핀 이모지 wishPinEmoji 단일 출처</td></tr>
+    <tr><td>수정</td><td><code>src/theme/tokens/tokens.ts</code>, <code>MapLegend/</code></td><td>전용 토큰 <code>mapWishPin: #FFB23E</code> 신설(킷 starFill 실값), 범례 3칩("가고 싶은 곳" 앰버 dot)</td></tr>
+    <tr><td>수정</td><td><code>src/navigation/screens/MapTabScreen/</code>, <code>src/features/wishlist/useAddNearbyWish/</code></td><td>3-way 머지·kind 3분기 카드 배선, <code>onAdded</code> 옵션으로 스프린트 1 담기 직후 위시 핀 즉시 반영</td></tr>
+    <tr><td>추가</td><td><code>docs/sprint/sprint-20260714-map-wish-pins/</code></td><td>스프린트 산출물 5종(plan / ui-spec / dev-notes / qa-report ×2)</td></tr>
+  </table>
+
+  <h2>3. 검증 결과</h2>
+  <table class="grid">
+    <tr><th style="width:180px">항목</th><th style="width:280px">방법·명령</th><th>결과</th></tr>
+    <tr><td>단위 테스트</td><td><code>npm test</code></td><td class="ok">통과 — 174 스위트 / 1,635 테스트 (스프린트 1 종료 시점 1,598 → +37)</td></tr>
+    <tr><td>타입체크</td><td><code>npx tsc --noEmit</code></td><td class="ok">에러 0</td></tr>
+    <tr><td>비주얼 QA (qa-visual)</td><td>킷 ↔ RN 3축 교차검증 + 배선 후 재검</td><td class="ok">통과 — 하드페일 0 · 근사허용 4(사유 기록) · 디바이스 스모크 이월 3</td></tr>
+    <tr><td>로직 QA (qa-logic)</td><td>경계면 8종 + T1~T9 mutation 표본 2곳 + 가드레일</td><td class="ok">통과 — 블로킹 0, 수정 요청 0 (비블로킹 nit 1건 참고 전달)</td></tr>
+    <tr><td>비용 가드레일</td><td>plan 계약 대조</td><td class="ok">마이그레이션/RPC/Edge/DEFINER/Realtime 신설 0 · 폴링 0 · 위시 select = 마운트1+포커스+add-후 · Kakao 호출 0</td></tr>
+    <tr><td>판별자 교체 회귀</td><td>기존 saved/nearby 테스트 + mutation 표본</td><td class="ok">saved/nearby 런타임 불변 — field residue 0, 회귀 가드 유효 확인</td></tr>
+  </table>
+
+  <h2>4. 사용자 검토 필요</h2>
+  <div class="review">
+    <div class="item">
+      <b class="title">커밋 체크포인트 — 커밋 후 "다음"으로 루프 재개</b>
+      <div class="why">루프 설계대로 스프린트마다 일시정지. 추천 커밋 메시지는 채팅에 제시됨. 다음은 3/6 map-category-filter(지도 카테고리 필터).</div>
+    </div>
+  </div>
+
+  <h2>5. 후속 조치</h2>
+  <div class="followup">
+    <div class="item">
+      <b class="title">디바이스 스모크 이월 3건 (qa-visual 명시)</b>
+      <div class="why">① 핀 3색(파랑/앰버/회색) 실기기 판별성 ② 3-way stacking 겹침 렌더 ③ 범례 3칩 협폭 기기 오버플로 — 코드·토큰 정합은 확인됐고 렌더 픽셀만 실기기 확인 필요. 담당: 사용자 스모크 배치(기존 이월 트랙과 동일). 라이브 RLS 크로스-로그 필터 확인도 동반.</div>
+    </div>
+    <div class="item">
+      <b class="title">위시 핀 SWR 캐시 (후속 후보 wish-pins-cache)</b>
+      <div class="why">먹로그 핀은 map-pins-cache로 캐시-우선이지만 위시 핀은 이번 범위에서 제외(plan OUT). 위시가 많아져 콜드 진입 팝인이 체감되면 착수. 담당: 백로그.</div>
+    </div>
+    <div class="item">
+      <b class="title">다음 스프린트: map-category-filter (루프 3/6)</b>
+      <div class="why">사용자 커밋 완료 후 착수. 핀 3종이 모두 모인 상태라 필터 대상이 완전함 — 기존 카테고리 칩 패턴을 지도로 확장.</div>
+    </div>
+  </div>
+
+  <footer>
+    <span>히스토리: <code>docs/reports/</code> (파일명 날짜순)</span>
+    <span>generated by sprint-orchestrator + guksu-harness:report</span>
+  </footer>
+
+</div>
+</body>
+</html>

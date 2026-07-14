@@ -39,15 +39,22 @@ describe('mapHtml', () => {
   });
 
   // ── slice2 증분 ────────────────────────────────────────────────
-  it('saved 분기 핀 색을 직박힌다(saved primary #3366FF / nearby 웜그레이 #B6ABA0)', () => {
+  it('kind 분기 핀 색을 직박힌다(saved primary #3366FF / nearby 웜그레이 #B6ABA0)', () => {
     expect(html).toContain('#3366FF');
     expect(html).toContain('#B6ABA0');
-    // m.saved로 분기하는 코드 존재.
-    expect(html).toContain('m.saved');
+    // map-wish-pins: m.kind로 className 분기(saved 잔재 0 — 단일 판별자).
+    expect(html).toContain('m.kind');
+    expect(html).not.toContain('m.saved');
   });
 
-  it('MARKER_TAP에 saved 플래그를 동봉한다', () => {
-    expect(html).toContain('saved: m.saved');
+  it('MARKER_TAP에 kind를 동봉한다', () => {
+    expect(html).toContain('kind: m.kind');
+  });
+
+  it('kind별 className을 분기한다(nearby→--nearby, wish→--wish, saved→base)', () => {
+    expect(html).toContain("m.kind === 'nearby'");
+    expect(html).toContain("m.kind === 'wish'");
+    expect(html).toContain('mk-pin mk-pin--wish');
   });
 
   it('idle 이벤트로 BOUNDS_CHANGED(sw/ne)를 post한다', () => {
@@ -155,6 +162,11 @@ describe('mapHtml', () => {
     expect(base).toContain('width: 34px');
     expect(base).toContain('height: 34px');
     expect(html).toContain('.mk-pin--nearby { border-color: #B6ABA0; }'); // nearby border 불변
+  });
+
+  // map-wish-pins: 위시 핀 색(ui-publisher 소유). kind→className/pinZIndex 배선은 developer(T6).
+  it('위시 핀 클래스(.mk-pin--wish)를 킷 앰버 #FFB23E border로 정의한다', () => {
+    expect(html).toContain('.mk-pin--wish { border-color: #FFB23E; }');
   });
 
   // ── map-pin-select 증분: 선택 브리지 JS(developer 소유) ──────────────

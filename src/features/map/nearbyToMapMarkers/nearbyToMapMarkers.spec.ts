@@ -3,7 +3,7 @@
 //   emoji = nearbyCategoryEmoji(종목별, 폴백 🍽️ 보장) / id=kakaoPlaceId / 좌표 비유한 제외 / 빈→빈.
 import { nearbyCategoryEmoji, NEARBY_FALLBACK_EMOJI } from '../nearbyCategoryEmoji';
 import { nearbyToMapMarkers } from './nearbyToMapMarkers';
-import { type NearbyPlaceItem } from '../types';
+import { MapPinKind, type NearbyPlaceItem } from '../types';
 
 const item = (over?: Partial<NearbyPlaceItem>): NearbyPlaceItem => ({
   kakaoPlaceId: 'k1',
@@ -17,9 +17,9 @@ const item = (over?: Partial<NearbyPlaceItem>): NearbyPlaceItem => ({
 });
 
 describe('nearbyToMapMarkers', () => {
-  it('각 item을 {id:kakaoPlaceId, lat, lng, emoji, saved:false} 마커로 변환한다', () => {
+  it('각 item을 {id:kakaoPlaceId, lat, lng, emoji, kind:nearby} 마커로 변환한다', () => {
     const markers = nearbyToMapMarkers({ items: [item({ kakaoPlaceId: 'kX', lat: 1, lng: 2 })] });
-    expect(markers).toEqual([{ id: 'kX', lat: 1, lng: 2, emoji: '🍜', saved: false }]);
+    expect(markers).toEqual([{ id: 'kX', lat: 1, lng: 2, emoji: '🍜', kind: MapPinKind.Nearby }]);
   });
 
   it('categoryName을 nearbyCategoryEmoji로 매핑한다(한식>칼국수→🍜)', () => {

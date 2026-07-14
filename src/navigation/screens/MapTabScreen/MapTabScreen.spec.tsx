@@ -25,21 +25,38 @@ jest.mock('@/features/map/useMuklogPins', () => ({ useMuklogPins: jest.fn() }));
 jest.mock('@/features/map/useLocationPermission', () => ({ useLocationPermission: jest.fn() }));
 // slice2: nearby 훅 모킹(setBounds 호출/마커 주입/카드 분기 검증 지점).
 jest.mock('@/features/map/useNearbyPlaces', () => ({ useNearbyPlaces: jest.fn() }));
+// map-wish-pins: 위시 핀 훅 모킹(크로스-로그 조회는 useWishPins 단위 테스트가 검증 — 여기선 핀 합류·카드 분기·refresh 배선만).
+jest.mock('@/features/map/useWishPins', () => ({ useWishPins: jest.fn() }));
+// map-wish-pins: 포커스 refresh 배선 — 실제 NavigationContainer 없이 콜백만 캡처해 수동 발화.
+const mockFocus: { cb: null | (() => void) } = { cb: null };
+jest.mock('@react-navigation/native', () => ({
+  useFocusEffect: (cb: () => void) => {
+    mockFocus.cb = cb;
+  },
+}));
 
 // map-nearby-wish: 위시 담기 오케스트레이션 훅 모킹 — 분기·중복 pre-check·insert·토스트는
 //   useAddNearbyWish 단위 테스트가 검증한다. 여기선 화면 배선(액션→requestAdd, choosing→시트, 선택→chooseLog)만 본다.
+//   map-wish-pins: onAdded(담기 성공 후 위시 refresh) 배선 지점도 캡처해 검증한다.
 const mockRequestAdd = jest.fn();
 const mockChooseLog = jest.fn();
 const mockDismiss = jest.fn();
-const mockNearbyWish: { choosing: unknown; submitting: boolean } = { choosing: null, submitting: false };
+const mockNearbyWish: { choosing: unknown; submitting: boolean; onAdded: null | (() => void) } = {
+  choosing: null,
+  submitting: false,
+  onAdded: null,
+};
 jest.mock('@/features/wishlist', () => ({
-  useAddNearbyWish: () => ({
-    requestAdd: mockRequestAdd,
-    chooseLog: mockChooseLog,
-    dismiss: mockDismiss,
-    choosing: mockNearbyWish.choosing,
-    submitting: mockNearbyWish.submitting,
-  }),
+  useAddNearbyWish: (opts?: { onAdded?: () => void }) => {
+    mockNearbyWish.onAdded = opts?.onAdded ?? null;
+    return {
+      requestAdd: mockRequestAdd,
+      chooseLog: mockChooseLog,
+      dismiss: mockDismiss,
+      choosing: mockNearbyWish.choosing,
+      submitting: mockNearbyWish.submitting,
+    };
+  },
 }));
 
 // injectJavaScript로 주입된 스크립트 캡처(slice2: SET_MARKERS 머지 마커 주입 검증).
@@ -71,13 +88,35 @@ jest.mock('@/features/map/components', () => {
 import { useMuklogPins } from '@/features/map/useMuklogPins';
 import { useLocationPermission } from '@/features/map/useLocationPermission';
 import { useNearbyPlaces } from '@/features/map/useNearbyPlaces';
-import { LocationPermissionStatus, type MapMarker } from '@/features/map/types';
+import { useWishPins } from '@/features/map/useWishPins';
+import { LocationPermissionStatus, MapPinKind, type MapMarker } from '@/features/map/types';
 
 import { MapTabScreen } from './MapTabScreen';
 
 const useMuklogPinsMock = useMuklogPins as jest.Mock;
 const useLocationPermissionMock = useLocationPermission as jest.Mock;
 const useNearbyPlacesMock = useNearbyPlaces as jest.Mock;
+const useWishPinsMock = useWishPins as jest.Mock;
+
+const wishRefreshSpy = jest.fn();
+// 위시 핀 상태 주입(기본: ready·빈 핀). 테스트에서 pins/state 오버라이드.
+const setWishPins = (over?: { pins?: unknown[]; state?: unknown }) => {
+  useWishPinsMock.mockReturnValue({
+    state: over?.state ?? { status: 'ready', pins: over?.pins ?? [] },
+    refresh: wishRefreshSpy,
+  });
+};
+
+const wishPin = (over?: Record<string, unknown>) => ({
+  id: 'w7',
+  roomId: 'r1',
+  placeName: '연남 파스타',
+  category: 'pasta',
+  area: '연남동',
+  lat: 37.5,
+  lng: 127.0,
+  ...over,
+});
 
 const setBoundsSpy = jest.fn();
 // nearby 훅 상태 주입(기본: idle·빈 마커·빈 items). 테스트에서 markers/items/status 오버라이드.
@@ -135,6 +174,9 @@ beforeEach(() => {
   useMuklogPinsMock.mockReset();
   useLocationPermissionMock.mockReset();
   useNearbyPlacesMock.mockReset();
+  useWishPinsMock.mockReset();
+  wishRefreshSpy.mockReset();
+  mockFocus.cb = null;
   setBoundsSpy.mockReset();
   requestSpy.mockReset();
   refreshCoordsSpy.mockReset();
@@ -142,10 +184,12 @@ beforeEach(() => {
   mockRequestAdd.mockReset();
   mockChooseLog.mockReset();
   mockDismiss.mockReset();
+  mockNearbyWish.onAdded = null;
   mockNearbyWish.choosing = null;
   mockNearbyWish.submitting = false;
   setPermission();
   setNearby();
+  setWishPins();
 });
 
 describe('MapTabScreen', () => {
@@ -189,7 +233,7 @@ describe('MapTabScreen', () => {
     renderWithTheme(<MapTabScreen />);
     // 탭 전엔 선택 카드 없음.
     expect(screen.queryByTestId('selected-spot-card')).toBeNull();
-    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', saved: true }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', kind: 'saved' }) });
     expect(screen.getByTestId('selected-spot-card')).toBeTruthy();
     expect(screen.getByText('스시 오마카세')).toBeTruthy();
   });
@@ -251,7 +295,7 @@ describe('MapTabScreen', () => {
     });
     setNearby({
       status: 'ready',
-      markers: [{ id: 'k1', lat: 38.0, lng: 128.0, emoji: '🍜', saved: false }],
+      markers: [{ id: 'k1', lat: 38.0, lng: 128.0, emoji: '🍜', kind: MapPinKind.Nearby }],
     });
     renderWithTheme(<MapTabScreen />);
     // READY → INIT 주입(머지 마커 포함). saved id(m1) + nearby id(k1) 둘 다 직렬화.
@@ -259,19 +303,19 @@ describe('MapTabScreen', () => {
     const joined = injectedScripts.join('\n');
     expect(joined).toContain('"id":"m1"');
     expect(joined).toContain('"id":"k1"');
-    expect(joined).toContain('"saved":false');
+    expect(joined).toContain('"kind":"nearby"');
   });
 
   it('MARKER_TAP(saved:false) 수신 시 NearbySpotCard(거리)를 표시한다', () => {
     useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
     setNearby({
       status: 'ready',
-      markers: [{ id: 'k7', lat: 37.5, lng: 127.0, emoji: '🍜', saved: false }],
+      markers: [{ id: 'k7', lat: 37.5, lng: 127.0, emoji: '🍜', kind: MapPinKind.Nearby }],
       items: [nearbyItem()],
     });
     renderWithTheme(<MapTabScreen />);
     expect(screen.queryByTestId('nearby-spot-card')).toBeNull();
-    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k7', saved: false }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k7', kind: 'nearby' }) });
     expect(screen.getByTestId('nearby-spot-card')).toBeTruthy();
     expect(screen.getByText('연남 칼국수')).toBeTruthy();
     // 메타 = 마지막 세그먼트 + 거리(raw 브레드크럼 아님), 커버 = 종목 이모지(☕ 일괄 폴백 아님).
@@ -284,11 +328,11 @@ describe('MapTabScreen', () => {
     useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
     setNearby({
       status: 'ready',
-      markers: [{ id: 'k7', lat: 37.5, lng: 127.0, emoji: '🍖', saved: false }],
+      markers: [{ id: 'k7', lat: 37.5, lng: 127.0, emoji: '🍖', kind: MapPinKind.Nearby }],
       items: [nearbyItem({ placeName: '연남 고깃집', categoryName: '음식점 > 한식 > 고기' })],
     });
     renderWithTheme(<MapTabScreen />);
-    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k7', saved: false }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k7', kind: 'nearby' }) });
     expect(screen.getByText('🍖')).toBeTruthy();
     expect(screen.getByText('고기 · 320m')).toBeTruthy();
     expect(screen.queryByText('☕')).toBeNull();
@@ -432,7 +476,7 @@ describe('MapTabScreen', () => {
     });
     renderWithTheme(<MapTabScreen />);
     emitMessage({ raw: JSON.stringify({ type: 'READY' }) }); // mapReady → SET_SELECTED effect 활성
-    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', saved: true }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', kind: 'saved' }) });
 
     const sel = setSelectedScripts();
     expect(sel[sel.length - 1]).toContain('"selectedId":"m9"');
@@ -446,8 +490,8 @@ describe('MapTabScreen', () => {
     });
     renderWithTheme(<MapTabScreen />);
     emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
-    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', saved: true }) });
-    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm10', saved: true }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', kind: 'saved' }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm10', kind: 'saved' }) });
 
     const sel = setSelectedScripts();
     expect(sel[sel.length - 1]).toContain('"selectedId":"m10"');
@@ -460,7 +504,7 @@ describe('MapTabScreen', () => {
     });
     renderWithTheme(<MapTabScreen />);
     emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
-    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', saved: true }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', kind: 'saved' }) });
     expect(screen.getByTestId('selected-spot-card')).toBeTruthy();
 
     emitMessage({ raw: JSON.stringify({ type: 'MAP_TAP' }) });
@@ -476,7 +520,7 @@ describe('MapTabScreen', () => {
     });
     renderWithTheme(<MapTabScreen />);
     // READY 미발화 → mapReady false. 탭이 와도 SET_SELECTED inject 0.
-    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', saved: true }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', kind: 'saved' }) });
     expect(setSelectedScripts()).toHaveLength(0);
   });
 
@@ -488,14 +532,14 @@ describe('MapTabScreen', () => {
     setNearby({ status: 'ready', markers: [] });
     const { rerender } = renderWithTheme(<MapTabScreen />);
     emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
-    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', saved: true }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm9', kind: 'saved' }) });
     expect(screen.getByTestId('selected-spot-card')).toBeTruthy();
     const selBefore = setSelectedScripts().length;
 
     // nearby 마커 갱신 → SET_MARKERS 재주입(markersKey 변경). 선택은 유지되어야 한다.
     setNearby({
       status: 'ready',
-      markers: [{ id: 'k1', lat: 38.0, lng: 128.0, emoji: '🍜', saved: false }],
+      markers: [{ id: 'k1', lat: 38.0, lng: 128.0, emoji: '🍜', kind: MapPinKind.Nearby }],
     });
     rerender(<MapTabScreen />);
 
@@ -509,12 +553,12 @@ describe('MapTabScreen', () => {
     useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
     setNearby({
       status: 'ready',
-      markers: [{ id: 'k7', lat: 37.5, lng: 127.0, emoji: '🍜', saved: false }],
+      markers: [{ id: 'k7', lat: 37.5, lng: 127.0, emoji: '🍜', kind: MapPinKind.Nearby }],
       items: [nearbyItem()],
     });
     const { rerender } = renderWithTheme(<MapTabScreen />);
     emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
-    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k7', saved: false }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k7', kind: 'nearby' }) });
     expect(screen.getByTestId('nearby-spot-card')).toBeTruthy();
 
     // 선택된 nearby 핀이 viewport 이탈/dedup으로 소실.
@@ -531,11 +575,11 @@ describe('MapTabScreen', () => {
     useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
     setNearby({
       status: 'ready',
-      markers: [{ id: 'k7', lat: 37.5, lng: 127.0, emoji: '🍜', saved: false }],
+      markers: [{ id: 'k7', lat: 37.5, lng: 127.0, emoji: '🍜', kind: MapPinKind.Nearby }],
       items: [nearbyItem()],
     });
     renderWithTheme(<MapTabScreen />);
-    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k7', saved: false }) });
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k7', kind: 'nearby' }) });
   };
 
   it('T3: nearby 카드 "위시에 담기" 탭 → requestAdd({ item: 선택된 nearby })', () => {
@@ -602,5 +646,57 @@ describe('MapTabScreen', () => {
     useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
     renderWithTheme(<MapTabScreen />);
     expect(screen.queryByTestId('log-picker-row-r1')).toBeNull();
+  });
+
+  // ── map-wish-pins 배선 (plan §5 T7) ─────────────────────────────
+  it('T7: 위시 핀을 SET_MARKERS에 합류시킨다(kind:wish)', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setWishPins({ pins: [wishPin({ id: 'w7', lat: 37.7, lng: 127.3 })] });
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    const joined = injectedScripts.join('\n');
+    expect(joined).toContain('"id":"w7"');
+    expect(joined).toContain('"kind":"wish"');
+  });
+
+  it('T7: MARKER_TAP(kind:wish) 수신 시 WishSpotCard(이름·카테고리·area)를 표시한다', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setWishPins({ pins: [wishPin({ id: 'w7', placeName: '연남 파스타', category: 'pasta', area: '연남동' })] });
+    renderWithTheme(<MapTabScreen />);
+    expect(screen.queryByText('연남 파스타')).toBeNull();
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'w7', kind: 'wish' }) });
+    expect(screen.getByText('연남 파스타')).toBeTruthy();
+    // 메타 = 카테고리 라벨 · area(별점/heart/거리/액션 없음).
+    expect(screen.getByText('· 파스타·양식 · 연남동')).toBeTruthy();
+  });
+
+  it('T7: 선택된 위시 핀이 사라지면 WishSpotCard가 닫힌다(refresh 후 소실)', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setWishPins({ pins: [wishPin({ id: 'w7', placeName: '연남 파스타' })] });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'w7', kind: 'wish' }) });
+    expect(screen.getByText('연남 파스타')).toBeTruthy();
+
+    setWishPins({ pins: [] }); // 삭제/refresh로 위시 소실.
+    rerender(<MapTabScreen />);
+    expect(screen.queryByText('연남 파스타')).toBeNull();
+  });
+
+  it('T7: 지도 탭 포커스 시 위시 핀을 refresh한다(폴링 아님 — 포커스 콜백 발화)', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+    // useFocusEffect 콜백을 수동 발화 → wishPins.refresh 호출.
+    expect(mockFocus.cb).not.toBeNull();
+    mockFocus.cb?.();
+    expect(wishRefreshSpy).toHaveBeenCalled();
+  });
+
+  it('T7: "위시에 담기" 성공 콜백(onAdded)이 위시 핀 refresh에 배선된다', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+    // MapTabScreen이 useAddNearbyWish({ onAdded: wishPins.refresh })로 배선 → onAdded 발화 시 위시 refresh.
+    expect(mockNearbyWish.onAdded).not.toBeNull();
+    mockNearbyWish.onAdded?.();
+    expect(wishRefreshSpy).toHaveBeenCalled();
   });
 });

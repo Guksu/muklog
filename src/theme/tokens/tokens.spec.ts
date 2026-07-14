@@ -99,6 +99,22 @@ describe('tokens — mapNearbyPin (지도 주변 음식점 핀/범례 dot, map-t
   });
 });
 
+describe('tokens — mapWishPin (지도 가고 싶은 곳/위시 핀·범례 dot, map-wish-pins)', () => {
+  it('위시 dot 색이 킷 앰버 #FFB23E다(starFill과 값 동일·의미 분리)', () => {
+    expect(themes.light.color.mapWishPin).toBe('#FFB23E');
+    expect(themes.light.color.mapWishPin).toBe(themes.light.color.starFill);
+  });
+
+  it('saved(primary)·nearby(웜그레이)와 3-way로 구분되는 제3의 색이다', () => {
+    expect(themes.light.color.mapWishPin).not.toBe(themes.light.color.primary);
+    expect(themes.light.color.mapWishPin).not.toBe(themes.light.color.mapNearbyPin);
+  });
+
+  it('라이트/다크 공통(지도 위 마커라 톤 고정)', () => {
+    expect(themes.dark.color.mapWishPin).toBe('#FFB23E');
+  });
+});
+
 describe('tokens — mapLocate (지도 현재위치 FAB 아이콘 블루, map-locate-button)', () => {
   it('locate FAB 아이콘색이 킷 verbatim #3B82F6다(브랜드 primary #3366FF와 구분)', () => {
     expect(themes.light.color.mapLocate).toBe('#3B82F6');

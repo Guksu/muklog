@@ -16,7 +16,7 @@ README 로드맵의 예정(⬜) 항목을 1스프린트=1기능으로 분해한 
 | # | 슬러그 | 기능 | 상태 |
 |---|--------|------|------|
 | 1 | map-nearby-wish | 주변 핀 위시 담기 | ✅ 완료 (2026-07-14) |
-| 2 | map-wish-pins | 위시 핀 지도 표시 | 대기 |
+| 2 | map-wish-pins | 위시 핀 지도 표시 | ✅ 완료 (2026-07-14) |
 | 3 | map-category-filter | 지도 카테고리 필터 | 대기 |
 | 4 | push-prefs-db | 알림 설정 DB 이전 (push S3) | 대기 |
 | 5 | push-receive-ux | 푸시 수신 UX — Android 채널·권한 안내 (push S4) | 대기 |
@@ -43,7 +43,8 @@ README 로드맵의 예정(⬜) 항목을 1스프린트=1기능으로 분해한 
 
 | 반복 | 결과 | 비고 |
 |------|------|------|
-| 1 (map-nearby-wish) | ✅ 통과 — qa-visual 이슈 0 / qa-logic 이슈 0 / 170 스위트·1,598 테스트 green / tsc 0 | 마이그레이션·RLS·Edge 신설 0. 라이브 스모크(insert/RLS·실기기 핀탭 흐름)는 관례대로 이월. 게이트 1회 차단(카피 수정 중 일시적 red) 후 green. 사용자 커밋 대기 중 |
+| 1 (map-nearby-wish) | ✅ 통과 — qa-visual 이슈 0 / qa-logic 이슈 0 / 170 스위트·1,598 테스트 green / tsc 0 | 마이그레이션·RLS·Edge 신설 0. 라이브 스모크(insert/RLS·실기기 핀탭 흐름)는 관례대로 이월. 게이트 1회 차단(카피 수정 중 일시적 red) 후 green. 커밋 e914e9a |
+| 2 (map-wish-pins) | ✅ 통과 — qa-visual 하드페일 0 / qa-logic 블로킹 0 / 174 스위트·1,635 테스트 green / tsc 0 | 백엔드 변경 0. MapMarker saved→kind 3-way 교체(lockstep, 회귀 가드 mutation 확인). 게이트 4회 차단(전환 과도기 red — 정상 동작) 후 green. 디바이스 스모크 이월 3(핀 3색 판별성·stacking·범례 협폭). 사용자 커밋 대기 중 |
 
 ## 5. 종료 보고
 

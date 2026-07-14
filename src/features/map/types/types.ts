@@ -38,16 +38,44 @@ export type Coords = { lat: number; lng: number };
 /** 지도 라이브러리 무관 영역 표현(zoom은 정수 스케일). */
 export type Region = { lat: number; lng: number; zoom: number };
 
+/** 지도 핀 종류 판별자(enum-style 단일 출처, map-wish-pins §3.4).
+ *  saved(내 맛집)·nearby(주변 음식점)·wish(위시 장소) 3종. slice2의 `saved: boolean`을 교체 —
+ *  이중 판별자(saved+kind 병존) 금지. 생산자/소비자/HTML/파서가 이 값 하나로 분기한다. */
+export const MapPinKind = {
+  Saved: 'saved', // 내 맛집(muklogId) — primary border
+  Nearby: 'nearby', // 주변 음식점(kakaoPlaceId) — 웜그레이 border
+  Wish: 'wish', // 위시 장소(wishlist_items.id) — 3번째 스타일(ui-publisher 확정)
+} as const;
+export type MapPinKind = (typeof MapPinKind)[keyof typeof MapPinKind];
+
 /** 지도뷰(WebView/JS SDK)가 먹는 마커 페이로드.
- *  slice2: saved를 boolean으로 폭 확장(true=내 맛집 primary / false=주변 음식점 mapNearbyPin).
- *  pinsToMapMarkers는 리터럴 true를 그대로 생산(회귀 0), nearbyToMapMarkers가 false를 생산. */
+ *  map-wish-pins: `saved: boolean` → `kind`(saved|nearby|wish) 3종 판별자로 교체(회귀 net = 컴파일러가 전 소비지점 강제 노출).
+ *  pinsToMapMarkers→'saved' / nearbyToMapMarkers→'nearby' / wishToMapMarkers→'wish'. */
 export type MapMarker = {
-  id: string; // saved=muklogId / nearby=kakaoPlaceId
+  id: string; // saved=muklogId / nearby=kakaoPlaceId / wish=wishlist_items.id
   lat: number;
   lng: number;
   emoji: string;
-  saved: boolean;
+  kind: MapPinKind;
 };
+
+/** 위시 핀 1건(camelCase, map-wish-pins §3.3). wishlist_items 크로스-로그 select → toWishPin 매핑 결과.
+ *  lat/lng는 쿼리 필터로 non-null 보장(toWishPin이 finite 방어). id = wishlist_items.id(kind 판별자로 탭 컬렉션 구분). */
+export type WishPin = {
+  id: string;
+  roomId: string;
+  placeName: string;
+  category: string | null; // CAT key | null(폴백 이모지)
+  area: string | null;
+  lat: number;
+  lng: number;
+};
+
+/** useWishPins 상태(판별 유니온). pins:[] = 빈 상태(정상, 에러 아님). */
+export type WishPinsState =
+  | { status: 'loading' }
+  | { status: 'ready'; pins: WishPin[] }
+  | { status: 'error'; message: string };
 
 /** nearby-search Edge Function 응답 1건(camelCase, plan §3.2).
  *  place-search PlaceSearchItem과 별도(주변은 address/road/phone 불필요, distance 추가). */
@@ -94,10 +122,10 @@ export const MapOutboundType = {
 export type MapOutboundType = (typeof MapOutboundType)[keyof typeof MapOutboundType];
 
 /** WebView → RN 파싱 결과(판별 유니온). 비JSON/미지 타입은 parseMapMessage가 null로 흡수.
- *  slice2: MARKER_TAP에 saved 동봉(saved=muklogId vs nearby=kakaoPlaceId 분기), BOUNDS_CHANGED 신설. */
+ *  map-wish-pins: MARKER_TAP에 kind 동봉(saved|nearby|wish 판별자로 카드 분기), BOUNDS_CHANGED 신설. */
 export type MapInboundMessage =
   | { type: typeof MapInboundType.Ready }
-  | { type: typeof MapInboundType.MarkerTap; id: string; saved: boolean }
+  | { type: typeof MapInboundType.MarkerTap; id: string; kind: MapPinKind }
   | { type: typeof MapInboundType.Error; reason: string }
   | { type: typeof MapInboundType.BoundsChanged; sw: Coords; ne: Coords }
   | { type: typeof MapInboundType.MapTap }; // map-pin-select: 빈 곳 탭(페이로드 없음)

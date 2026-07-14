@@ -1,11 +1,11 @@
 // src/features/map/mergeMapMarkers.ts
-// saved(내 맛집) + nearby(주변 음식점) 마커 머지 + 중복 제거 (plan §3.4·§9.3·§7 경계면).
-//   생산자: pinsToMapMarkers(saved:true) + nearbyToMapMarkers(saved:false). 소비자: 지도뷰 SET_MARKERS.
-//   규칙(§9.3 확정): saved 우선. saved.id=muklogId ≠ nearby.id=kakaoPlaceId라 id 비교 불가 →
-//     saved 핀과 좌표가 근접(epsilon)한 nearby는 제외(중복 핀 금지). 정확 dedup(kakao_place_id)은 후속.
+// saved(내 맛집) + wish(위시) + nearby(주변 음식점) 3-way 마커 머지 + 중복 제거 (map-wish-pins §3.5·§7 경계면).
+//   생산자: pinsToMapMarkers(kind:saved) + wishToMapMarkers(kind:wish) + nearbyToMapMarkers(kind:nearby). 소비자: 지도뷰 SET_MARKERS.
+//   우선순위 saved > wish > nearby: 다녀온 곳(먹로그)이 위시를 가리고, 내 위시가 일반 주변 핀을 가린다.
+//   id 네임스페이스가 kind별로 달라 id 비교 불가 → 좌표근접(epsilon) dedup(중복 핀 금지). 정확 dedup(kakao_place_id)은 후속.
 import { type MapMarker } from '../types';
 
-/** 좌표 근접 dedup 임계(도 단위, ≈1e-4°≈11m). saved/nearby가 같은 가게면 둘이 ~동일 좌표 → nearby 제외. */
+/** 좌표 근접 dedup 임계(도 단위, ≈1e-4°≈11m). 같은 가게면 두 핀이 ~동일 좌표 → 낮은 우선순위 제외. */
 export const MERGE_DEDUP_EPSILON = 1e-4;
 
 /**
@@ -17,21 +17,30 @@ export const MERGE_DEDUP_EPSILON = 1e-4;
 const isNear = ({ a, b }: { a: MapMarker; b: MapMarker }): boolean =>
   Math.abs(a.lat - b.lat) <= MERGE_DEDUP_EPSILON && Math.abs(a.lng - b.lng) <= MERGE_DEDUP_EPSILON;
 
+/** candidate가 others 중 어느 하나와 좌표 근접한지. */
+const isNearAny = ({ candidate, others }: { candidate: MapMarker; others: MapMarker[] }): boolean =>
+  others.some((other) => isNear({ a: other, b: candidate }));
+
 /**
- * saved + nearby 마커를 머지한다. saved를 우선하고, saved와 좌표 근접한 nearby는 제외한다.
- * @param saved 내 맛집 마커(saved:true) — 항상 전부 포함
- * @param nearby 주변 음식점 마커(saved:false) — saved와 좌표 근접하지 않은 것만 포함
- * @returns 머지된 마커 배열(saved 먼저, 그다음 살아남은 nearby)
+ * saved + wish + nearby 마커를 우선순위(saved > wish > nearby)로 머지한다.
+ * @param saved 내 맛집 마커(kind:saved) — 항상 전부 포함
+ * @param wish 위시 마커(kind:wish) — saved와 좌표 근접하지 않은 것만 포함
+ * @param nearby 주변 음식점 마커(kind:nearby) — saved·wish 어느 쪽과도 근접하지 않은 것만 포함
+ * @returns 머지된 마커 배열(saved → 살아남은 wish → 살아남은 nearby)
  */
 export const mergeMapMarkers = ({
   saved,
+  wish,
   nearby,
 }: {
   saved: MapMarker[];
+  wish: MapMarker[];
   nearby: MapMarker[];
 }): MapMarker[] => {
+  const dedupedWish = wish.filter((candidate) => !isNearAny({ candidate, others: saved }));
   const dedupedNearby = nearby.filter(
-    (candidate) => !saved.some((savedMarker) => isNear({ a: savedMarker, b: candidate })),
+    (candidate) =>
+      !isNearAny({ candidate, others: saved }) && !isNearAny({ candidate, others: wish }),
   );
-  return [...saved, ...dedupedNearby];
+  return [...saved, ...dedupedWish, ...dedupedNearby];
 };
