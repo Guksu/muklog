@@ -1,0 +1,1 @@
+export { nearbyToWishlistInput } from './nearbyToWishlistInput';

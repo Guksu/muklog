@@ -13,6 +13,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import {
+  LogPickerSheet,
   MapLegend,
   MapLocateButton,
   MapStatusOverlay,
@@ -20,6 +21,7 @@ import {
   MapWebView,
   NearbySpotCard,
   SelectedSpotCard,
+  type LogPickerItem,
   type MapWebViewHandle,
   type MapWebViewMessageEvent,
 } from '@/features/map/components';
@@ -41,6 +43,8 @@ import { LocationPermissionStatus, MapInboundType, type MuklogPin } from '@/feat
 import { useLocationPermission } from '@/features/map/useLocationPermission';
 import { useMuklogPins } from '@/features/map/useMuklogPins';
 import { useNearbyPlaces } from '@/features/map/useNearbyPlaces';
+import { displayLogName } from '@/features/room/logName';
+import { useAddNearbyWish } from '@/features/wishlist';
 import { env } from '@/lib/env';
 import { useTheme } from '@/theme';
 
@@ -58,6 +62,9 @@ export const MapTabScreen = () => {
   const { state, refresh } = useMuklogPins();
   const permission = useLocationPermission();
   const nearby = useNearbyPlaces();
+  // map-nearby-wish: 주변 카드 "위시에 담기" 오케스트레이션(로그 0/1/2+ 분기·중복 가드·토스트는 훅 내부).
+  //   화면은 액션→requestAdd·시트(choosing) 렌더·선택→chooseLog 배선만 하고 비주얼은 컴포넌트가 소유(임의 변경 금지).
+  const nearbyWish = useAddNearbyWish();
 
   // 선택 상태는 {id, saved} 쌍 — saved(muklogId) vs nearby(kakaoPlaceId) id 충돌 방지(plan §4·§6).
   const [selected, setSelected] = useState<{ id: string; saved: boolean } | null>(null);
@@ -202,6 +209,14 @@ export const MapTabScreen = () => {
     selected && !selected.saved
       ? nearby.items.find((it) => it.kakaoPlaceId === selected.id) ?? null
       : null;
+  // 로그 2+개 담기 분기 시트 항목 — choosing.logs(MyLog[])를 LogPickerItem으로 매핑.
+  //   label은 displayLogName으로 산출(퍼블리셔 미소유). selfNickname은 미주입(null) — 표시명 폴백은
+  //   커플 "우리 로그"/솔로 "내 로그"(닉네임은 같은 사용자 로그 간 구분에 무의미하므로 이름 우선).
+  const pickerLogs: LogPickerItem[] = (nearbyWish.choosing?.logs ?? []).map((log) => ({
+    roomId: log.roomId,
+    label: displayLogName({ name: log.name, memberCount: log.memberCount, selfNickname: null }),
+    memberCount: log.memberCount,
+  }));
   // 하단 스팟 카드 도킹 여부 — FAB가 카드에 가려지지 않게 위로 띄우는 데 사용(ui-spec §4).
 
   // 상태 → 오버레이(tone/message) 판단(ui-spec §3 매핑). 우선순위: 지도 SDK 에러 → 핀 에러 → 로딩 → 빈/권한안내.
@@ -275,7 +290,8 @@ export const MapTabScreen = () => {
         />
       ) : null}
 
-      {/* 주변 스팟 카드 — nearby 핀 탭 시 하단 도킹(이름·카테고리·거리, 별점/area/heart 없음). */}
+      {/* 주변 스팟 카드 — nearby 핀 탭 시 하단 도킹(이름·카테고리·거리, 별점/area/heart 없음).
+          "위시에 담기" 액션(onAddWish) → requestAdd가 로그 개수 분기·담기를 처리. adding=담는 중 로딩 가드. */}
       {selectedNearby ? (
         <NearbySpotCard
           placeName={selectedNearby.placeName}
@@ -285,8 +301,19 @@ export const MapTabScreen = () => {
             categoryGroupCode: selectedNearby.categoryGroupCode,
           })}
           distanceText={formatDistance({ distance: selectedNearby.distance })}
+          onAddWish={() => nearbyWish.requestAdd({ item: selectedNearby })}
+          adding={nearbyWish.submitting}
         />
       ) : null}
+
+      {/* 대상 로그 선택 시트 — 로그 2+개일 때만 훅이 choosing을 세팅(visible). 행 탭 → chooseLog(그 roomId로 담기),
+          딤/드래그-다운(onClose) → dismiss(담기 미발생). 로그 0/1개는 시트 없이 훅이 처리. */}
+      <LogPickerSheet
+        visible={nearbyWish.choosing !== null}
+        onClose={nearbyWish.dismiss}
+        logs={pickerLogs}
+        onSelect={nearbyWish.chooseLog}
+      />
     </View>
   );
 };

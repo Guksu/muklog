@@ -5,7 +5,7 @@
 //   데이터는 props로만 주입. 비즈니스 로직 없음.
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { screen } from '@testing-library/react-native';
+import { fireEvent, screen } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -60,5 +60,60 @@ describe('NearbySpotCard', () => {
     );
     const meta = StyleSheet.flatten(screen.getByText('칼국수 · 320m').props.style);
     expect(meta.lineHeight).toBeGreaterThan(meta.fontSize);
+  });
+
+  // map-nearby-wish: "위시에 담기" 액션(킷 직접 시안 없음 — mk-extra:187 위시 추가 soft 버튼 패턴 조합).
+  describe('위시에 담기 액션(map-nearby-wish)', () => {
+    it('onAddWish 미전달 시 액션을 렌더하지 않는다(순수 표시 카드 보존)', () => {
+      renderWithTheme(
+        <NearbySpotCard placeName="연남 칼국수" categoryName="칼국수" coverEmoji="🍜" distanceText="320m" />,
+      );
+      expect(screen.queryByTestId('nearby-add-wish')).toBeNull();
+    });
+
+    it('onAddWish 전달 시 "위시에 담기" 액션을 렌더한다', () => {
+      renderWithTheme(
+        <NearbySpotCard
+          placeName="연남 칼국수"
+          categoryName="칼국수"
+          coverEmoji="🍜"
+          distanceText="320m"
+          onAddWish={() => {}}
+        />,
+      );
+      expect(screen.getByTestId('nearby-add-wish')).toBeTruthy();
+      expect(screen.getByText('위시에 담기')).toBeTruthy();
+    });
+
+    it('액션 탭 시 onAddWish를 호출한다', () => {
+      const onAddWish = jest.fn();
+      renderWithTheme(
+        <NearbySpotCard
+          placeName="연남 칼국수"
+          categoryName="칼국수"
+          coverEmoji="🍜"
+          distanceText="320m"
+          onAddWish={onAddWish}
+        />,
+      );
+      fireEvent.press(screen.getByTestId('nearby-add-wish'));
+      expect(onAddWish).toHaveBeenCalledTimes(1);
+    });
+
+    it('adding(담는 중)이면 액션이 비활성이라 재탭해도 onAddWish가 호출되지 않는다(로딩 가드)', () => {
+      const onAddWish = jest.fn();
+      renderWithTheme(
+        <NearbySpotCard
+          placeName="연남 칼국수"
+          categoryName="칼국수"
+          coverEmoji="🍜"
+          distanceText="320m"
+          adding
+          onAddWish={onAddWish}
+        />,
+      );
+      fireEvent.press(screen.getByTestId('nearby-add-wish'));
+      expect(onAddWish).not.toHaveBeenCalled();
+    });
   });
 });

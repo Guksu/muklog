@@ -1,0 +1,9 @@
+{
+  "checks": [
+    { "name": "test", "command": "npm test" },
+    { "name": "typecheck", "command": "npm run typecheck" }
+  ],
+  "maxIterations": 10,
+  "maxTokens": 6000000,
+  "stuckAfter": 3
+}

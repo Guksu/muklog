@@ -1,0 +1,1 @@
+export { wishlistExists } from './wishlistExists';

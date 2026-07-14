@@ -4,6 +4,13 @@ export { WishlistView, type WishlistViewProps } from './WishlistView';
 export { useWishlist } from './useWishlist';
 export { useAddWishlist, type AddWishlistResult } from './useAddWishlist';
 export { useRemoveWishlist } from './useRemoveWishlist';
+export { nearbyToWishlistInput } from './nearbyToWishlistInput';
+export { wishlistExists } from './wishlistExists';
+export {
+  useAddNearbyWish,
+  NEARBY_WISH_COPY,
+  type NearbyWishChoosing,
+} from './useAddNearbyWish';
 export { toWishlistItem, type WishlistRow } from './toWishlistItem';
 export { toWishlistRow } from './toWishlistRow';
 export {

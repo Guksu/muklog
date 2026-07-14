@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>작업 보고서 — map-nearby-wish (지도 주변 핀 위시 담기)</title>
+<style>
+  :root {
+    --ink: #1c1c1c; --sub: #595959; --line: #e3e3e3; --bg: #f6f6f4; --card: #ffffff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.6; font-size: 15px;
+    padding: 40px 16px;
+  }
+  .page { max-width: 860px; margin: 0 auto; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 44px 48px; }
+  header { border-bottom: 2px solid var(--ink); padding-bottom: 18px; margin-bottom: 26px; }
+  .doc-label { font-size: 12px; letter-spacing: .14em; color: var(--sub); text-transform: uppercase; }
+  h1 { font-size: 24px; font-weight: 700; margin: 6px 0 12px; }
+  .status { display: inline-block; font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 4px; border: 1px solid; }
+  .status[data-status="done"]    { color: #1a7f37; background: #ebf7ee; border-color: #9fd6ad; }
+  .status[data-status="partial"] { color: #9a6700; background: #fff8e5; border-color: #e6c86e; }
+  .status[data-status="stopped"] { color: #b42318; background: #fdf0ee; border-color: #f0a9a0; }
+  table.meta { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13.5px; }
+  table.meta th { text-align: left; color: var(--sub); font-weight: 600; width: 110px; padding: 3px 0; vertical-align: top; }
+  table.meta td { padding: 3px 0; }
+  h2 { font-size: 16.5px; font-weight: 700; margin: 34px 0 12px; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+  p.summary { color: var(--ink); }
+  table.grid { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 4px; }
+  table.grid th { background: #f2f2ef; text-align: left; padding: 8px 12px; border: 1px solid var(--line); font-weight: 600; }
+  table.grid td { padding: 8px 12px; border: 1px solid var(--line); vertical-align: top; }
+  .ok { color: #1a7f37; font-weight: 700; }
+  .fail { color: #b42318; font-weight: 700; }
+  .item { border: 1px solid var(--line); border-left: 4px solid #8a8a8a; border-radius: 6px; padding: 14px 16px; margin: 10px 0; background: #fcfcfb; }
+  .review .item { border-left-color: #d4a72c; background: #fffdf5; }
+  .followup .item { border-left-color: #4477aa; background: #f8fbfd; }
+  .item b.title { display: block; font-size: 14.5px; margin-bottom: 4px; }
+  .item .why { color: var(--sub); font-size: 13.5px; }
+  .none { color: var(--sub); font-size: 14px; }
+  footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--sub); font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+  code { font-family: ui-monospace, 'D2Coding', Consolas, monospace; font-size: .92em; background: #f2f2ef; padding: 1px 5px; border-radius: 3px; }
+  @media print { body { background: #fff; padding: 0; } .page { border: none; padding: 24px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="doc-label">Work Report · muklog</div>
+    <h1>map-nearby-wish — 지도 주변 핀 위시 담기 (로드맵 루프 1/6)</h1>
+    <span class="status" data-status="done">완료</span>
+    <table class="meta">
+      <tr><th>날짜</th><td>2026-07-14</td></tr>
+      <tr><th>작성</th><td>sprint-orchestrator (planner → ui-publisher → developer → qa-visual ∥ qa-logic)</td></tr>
+      <tr><th>브랜치</th><td><code>main</code> (커밋은 사용자 직접 수행)</td></tr>
+      <tr><th>워크로그</th><td><code>docs/sprint/sprint-20260714-map-nearby-wish/</code> — 정본 기록 (plan / ui-spec / dev-notes / qa-report-visual / qa-report-logic)</td></tr>
+    </table>
+  </header>
+
+  <h2>1. 요약</h2>
+  <p class="summary">README 로드맵 "지도 고도화"의 첫 슬라이스로, 지도 탭에서 주변 음식점 핀을 탭했을 때 뜨는 카드(NearbySpotCard)에 "위시에 담기" 액션을 추가했다. 카카오 장소 데이터(이름·좌표·주소·카테고리)를 기존 <code>wishlist_items</code> 계약 그대로 insert하며, 여러 로그 소속 사용자는 대상 로그 선택 시트(LogPickerSheet)로 분기한다. 마이그레이션·RLS·Edge Function·Realtime 신설이 전부 0건인 순수 클라이언트 스프린트로, 두 QA(비주얼·로직) 모두 이슈 0으로 통과했고 전체 테스트 1,598건 green·타입체크 0 에러 상태로 종료됐다. <code>docs/loops/roadmap-sprints.md</code> 루프의 1/6이며, 사용자 커밋 후 2/6(map-wish-pins)로 진행한다.</p>
+
+  <h2>2. 작업 내용</h2>
+  <table class="grid">
+    <tr><th style="width:130px">구분</th><th style="width:280px">경로</th><th>내용</th></tr>
+    <tr><td>추가</td><td><code>src/features/wishlist/nearbyToWishlistInput/</code></td><td>NearbyPlaceItem+roomId → AddWishlistInput 순수 매퍼. category는 기존 mapKakaoCategory 재사용, 좌표 쌍 유한 가드</td></tr>
+    <tr><td>추가</td><td><code>src/features/wishlist/wishlistExists/</code></td><td>(room_id, kakao_place_id) 중복 pre-check 헬퍼 — RLS select, DEFINER/Realtime 미사용</td></tr>
+    <tr><td>추가</td><td><code>src/features/wishlist/useAddNearbyWish/</code></td><td>오케스트레이션 훅 — 로그 0/1/2+ 분기, 중복 가드, submittingRef 로딩 가드, 성공(<code>위시에 담았어요 📍</code>)/중복/실패/로그없음 토스트</td></tr>
+    <tr><td>추가</td><td><code>src/features/map/components/LogPickerSheet/</code></td><td>대상 로그 선택 시트 — 공용 Sheet + MemberBadge 조합(신규 프리미티브·토큰 0, ui-publisher)</td></tr>
+    <tr><td>수정</td><td><code>src/features/map/components/NearbySpotCard/</code></td><td>"위시에 담기" 풀폭 soft 버튼(킷 mk-extra:187 위시 CTA 1:1). onAddWish/adding props — 미전달 시 미렌더로 회귀 0</td></tr>
+    <tr><td>수정</td><td><code>src/navigation/screens/MapTabScreen/MapTabScreen.tsx</code></td><td>useAddNearbyWish 배선 — 카드 액션·시트 마운트·displayLogName 매핑</td></tr>
+    <tr><td>수정</td><td><code>src/features/wishlist/index.ts</code>, <code>src/features/map/components/index.ts</code></td><td>배럴 export 추가</td></tr>
+    <tr><td>추가</td><td><code>docs/sprint/sprint-20260714-map-nearby-wish/</code></td><td>스프린트 산출물 5종(plan / ui-spec / dev-notes / qa-report ×2)</td></tr>
+    <tr><td>추가</td><td><code>docs/loops/roadmap-sprints.md</code>, <code>docs/templates/</code>(6종), <code>.claude/hooks/verifierGate.*</code>, <code>.claude/settings.json</code></td><td>루프 인프라 — 루프 명세(사용자 확인 2026-07-14), 공통 템플릿, 검증자 게이트(Stop 훅: npm test+typecheck, 예산 6M·막힘 3연속). 루프 종료 시 게이트 제거 예정</td></tr>
+  </table>
+
+  <h2>3. 검증 결과</h2>
+  <table class="grid">
+    <tr><th style="width:180px">항목</th><th style="width:280px">방법·명령</th><th>결과</th></tr>
+    <tr><td>단위 테스트</td><td><code>npm test</code></td><td class="ok">통과 — 170 스위트 / 1,598 테스트 (스프린트 전 1,565 → +33)</td></tr>
+    <tr><td>타입체크</td><td><code>npx tsc --noEmit</code></td><td class="ok">에러 0</td></tr>
+    <tr><td>비주얼 QA (qa-visual)</td><td>킷 templates/muklog ↔ RN 3축 교차검증</td><td class="ok">통과 — 하드페일 0 · 저심각 0(카피 📍 반영으로 해소) · 근사허용 4(사유 기록)</td></tr>
+    <tr><td>로직 QA (qa-logic)</td><td>경계면 8종 shape 교차검증 + T1~T6 mutation 표본 + 가드레일·컨벤션</td><td class="ok">통과 — 이슈 0, 수정 요청 0</td></tr>
+    <tr><td>비용 가드레일</td><td>plan 계약 대조</td><td class="ok">Kakao 호출 0 · 폴링 0 · 담기당 select 1 + insert 1 · 마이그레이션/RLS/Edge/DEFINER/Realtime 신설 0</td></tr>
+  </table>
+
+  <h2>4. 사용자 검토 필요</h2>
+  <div class="review">
+    <div class="item">
+      <b class="title">커밋 체크포인트 — 커밋 후 "다음"으로 루프 재개</b>
+      <div class="why">루프 설계(사용자 확정)대로 스프린트마다 일시정지한다. 추천 커밋 메시지는 채팅에 제시됨. 커밋 없이 다음 스프린트를 진행하면 워킹트리에 2개 기능 변경이 섞인다(비권장). 루프 인프라 파일(.claude/hooks·docs/loops·docs/templates)을 앱 커밋과 분리할지는 사용자 판단.</div>
+    </div>
+  </div>
+
+  <h2>5. 후속 조치</h2>
+  <div class="followup">
+    <div class="item">
+      <b class="title">다음 스프린트: map-wish-pins (루프 2/6)</b>
+      <div class="why">사용자 커밋 완료 후 오케스트레이터가 착수. 위시 장소를 먹로그 핀과 구분되는 스타일로 지도에 표시 — 이번 스프린트의 지도↔위시 연결을 전제로 함.</div>
+    </div>
+    <div class="item">
+      <b class="title">라이브·디바이스 스모크 (이월 — 기존 관례)</b>
+      <div class="why">wishlist_items insert/RLS 라이브 확인 + 실기기에서 핀탭→카드→담기→(시트)→토스트 흐름. 담당: 사용자 환경 스모크 배치(architecture §5 "출시 전 필요"와 동일 트랙). 단위 테스트로는 WebView 실렌더를 검증할 수 없음.</div>
+    </div>
+    <div class="item">
+      <b class="title">루프 종료 시 검증자 게이트 제거</b>
+      <div class="why">큐 6개 소진(또는 중단) 시 .claude/settings.json Stop 훅과 verifierGate.* 파일 제거 — 남겨두면 이후 모든 세션에서 턴 종료마다 테스트가 실행됨. 담당: 오케스트레이터(루프 종료 절차).</div>
+    </div>
+  </div>
+
+  <footer>
+    <span>히스토리: <code>docs/reports/</code> (파일명 날짜순)</span>
+    <span>generated by sprint-orchestrator + guksu-harness:report</span>
+  </footer>
+
+</div>
+</body>
+</html>

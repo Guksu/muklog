@@ -17,8 +17,11 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { FoodCover, Text } from '@/components';
+import { Button, FoodCover, IconName, Text } from '@/components';
 import { useTheme } from '@/theme';
+
+// "위시에 담기" 액션 라벨(카피 단일 출처). 킷 직접 시안 없음 — 위시 추가 CTA(mk-extra:187) 패턴을 조합.
+const ADD_WISH_LABEL = '위시에 담기';
 
 export type NearbySpotCardProps = {
   /** 가게명(Kakao placeName). */
@@ -35,6 +38,13 @@ export type NearbySpotCardProps = {
   coverEmoji: string;
   /** 거리 표기 문자열(예 "320m"/"1.5km"). developer가 formatDistance로 생성·주입. 결측이면 미전달 → 거리 생략. */
   distanceText?: string;
+  /**
+   * "위시에 담기" 탭 핸들러(map-nearby-wish). developer가 로그 선택/insert/토스트 흐름을 배선.
+   * 미전달이면 액션을 렌더하지 않는다(순수 표시 카드로 동작 — 기존 소비처 보존).
+   */
+  onAddWish?: () => void;
+  /** 담는 중(insert 진행) — 액션을 로딩/비활성해 중복 탭을 막는다(로딩 가드). 기본 false. */
+  adding?: boolean;
 };
 
 // 킷 FC 54×54, radius 14, emojiSize 26(mk-home:290) — SelectedSpotCard와 동일 셸.
@@ -63,6 +73,8 @@ export const NearbySpotCard = ({
   categoryName,
   coverEmoji,
   distanceText,
+  onAddWish,
+  adding = false,
 }: NearbySpotCardProps) => {
   const theme = useTheme();
   const meta = buildMeta({ categoryName, distanceText });
@@ -107,6 +119,23 @@ export const NearbySpotCard = ({
           ) : null}
         </View>
       </View>
+
+      {/* "위시에 담기" — 킷 직접 시안 없음(킷 MapScreen엔 saved 카드만). 위시 추가 CTA(mk-extra:187,
+          MkButton soft + leftIcon plus)를 그대로 재사용해 카드 하단 풀폭 버튼으로 배치. onAddWish 없으면 미렌더.
+          로그 선택/insert/토스트 흐름은 developer(MapTabScreen) 배선 — 여기선 콜백만 노출. */}
+      {onAddWish ? (
+        <Button
+          testID="nearby-add-wish"
+          title={ADD_WISH_LABEL}
+          variant="soft"
+          size="md"
+          leftIcon={IconName.Plus}
+          full
+          loading={adding}
+          onPress={onAddWish}
+          style={{ marginTop: theme.spacing[14] }}
+        />
+      ) : null}
     </View>
   );
 };

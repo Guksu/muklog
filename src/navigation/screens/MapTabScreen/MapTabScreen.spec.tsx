@@ -26,6 +26,22 @@ jest.mock('@/features/map/useLocationPermission', () => ({ useLocationPermission
 // slice2: nearby 훅 모킹(setBounds 호출/마커 주입/카드 분기 검증 지점).
 jest.mock('@/features/map/useNearbyPlaces', () => ({ useNearbyPlaces: jest.fn() }));
 
+// map-nearby-wish: 위시 담기 오케스트레이션 훅 모킹 — 분기·중복 pre-check·insert·토스트는
+//   useAddNearbyWish 단위 테스트가 검증한다. 여기선 화면 배선(액션→requestAdd, choosing→시트, 선택→chooseLog)만 본다.
+const mockRequestAdd = jest.fn();
+const mockChooseLog = jest.fn();
+const mockDismiss = jest.fn();
+const mockNearbyWish: { choosing: unknown; submitting: boolean } = { choosing: null, submitting: false };
+jest.mock('@/features/wishlist', () => ({
+  useAddNearbyWish: () => ({
+    requestAdd: mockRequestAdd,
+    chooseLog: mockChooseLog,
+    dismiss: mockDismiss,
+    choosing: mockNearbyWish.choosing,
+    submitting: mockNearbyWish.submitting,
+  }),
+}));
+
 // injectJavaScript로 주입된 스크립트 캡처(slice2: SET_MARKERS 머지 마커 주입 검증).
 const injectedScripts: string[] = [];
 
@@ -123,6 +139,11 @@ beforeEach(() => {
   requestSpy.mockReset();
   refreshCoordsSpy.mockReset();
   injectedScripts.length = 0;
+  mockRequestAdd.mockReset();
+  mockChooseLog.mockReset();
+  mockDismiss.mockReset();
+  mockNearbyWish.choosing = null;
+  mockNearbyWish.submitting = false;
   setPermission();
   setNearby();
 });
@@ -503,5 +524,83 @@ describe('MapTabScreen', () => {
     expect(screen.queryByTestId('nearby-spot-card')).toBeNull();
     const sel = setSelectedScripts();
     expect(sel[sel.length - 1]).toContain('"selectedId":null');
+  });
+
+  // ── map-nearby-wish 배선 (plan §5 T3·T4·T5, ui-spec §4) ─────────
+  const selectNearby = () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setNearby({
+      status: 'ready',
+      markers: [{ id: 'k7', lat: 37.5, lng: 127.0, emoji: '🍜', saved: false }],
+      items: [nearbyItem()],
+    });
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'k7', saved: false }) });
+  };
+
+  it('T3: nearby 카드 "위시에 담기" 탭 → requestAdd({ item: 선택된 nearby })', () => {
+    selectNearby();
+    expect(screen.getByText('위시에 담기')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('nearby-add-wish'));
+    expect(mockRequestAdd).toHaveBeenCalledWith({
+      item: expect.objectContaining({ kakaoPlaceId: 'k7', placeName: '연남 칼국수' }),
+    });
+  });
+
+  it('T5: submitting(담는 중)이면 카드 액션이 비활성이라 재탭이 requestAdd를 부르지 않는다', () => {
+    mockNearbyWish.submitting = true;
+    selectNearby();
+    fireEvent.press(screen.getByTestId('nearby-add-wish'));
+    expect(mockRequestAdd).not.toHaveBeenCalled();
+  });
+
+  it('T4: choosing이 있으면 LogPickerSheet를 로그 라벨과 함께 노출한다(2+개)', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    mockNearbyWish.choosing = {
+      item: nearbyItem(),
+      logs: [
+        { roomId: 'r1', name: '성수 로그', memberCount: 2 },
+        { roomId: 'r2', name: '연남 로그', memberCount: 1 },
+      ],
+    };
+    renderWithTheme(<MapTabScreen />);
+    expect(screen.getByText('성수 로그')).toBeTruthy();
+    expect(screen.getByText('연남 로그')).toBeTruthy();
+    expect(screen.getByTestId('log-picker-row-r1')).toBeTruthy();
+  });
+
+  it('T4: 이름 없는 로그는 displayLogName 폴백으로 표시한다(name=null)', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    mockNearbyWish.choosing = {
+      item: nearbyItem(),
+      logs: [
+        { roomId: 'r1', name: null, memberCount: 2 },
+        { roomId: 'r2', name: null, memberCount: 1 },
+      ],
+    };
+    renderWithTheme(<MapTabScreen />);
+    // selfNickname 미주입(null) → 커플 "우리 로그" / 솔로 "내 로그" 폴백.
+    expect(screen.getByText('우리 로그')).toBeTruthy();
+    expect(screen.getByText('내 로그')).toBeTruthy();
+  });
+
+  it('T4: LogPickerSheet 행 탭 → 그 roomId로 chooseLog', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    mockNearbyWish.choosing = {
+      item: nearbyItem(),
+      logs: [
+        { roomId: 'r1', name: '성수 로그', memberCount: 2 },
+        { roomId: 'r2', name: '연남 로그', memberCount: 1 },
+      ],
+    };
+    renderWithTheme(<MapTabScreen />);
+    fireEvent.press(screen.getByTestId('log-picker-row-r2'));
+    expect(mockChooseLog).toHaveBeenCalledWith({ roomId: 'r2' });
+  });
+
+  it('T4: choosing이 없으면 LogPickerSheet를 렌더하지 않는다', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+    expect(screen.queryByTestId('log-picker-row-r1')).toBeNull();
   });
 });
