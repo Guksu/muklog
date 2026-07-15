@@ -4,6 +4,10 @@ export { SelectedSpotCard, type SelectedSpotCardProps } from './SelectedSpotCard
 export { NearbySpotCard, type NearbySpotCardProps } from './NearbySpotCard';
 export { WishSpotCard, type WishSpotCardProps } from './WishSpotCard';
 export {
+  CategoryFilterBar,
+  type CategoryFilterBarProps,
+} from './CategoryFilterBar';
+export {
   LogPickerSheet,
   type LogPickerItem,
   type LogPickerSheetProps,

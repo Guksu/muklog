@@ -99,6 +99,7 @@ const useNearbyPlacesMock = useNearbyPlaces as jest.Mock;
 const useWishPinsMock = useWishPins as jest.Mock;
 
 const wishRefreshSpy = jest.fn();
+const muklogRefreshSpy = jest.fn();
 // 위시 핀 상태 주입(기본: ready·빈 핀). 테스트에서 pins/state 오버라이드.
 const setWishPins = (over?: { pins?: unknown[]; state?: unknown }) => {
   useWishPinsMock.mockReturnValue({
@@ -176,6 +177,7 @@ beforeEach(() => {
   useNearbyPlacesMock.mockReset();
   useWishPinsMock.mockReset();
   wishRefreshSpy.mockReset();
+  muklogRefreshSpy.mockReset();
   mockFocus.cb = null;
   setBoundsSpy.mockReset();
   requestSpy.mockReset();
@@ -293,9 +295,10 @@ describe('MapTabScreen', () => {
       state: { status: 'ready', pins: [pin({ muklogId: 'm1', lat: 37.5, lng: 127.0 })] },
       refresh: jest.fn(),
     });
+    // nearby 마커는 items에서 파생(MapTabScreen이 nearbyToMapMarkers로 생성) — 실제 useNearbyPlaces 동작과 일치.
     setNearby({
       status: 'ready',
-      markers: [{ id: 'k1', lat: 38.0, lng: 128.0, emoji: '🍜', kind: MapPinKind.Nearby }],
+      items: [nearbyItem({ kakaoPlaceId: 'k1', lat: 38.0, lng: 128.0 })],
     });
     renderWithTheme(<MapTabScreen />);
     // READY → INIT 주입(머지 마커 포함). saved id(m1) + nearby id(k1) 둘 다 직렬화.
@@ -536,10 +539,10 @@ describe('MapTabScreen', () => {
     expect(screen.getByTestId('selected-spot-card')).toBeTruthy();
     const selBefore = setSelectedScripts().length;
 
-    // nearby 마커 갱신 → SET_MARKERS 재주입(markersKey 변경). 선택은 유지되어야 한다.
+    // nearby 마커 갱신(items → 파생) → SET_MARKERS 재주입(markersKey 변경). 선택은 유지되어야 한다.
     setNearby({
       status: 'ready',
-      markers: [{ id: 'k1', lat: 38.0, lng: 128.0, emoji: '🍜', kind: MapPinKind.Nearby }],
+      items: [nearbyItem({ kakaoPlaceId: 'k1', lat: 38.0, lng: 128.0 })],
     });
     rerender(<MapTabScreen />);
 
@@ -698,5 +701,109 @@ describe('MapTabScreen', () => {
     expect(mockNearbyWish.onAdded).not.toBeNull();
     mockNearbyWish.onAdded?.();
     expect(wishRefreshSpy).toHaveBeenCalled();
+  });
+
+  // ── map-category-filter 배선 (plan §5 T3·T4) ────────────────────
+  const lastSetMarkers = () =>
+    injectedScripts.filter((s) => s.includes('"type":"SET_MARKERS"')).slice(-1)[0] ?? '';
+
+  // 3종 핀 소스: saved(pasta) + wish(cafe) + nearby(cafe). 좌표는 서로 떨어뜨려 dedup 방지.
+  const setupThreeKinds = () => {
+    useMuklogPinsMock.mockReturnValue({
+      state: {
+        status: 'ready',
+        pins: [pin({ muklogId: 'm-pasta', category: 'pasta', lat: 37.5, lng: 127.0 })],
+      },
+      refresh: muklogRefreshSpy,
+    });
+    setWishPins({ pins: [wishPin({ id: 'w-cafe', category: 'cafe', lat: 37.6, lng: 127.1 })] });
+    setNearby({
+      status: 'ready',
+      items: [
+        nearbyItem({
+          kakaoPlaceId: 'k-cafe',
+          categoryName: '음식점 > 카페 > 스페셜티커피',
+          lat: 37.7,
+          lng: 127.2,
+        }),
+      ],
+    });
+  };
+
+  it('T3: 카테고리 칩 선택 시 3종 핀이 해당 카테고리로 좁혀 SET_MARKERS 재주입한다', () => {
+    setupThreeKinds();
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    // 초기(전체): 세 핀 모두 INIT/SET_MARKERS에 존재.
+    const initJoined = injectedScripts.join('\n');
+    expect(initJoined).toContain('"id":"m-pasta"');
+    expect(initJoined).toContain('"id":"w-cafe"');
+    expect(initJoined).toContain('"id":"k-cafe"');
+
+    // 카페 필터 → pasta(saved) 탈락, cafe(wish·nearby)만.
+    fireEvent.press(screen.getByTestId('filter-chip-cafe'));
+    const filtered = lastSetMarkers();
+    expect(filtered).toContain('"id":"w-cafe"');
+    expect(filtered).toContain('"id":"k-cafe"');
+    expect(filtered).not.toContain('"id":"m-pasta"');
+  });
+
+  it('T3: "전체" 리셋 시 전 핀이 복귀한다', () => {
+    setupThreeKinds();
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    fireEvent.press(screen.getByTestId('filter-chip-cafe'));
+    expect(lastSetMarkers()).not.toContain('"id":"m-pasta"');
+
+    fireEvent.press(screen.getByTestId('filter-chip-all'));
+    const reset = lastSetMarkers();
+    expect(reset).toContain('"id":"m-pasta"');
+    expect(reset).toContain('"id":"w-cafe"');
+    expect(reset).toContain('"id":"k-cafe"');
+  });
+
+  it('T3: 필터 변경은 재조회를 유발하지 않는다(순수 클라 파생, 비용 0)', () => {
+    setupThreeKinds();
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    setBoundsSpy.mockClear();
+    muklogRefreshSpy.mockClear();
+    wishRefreshSpy.mockClear();
+
+    fireEvent.press(screen.getByTestId('filter-chip-cafe'));
+    fireEvent.press(screen.getByTestId('filter-chip-all'));
+
+    // 필터는 표시 파생만 — nearby bounds 재조회·먹로그/위시 refresh 모두 미발생.
+    expect(setBoundsSpy).not.toHaveBeenCalled();
+    expect(muklogRefreshSpy).not.toHaveBeenCalled();
+    expect(wishRefreshSpy).not.toHaveBeenCalled();
+  });
+
+  it('T4: 선택된 핀이 필터에서 빠지면 카드가 닫힌다(SET_SELECTED null)', () => {
+    setupThreeKinds();
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    // saved(pasta) 핀 탭 → SelectedSpotCard 표시.
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'm-pasta', kind: 'saved' }) });
+    expect(screen.getByTestId('selected-spot-card')).toBeTruthy();
+
+    // 카페 필터 → pasta 핀 소실 → 활성 정리로 카드 닫힘 + SET_SELECTED(null).
+    fireEvent.press(screen.getByTestId('filter-chip-cafe'));
+    expect(screen.queryByTestId('selected-spot-card')).toBeNull();
+    const sel = setSelectedScripts();
+    expect(sel[sel.length - 1]).toContain('"selectedId":null');
+  });
+
+  it('T4: 선택된 핀이 필터에 남아있으면 카드가 유지된다', () => {
+    setupThreeKinds();
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    // wish(cafe) 핀 탭 → WishSpotCard 표시.
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'w-cafe', kind: 'wish' }) });
+    expect(screen.getByText('연남 파스타')).toBeTruthy(); // wishPin 기본 placeName
+
+    // 카페 필터 → wish(cafe)는 남으므로 카드 유지.
+    fireEvent.press(screen.getByTestId('filter-chip-cafe'));
+    expect(screen.getByText('연남 파스타')).toBeTruthy();
   });
 });

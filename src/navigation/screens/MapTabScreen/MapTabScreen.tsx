@@ -14,6 +14,7 @@ import { StyleSheet, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
 import {
+  CategoryFilterBar,
   LogPickerSheet,
   MapLegend,
   MapLocateButton,
@@ -37,8 +38,11 @@ import { formatDistance } from '@/features/map/formatDistance';
 import { initialRegion } from '@/features/map/initialRegion';
 import { lastCategorySegment } from '@/features/map/lastCategorySegment';
 import { mapHtml } from '@/features/map/mapHtml';
+import { filterByAppCategory } from '@/features/map/filterByAppCategory';
+import { filterNearbyByCategory } from '@/features/map/filterNearbyByCategory';
 import { mergeMapMarkers } from '@/features/map/mergeMapMarkers';
 import { nearbyCategoryEmoji } from '@/features/map/nearbyCategoryEmoji';
+import { nearbyToMapMarkers } from '@/features/map/nearbyToMapMarkers';
 import { parseMapMessage } from '@/features/map/parseMapMessage';
 import { pinsToMapMarkers } from '@/features/map/pinsToMapMarkers';
 import {
@@ -53,6 +57,7 @@ import { useMuklogPins } from '@/features/map/useMuklogPins';
 import { useNearbyPlaces } from '@/features/map/useNearbyPlaces';
 import { useWishPins } from '@/features/map/useWishPins';
 import { wishPinEmoji, wishToMapMarkers } from '@/features/map/wishToMapMarkers';
+import { type MuklogCategoryKey } from '@/features/muklog/categories';
 import { displayLogName } from '@/features/room/logName';
 import { useAddNearbyWish } from '@/features/wishlist';
 import { env } from '@/lib/env';
@@ -81,6 +86,8 @@ export const MapTabScreen = () => {
 
   // 선택 상태는 {id, kind} 쌍 — kind(saved|nearby|wish)로 id 네임스페이스 충돌 방지 + 카드 3분기(map-wish-pins §3.4).
   const [selected, setSelected] = useState<{ id: string; kind: MapPinKind } | null>(null);
+  // map-category-filter: 카테고리 필터(클라 전용 state, null="전체"). 백엔드·조회 재실행 0 — 이미 받은 데이터의 표시 필터.
+  const [category, setCategory] = useState<MuklogCategoryKey | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapErrored, setMapErrored] = useState(false);
   const webviewRef = useRef<MapWebViewHandle>(null);
@@ -93,9 +100,14 @@ export const MapTabScreen = () => {
   // 위시 핀 목록(ready일 때만 — 조회 실패/로딩이어도 지도·먹로그·주변은 정상, 위시 핀만 생략 best-effort §4.2).
   const wishPinsList: WishPin[] = wishPins.state.status === 'ready' ? wishPins.state.pins : [];
   // saved(내 맛집) + wish(위시) + nearby(주변) 3-way 머지(좌표 근접 dedup, 우선순위 saved>wish>nearby) → 지도뷰 전체 마커.
-  const savedMarkers = pinsToMapMarkers({ pins });
-  const wishMarkers = wishToMapMarkers({ pins: wishPinsList });
-  const markers = mergeMapMarkers({ saved: savedMarkers, wish: wishMarkers, nearby: nearby.markers });
+  // map-category-filter: 3소스를 마커 변환 "전에" 카테고리로 필터(순수 파생, 재조회 0). category=null이면 원본 통과.
+  //   saved/wish는 category 필드 직접 비교(filterByAppCategory), nearby는 mapKakaoCategory 파생 비교(filterNearbyByCategory).
+  const savedMarkers = pinsToMapMarkers({ pins: filterByAppCategory({ items: pins, category }) });
+  const wishMarkers = wishToMapMarkers({ pins: filterByAppCategory({ items: wishPinsList, category }) });
+  const nearbyMarkers = nearbyToMapMarkers({
+    items: filterNearbyByCategory({ items: nearby.items, category }),
+  });
+  const markers = mergeMapMarkers({ saved: savedMarkers, wish: wishMarkers, nearby: nearbyMarkers });
   const center = initialRegion({ coords: permission.coords, pins });
   // HTML은 1회 생성(키 주입). INIT/SET_MARKERS는 injectJavaScript로 주입(SDK 재로드 없음).
   const html = mapHtml({ jsKey: env.KAKAO_JS_KEY });
@@ -194,22 +206,17 @@ export const MapTabScreen = () => {
     [selectedId, mapReady],
   );
 
-  // map-pin-select(T7)+map-wish-pins: 선택된 nearby/wish 핀이 목록에서 사라지면(viewport 이탈·dedup·삭제 refresh)
-  //   selected 정리 → 카드 자동 닫힘 + SET_SELECTED(null) 일관. saved 핀은 항상 렌더라 해당 없음.
-  const nearbyItems = nearby.items;
+  // 활성 핀 정리 — 선택된 핀이 표시 마커(필터·머지·dedup 후 최종 집합)에서 빠지면 selection 해제
+  //   → 카드 자동 닫힘 + SET_SELECTED(null) 일관. nearby viewport 이탈·wish 삭제·카테고리 필터아웃(T4)을
+  //   한 곳에서 처리(map-pin-select 선례 일반화, 3 kind 공통). saved도 필터아웃되면 정리된다.
   useEffect(
     function clearSelectionWhenPinGone() {
       if (!selected) return;
-      if (selected.kind === MapPinKind.Nearby) {
-        const present = nearbyItems.some((it) => it.kakaoPlaceId === selected.id);
-        if (!present) setSelected(null);
-      } else if (selected.kind === MapPinKind.Wish) {
-        const present = wishPinsList.some((w) => w.id === selected.id);
-        if (!present) setSelected(null);
-      }
+      const present = markers.some((m) => m.id === selected.id);
+      if (!present) setSelected(null);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- wishPinsList는 매 렌더 새 참조라 deps 제외(effect 본문은 setSelected(null) 가드로 루프 없음).
-    [selected, nearbyItems, wishPins.state],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- markersKey(마커 집합 요약)로 발화. markers 배열은 매 렌더 새 참조라 제외(본문 setSelected(null) 가드로 루프 없음).
+    [selected, markersKey],
   );
 
   // #4: READY 이후 현위치(coords)가 처음 도착하면 1회 자동 RECENTER(서울 폴백 고정 해제).
@@ -293,8 +300,16 @@ export const MapTabScreen = () => {
   return (
     <View style={styles.root}>
       <MapWebView html={html} onMessage={handleMessage} webviewRef={webviewRef}>
-        {/* 범례 — 좌상단 오버레이(ui-spec §2.2: top/left 배치는 부모 책임). */}
-        <View style={[styles.legend, { top: theme.spacing[14], left: theme.spacing[16] }]}>
+        {/* 카테고리 필터 바 — 최상단 full-width strip(ui-spec §2: top 12, edge-bleed 가로 스크롤). 위치는 부모가 배치. */}
+        <View style={[styles.filterBar, { top: theme.spacing[12] }]}>
+          <CategoryFilterBar
+            selected={category}
+            onSelect={({ category: next }) => setCategory(next)}
+          />
+        </View>
+
+        {/* 범례 — 필터 바 아래로 하강(ui-spec §2: top 56 = 12 + 필터바 ~34 + gap ~10). left 불변. */}
+        <View style={[styles.legend, { top: theme.spacing[56], left: theme.spacing[16] }]}>
           <MapLegend />
         </View>
 
@@ -369,6 +384,8 @@ export const MapTabScreen = () => {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  // 카테고리 필터 바 — 최상단 full-width 절대배치(top은 인라인 토큰). left/right 0으로 edge-bleed 가로 스크롤.
+  filterBar: { position: 'absolute', left: 0, right: 0 },
   legend: { position: 'absolute' },
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   // 현재위치 FAB — 우하단 절대배치(right/bottom은 인라인 토큰, ui-spec §4.2).

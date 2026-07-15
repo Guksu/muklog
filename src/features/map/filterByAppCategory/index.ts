@@ -1,0 +1,1 @@
+export { filterByAppCategory } from './filterByAppCategory';

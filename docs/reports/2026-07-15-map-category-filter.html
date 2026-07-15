@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>작업 보고서 — map-category-filter (지도 카테고리 필터)</title>
+<style>
+  :root {
+    --ink: #1c1c1c; --sub: #595959; --line: #e3e3e3; --bg: #f6f6f4; --card: #ffffff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.6; font-size: 15px;
+    padding: 40px 16px;
+  }
+  .page { max-width: 860px; margin: 0 auto; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 44px 48px; }
+  header { border-bottom: 2px solid var(--ink); padding-bottom: 18px; margin-bottom: 26px; }
+  .doc-label { font-size: 12px; letter-spacing: .14em; color: var(--sub); text-transform: uppercase; }
+  h1 { font-size: 24px; font-weight: 700; margin: 6px 0 12px; }
+  .status { display: inline-block; font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 4px; border: 1px solid; }
+  .status[data-status="done"]    { color: #1a7f37; background: #ebf7ee; border-color: #9fd6ad; }
+  .status[data-status="partial"] { color: #9a6700; background: #fff8e5; border-color: #e6c86e; }
+  .status[data-status="stopped"] { color: #b42318; background: #fdf0ee; border-color: #f0a9a0; }
+  table.meta { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13.5px; }
+  table.meta th { text-align: left; color: var(--sub); font-weight: 600; width: 110px; padding: 3px 0; vertical-align: top; }
+  table.meta td { padding: 3px 0; }
+  h2 { font-size: 16.5px; font-weight: 700; margin: 34px 0 12px; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+  p.summary { color: var(--ink); }
+  table.grid { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 4px; }
+  table.grid th { background: #f2f2ef; text-align: left; padding: 8px 12px; border: 1px solid var(--line); font-weight: 600; }
+  table.grid td { padding: 8px 12px; border: 1px solid var(--line); vertical-align: top; }
+  .ok { color: #1a7f37; font-weight: 700; }
+  .fail { color: #b42318; font-weight: 700; }
+  .item { border: 1px solid var(--line); border-left: 4px solid #8a8a8a; border-radius: 6px; padding: 14px 16px; margin: 10px 0; background: #fcfcfb; }
+  .review .item { border-left-color: #d4a72c; background: #fffdf5; }
+  .followup .item { border-left-color: #4477aa; background: #f8fbfd; }
+  .item b.title { display: block; font-size: 14.5px; margin-bottom: 4px; }
+  .item .why { color: var(--sub); font-size: 13.5px; }
+  .none { color: var(--sub); font-size: 14px; }
+  footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--sub); font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+  code { font-family: ui-monospace, 'D2Coding', Consolas, monospace; font-size: .92em; background: #f2f2ef; padding: 1px 5px; border-radius: 3px; }
+  @media print { body { background: #fff; padding: 0; } .page { border: none; padding: 24px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="doc-label">Work Report · muklog</div>
+    <h1>map-category-filter — 지도 카테고리 필터 (로드맵 루프 3/6)</h1>
+    <span class="status" data-status="done">완료</span>
+    <table class="meta">
+      <tr><th>날짜</th><td>2026-07-15 (착수 2026-07-14)</td></tr>
+      <tr><th>작성</th><td>sprint-orchestrator (planner → ui-publisher → developer → qa-visual ∥ qa-logic)</td></tr>
+      <tr><th>브랜치</th><td><code>main</code> (커밋은 사용자 직접 수행)</td></tr>
+      <tr><th>워크로그</th><td><code>docs/sprint/sprint-20260714-map-category-filter/</code> — 정본 기록 (plan / ui-spec / dev-notes / qa-report ×2)</td></tr>
+    </table>
+  </header>
+
+  <h2>1. 요약</h2>
+  <p class="summary">로드맵 "지도 고도화"의 마지막 슬라이스로, 지도 상단에 카테고리 칩 바(전체+고정 8종, 단일 선택)를 얹어 먹로그·위시·주변 핀 3종을 카테고리로 좁혀 볼 수 있게 했다. 필터는 마커 변환 전 소스 3종에 적용되는 순수 클라이언트 파생이라 조회 재실행·Kakao 호출·백엔드 변경이 전부 0이고, WebView 브리지 계약(MapMarker·SET_MARKERS)도 불변이다. 선택 카드가 열린 핀이 필터로 사라지면 카드도 자동으로 닫힌다. 두 QA 모두 이슈 0 통과, 전체 1,658 테스트 green. 이로써 지도 고도화 3슬라이스가 완결됐고, 다음은 푸시 알림 잔여(S3 prefs DB 이전)로 넘어간다. 진행 중 qa-logic이 세션 한도로 한 차례 중단됐다가 한도 해제 후 재개해 완료했다(작업 품질 영향 없음).</p>
+
+  <h2>2. 작업 내용</h2>
+  <table class="grid">
+    <tr><th style="width:130px">구분</th><th style="width:280px">경로</th><th>내용</th></tr>
+    <tr><td>추가</td><td><code>src/features/map/filterByAppCategory/</code></td><td>제네릭 순수 필터 — MuklogPin/WishPin 공용, category key|null(null=전체, 동일 참조 반환)</td></tr>
+    <tr><td>추가</td><td><code>src/features/map/filterNearbyByCategory/</code></td><td>주변 핀 필터 — 기존 mapKakaoCategory 매핑 재사용(재매핑 금지), NearbyPlaceItem[] 대상</td></tr>
+    <tr><td>추가</td><td><code>src/features/map/components/CategoryFilterBar/</code></td><td>지도 상단 오버레이 칩 바 — 킷 mk-log:113-118 직접 시안 이식, 공용 Chip·categoryLabel 재사용(신규 프리미티브·토큰 0)</td></tr>
+    <tr><td>수정</td><td><code>src/navigation/screens/MapTabScreen/</code></td><td>category useState + 3소스(pins/wish/nearby.items) 마커 변환 전 필터 → mergeMapMarkers. 활성 핀 정리를 표시 markers 기반으로 일반화(필터아웃 시 카드 자동 닫힘). MapLegend top 하강(필터바와 비충돌)</td></tr>
+    <tr><td>수정</td><td><code>src/features/map/</code> (nearby 마커 생성 경로)</td><td>nearby.markers → nearby.items에서 생성으로 이동(필터 삽입 지점) — useNearbyPlaces·누적 머지 불변, category=null 시 기존 산출과 동일(회귀 0)</td></tr>
+    <tr><td>추가</td><td><code>docs/sprint/sprint-20260714-map-category-filter/</code></td><td>스프린트 산출물 5종</td></tr>
+  </table>
+
+  <h2>3. 검증 결과</h2>
+  <table class="grid">
+    <tr><th style="width:180px">항목</th><th style="width:280px">방법·명령</th><th>결과</th></tr>
+    <tr><td>단위 테스트</td><td><code>npm test</code></td><td class="ok">통과 — 177 스위트 / 1,658 테스트 (스프린트 2 종료 시점 1,635 → +23)</td></tr>
+    <tr><td>타입체크</td><td><code>npx tsc --noEmit</code></td><td class="ok">에러 0</td></tr>
+    <tr><td>비주얼 QA (qa-visual)</td><td>킷 mk-log 직접 시안 정밀 대조 + 배선 후 오버레이 재검</td><td class="ok">통과 — 하드페일 0 · 근사허용 2(사유 기록) · 디바이스 스모크 이월 2</td></tr>
+    <tr><td>로직 QA (qa-logic)</td><td>경계면 7쌍 + T1~T6 mutation 표본 2곳(8건 red 확인)</td><td class="ok">통과 — 이슈 0, 수정 요청 0</td></tr>
+    <tr><td>비용 가드레일</td><td>plan 계약 대조 + 미호출 단언 확인</td><td class="ok">필터 변경 시 재조회 0(setBounds·refresh 미호출 단언) · 백엔드/브리지/마이그레이션/Kakao/Realtime 전부 0</td></tr>
+  </table>
+
+  <h2>4. 사용자 검토 필요</h2>
+  <div class="review">
+    <div class="item">
+      <b class="title">커밋 체크포인트 — 커밋 후 "다음"으로 루프 재개</b>
+      <div class="why">다음은 4/6 push-prefs-db(알림 설정 DB 이전). 지도 고도화 3슬라이스 완결 시점이라, 원하시면 여기서 실기기 스모크(지도 전체 흐름)를 먼저 배치하는 것도 선택지 — 미결정 시 기본은 루프 계속.</div>
+    </div>
+    <div class="item">
+      <b class="title">칩 집합 divergence 확인 (플래그)</b>
+      <div class="why">리스트 필터는 "존재하는 카테고리만" 노출하지만 지도는 고정 8종+전체를 노출한다(주변 핀 churn으로 칩이 나타났다 사라지는 UX 회피 — plan §3④ 근거). 제품 판단이 필요하면 말씀 주시면 정합 조정. 미결정 시 현행 유지.</div>
+    </div>
+  </div>
+
+  <h2>5. 후속 조치</h2>
+  <div class="followup">
+    <div class="item">
+      <b class="title">디바이스 스모크 이월 2건 + 지도 고도화 누적 이월 통합 확인</b>
+      <div class="why">이번: 스크림 없는 칩의 복잡 타일 위 가독성 / 노치·소형 화면 오버레이 비충돌. 누적(1·2/6): 핀 3색 판별성·stacking·범례 협폭·위시 담기 실기기 흐름·RLS 라이브. 지도 고도화 3종이 완결됐으니 한 번의 실기기 세션으로 묶어 확인 권장. 담당: 사용자 스모크 배치.</div>
+    </div>
+    <div class="item">
+      <b class="title">다음 스프린트: push-prefs-db (루프 4/6)</b>
+      <div class="why">사용자 커밋 완료 후 착수. 알림 설정 AsyncStorage → 서버 가독 notification_prefs DB 이전(useNotifPrefs 인터페이스 보존) — 이번 루프 첫 마이그레이션 동반 스프린트라 라이브 db push 필요성이 생김.</div>
+    </div>
+  </div>
+
+  <footer>
+    <span>히스토리: <code>docs/reports/</code> (파일명 날짜순)</span>
+    <span>generated by sprint-orchestrator + guksu-harness:report</span>
+  </footer>
+
+</div>
+</body>
+</html>
