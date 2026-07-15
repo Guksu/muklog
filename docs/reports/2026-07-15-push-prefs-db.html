@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>작업 보고서 — push-prefs-db (정찰: 기구현 확인·문서 정합)</title>
+<style>
+  :root {
+    --ink: #1c1c1c; --sub: #595959; --line: #e3e3e3; --bg: #f6f6f4; --card: #ffffff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.6; font-size: 15px;
+    padding: 40px 16px;
+  }
+  .page { max-width: 860px; margin: 0 auto; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 44px 48px; }
+  header { border-bottom: 2px solid var(--ink); padding-bottom: 18px; margin-bottom: 26px; }
+  .doc-label { font-size: 12px; letter-spacing: .14em; color: var(--sub); text-transform: uppercase; }
+  h1 { font-size: 24px; font-weight: 700; margin: 6px 0 12px; }
+  .status { display: inline-block; font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 4px; border: 1px solid; }
+  .status[data-status="done"]    { color: #1a7f37; background: #ebf7ee; border-color: #9fd6ad; }
+  .status[data-status="partial"] { color: #9a6700; background: #fff8e5; border-color: #e6c86e; }
+  .status[data-status="stopped"] { color: #b42318; background: #fdf0ee; border-color: #f0a9a0; }
+  table.meta { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13.5px; }
+  table.meta th { text-align: left; color: var(--sub); font-weight: 600; width: 110px; padding: 3px 0; vertical-align: top; }
+  table.meta td { padding: 3px 0; }
+  h2 { font-size: 16.5px; font-weight: 700; margin: 34px 0 12px; padding-bottom: 7px; border-bottom: 1px solid var(--line); }
+  p.summary { color: var(--ink); }
+  table.grid { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 4px; }
+  table.grid th { background: #f2f2ef; text-align: left; padding: 8px 12px; border: 1px solid var(--line); font-weight: 600; }
+  table.grid td { padding: 8px 12px; border: 1px solid var(--line); vertical-align: top; }
+  .ok { color: #1a7f37; font-weight: 700; }
+  .fail { color: #b42318; font-weight: 700; }
+  .item { border: 1px solid var(--line); border-left: 4px solid #8a8a8a; border-radius: 6px; padding: 14px 16px; margin: 10px 0; background: #fcfcfb; }
+  .review .item { border-left-color: #d4a72c; background: #fffdf5; }
+  .followup .item { border-left-color: #4477aa; background: #f8fbfd; }
+  .item b.title { display: block; font-size: 14.5px; margin-bottom: 4px; }
+  .item .why { color: var(--sub); font-size: 13.5px; }
+  .none { color: var(--sub); font-size: 14px; }
+  footer { margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--sub); font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+  code { font-family: ui-monospace, 'D2Coding', Consolas, monospace; font-size: .92em; background: #f2f2ef; padding: 1px 5px; border-radius: 3px; }
+  @media print { body { background: #fff; padding: 0; } .page { border: none; padding: 24px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="doc-label">Work Report · muklog</div>
+    <h1>push-prefs-db — 정찰: S3 기구현 확인 · 문서 정합 (로드맵 루프 4/6)</h1>
+    <span class="status" data-status="done">완료</span>
+    <table class="meta">
+      <tr><th>날짜</th><td>2026-07-15</td></tr>
+      <tr><th>작성</th><td>sprint-orchestrator (sprint-planner 정찰 — 구현·QA 미투입)</td></tr>
+      <tr><th>브랜치</th><td><code>main</code> (커밋은 사용자 직접 수행)</td></tr>
+      <tr><th>워크로그</th><td><code>docs/sprint/sprint-20260715-push-prefs-db/plan.md</code> — 정찰 findings + A안 결정 기록</td></tr>
+    </table>
+  </header>
+
+  <h2>1. 요약</h2>
+  <p class="summary">루프 4/6로 예정됐던 "알림 설정 DB 이전(push S3)"은 planner 정찰 결과 <b>이미 전량 구현·병합된 상태</b>였다. 6월 22일 push-send(S2) 스프린트가 발송 게이팅의 전제 조건으로 S3를 통째로 흡수해 — <code>notification_prefs</code>·<code>notification_pref_rooms</code> 테이블+RLS(마이그레이션 <code>20260622120000_push_send.sql</code>), <code>useNotifPrefs</code>의 서버 read/write 교체(인터페이스 보존), <code>list_room_push_targets</code> DEFINER RPC 게이팅까지 — 완료했는데 architecture.md와 README가 갱신되지 않아 "예정"으로 남아 있었다. 유일한 미실행분(기존 로컬값 1회 시드)은 당시 의식적으로 폐기된 결정(출시 전 사용자 0·기본 on)이라 재구현하지 않기로 했다(A안, 리더 확정). 따라서 이 스프린트는 코드 변경 0의 문서 정합으로 축소 종료됐고, 푸시 잔여는 S4(수신 UX)뿐이다.</p>
+
+  <h2>2. 작업 내용</h2>
+  <table class="grid">
+    <tr><th style="width:130px">구분</th><th style="width:280px">경로</th><th>내용</th></tr>
+    <tr><td>수정</td><td><code>docs/design/architecture.md</code></td><td>§5 S2·S3 행 "예정"→"✅ 완료(push-send 흡수, 라이브 이월)" 정정, S2 트리거 방식 확정 명시(클라 <code>functions.invoke</code> fire-and-forget — DB트리거 아님), notif-settings 행 후속 주석, "출시 후 후속" 목록에서 S2·S3 제거(S4만 잔존), §7 동기화</td></tr>
+    <tr><td>수정</td><td><code>README.md</code></td><td>로드맵 푸시 항목 실상태 정정(토큰·발송·게이팅 완료 / 남은 것: 수신 UX+라이브 활성화) + 지도 고도화 항목 ✅ 완료 처리(루프 1~3 반영)</td></tr>
+    <tr><td>추가</td><td><code>docs/sprint/sprint-20260715-push-prefs-db/plan.md</code></td><td>정찰 findings(근거 파일:라인) + A안 채택 결정 기록(2026-07-15)</td></tr>
+    <tr><td>—</td><td><code>src/</code>, <code>supabase/</code></td><td><b>코드 변경 0</b> — 구현·QA 에이전트 미투입</td></tr>
+  </table>
+
+  <h2>3. 검증 결과</h2>
+  <table class="grid">
+    <tr><th style="width:180px">항목</th><th style="width:280px">방법·명령</th><th>결과</th></tr>
+    <tr><td>기구현 근거 확인</td><td>마이그레이션·훅·Edge Function 실코드 정찰</td><td class="ok">20260622120000_push_send.sql L30–98(테이블+RLS)·L111–132(게이팅 RPC), useNotifPrefs 서버 교체, send-muklog-push service_role 호출 확인</td></tr>
+    <tr><td>단위 테스트</td><td><code>npm test</code></td><td class="ok">177 스위트 / 1,658 테스트 green (변경 없음 유지)</td></tr>
+    <tr><td>타입체크</td><td><code>npx tsc --noEmit</code></td><td class="ok">에러 0</td></tr>
+  </table>
+
+  <h2>4. 사용자 검토 필요</h2>
+  <div class="review">
+    <div class="item">
+      <b class="title">A안(문서 정합 축소) 사후 확인 + 커밋 체크포인트</b>
+      <div class="why">리더가 A안을 확정해 진행했다(근거: 재구현 대상 없음, 로컬 시드는 폐기 결정 유지가 타당). 이의 있으시면 되돌릴 수 있다(문서만 변경됨). 커밋 후 "다음"으로 5/6 push-receive-ux 착수. 참고: push 라이브 활성화(db push·FCM·실기기 토큰)는 여전히 기존 이월 트랙에 남아 있다.</div>
+    </div>
+  </div>
+
+  <h2>5. 후속 조치</h2>
+  <div class="followup">
+    <div class="item">
+      <b class="title">다음 스프린트: push-receive-ux (루프 5/6 — 푸시 잔여의 마지막 슬라이스)</b>
+      <div class="why">알림 탭 딥링크(해당 로그/먹로그 진입)·Android 알림 채널·권한 안내·뱃지·무효 토큰 정리(receipt 폴링). S2 의존이 이미 충족돼 착수 가능. 사용자 커밋 후 진행.</div>
+    </div>
+    <div class="item">
+      <b class="title">푸시 파이프라인 라이브 스모크 (기존 이월 통합)</b>
+      <div class="why">db push(device_tokens·push_send 마이그레이션 포함) + FCM/실기기 토큰 + 실발송 게이팅(마스터/로그별 토글) 확인 — S4 완료 후 한 번에 확인하면 푸시 전체 파이프라인을 단일 세션으로 검증 가능. 담당: 사용자 스모크 배치.</div>
+    </div>
+  </div>
+
+  <footer>
+    <span>히스토리: <code>docs/reports/</code> (파일명 날짜순)</span>
+    <span>generated by sprint-orchestrator + guksu-harness:report</span>
+  </footer>
+
+</div>
+</body>
+</html>
