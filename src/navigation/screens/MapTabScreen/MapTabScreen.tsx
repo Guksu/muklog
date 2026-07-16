@@ -122,15 +122,19 @@ export const MapTabScreen = () => {
     [permission.status],
   );
 
-  // map-wish-pins: 지도 탭 포커스마다 위시 핀 재조회(LogScreen 위시 추가/삭제 후 복귀 반영). 폴링 아님 — 포커스 단위.
+  // 지도 탭 포커스마다 위시 핀 + 먹로그(saved) 핀 재조회(로그에서 추가/삭제·방 나가기 후 복귀 반영). 폴링 아님 — 포커스 단위.
+  //   바텀탭 화면은 첫 진입 후 언마운트되지 않으므로 마운트 1회 조회만으로는 세션 내내 stale(H1) — 위시 핀과 대칭으로 saved 핀도 refresh한다.
   //   useFocusEffect는 콜백 참조 안정성이 필수 → ref + 빈 deps useCallback(컨벤션 허용 예외, LogScreen 선례).
-  //   첫 포커스는 useWishPins 마운트 조회와 중복이나 refresh가 loading으로 되돌리지 않아 무해(§4.3).
+  //   첫 포커스는 마운트 조회와 중복이나 refresh가 loading으로 되돌리지 않아 무해(§4.3).
   const wishRefreshRef = useRef(wishPins.refresh);
   wishRefreshRef.current = wishPins.refresh;
-  const handleWishFocus = React.useCallback(function refreshWishOnFocus() {
+  const muklogRefreshRef = useRef(refresh);
+  muklogRefreshRef.current = refresh;
+  const handleFocus = React.useCallback(function refreshPinsOnFocus() {
     void wishRefreshRef.current();
+    void muklogRefreshRef.current();
   }, []);
-  useFocusEffect(handleWishFocus);
+  useFocusEffect(handleFocus);
 
   const sendInit = () => {
     // INIT center가 이미 현위치면(coords 존재) 자동 RECENTER 불필요 — 1회 가드를 소진한 것으로 본다(#4).
