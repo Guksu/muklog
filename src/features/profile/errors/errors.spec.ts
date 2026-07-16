@@ -32,9 +32,36 @@ describe('mapProfileError — 토큰 정확 일치 (4종 + fallback)', () => {
     );
   });
 
-  it('PROFILE_ERROR_MESSAGES는 정확히 4개의 토큰 키를 가진다 (단일 출처)', () => {
+  // L3: 회원 탈퇴(delete-account) 경로 토큰 — 매핑 누락 시 전부 기본 메시지로 뭉개지던 것을 정합.
+  it('UNAUTHENTICATED', () => {
+    expect(mapProfileError({ error: new Error(ProfileErrorToken.Unauthenticated) })).toBe(
+      '로그인이 만료됐어요. 다시 로그인한 뒤 시도해 주세요.',
+    );
+  });
+
+  it('DELETE_FAILED', () => {
+    expect(mapProfileError({ error: new Error(ProfileErrorToken.DeleteFailed) })).toBe(
+      '계정 삭제에 실패했어요. 잠시 후 다시 시도해 주세요.',
+    );
+  });
+
+  it('DELETE_ACCOUNT_INCOMPLETE', () => {
+    expect(mapProfileError({ error: new Error(ProfileErrorToken.DeleteAccountIncomplete) })).toBe(
+      '계정 삭제에 실패했어요. 잠시 후 다시 시도해 주세요.',
+    );
+  });
+
+  it('PROFILE_ERROR_MESSAGES는 정확히 7개의 토큰 키를 가진다 (단일 출처)', () => {
     expect(Object.keys(PROFILE_ERROR_MESSAGES).sort()).toEqual(
-      ['AVATAR_UPLOAD_FAILED', 'NICKNAME_EMPTY', 'NICKNAME_TOO_LONG', 'PERMISSION_DENIED'].sort(),
+      [
+        'AVATAR_UPLOAD_FAILED',
+        'DELETE_ACCOUNT_INCOMPLETE',
+        'DELETE_FAILED',
+        'NICKNAME_EMPTY',
+        'NICKNAME_TOO_LONG',
+        'PERMISSION_DENIED',
+        'UNAUTHENTICATED',
+      ].sort(),
     );
   });
 });
