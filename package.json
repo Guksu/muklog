@@ -10,6 +10,7 @@
     "ios:sim": "bash scripts/run-ios-sim.sh",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:functions": "deno test --allow-net supabase/functions/",
     "typecheck": "tsc --noEmit"
   },
   "jest": {
