@@ -41,8 +41,8 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
-// 배럼 모킹: useRoom·useRenameRoom 모킹 + displayLogName/code는 실 구현(표시명 로직 직접 검증).
-//   LogTitleButton는 경량 테스트 더블로 대체 — 실 구현은 @/components를 거쳐 배럼을 재유입(순환)시켜
+// 배럴 모킹: useRoom·useRenameRoom 모킹 + displayLogName/code는 실 구현(표시명 로직 직접 검증).
+//   LogTitleButton는 경량 테스트 더블로 대체 — 실 구현은 @/components를 거쳐 배럴을 재유입(순환)시켜
 //   TDZ를 유발한다. RenameDialog는 @/components(별도 모킹)에서 controlled 더블로 대체. 배선 로직(open/save/error/disabled/extra 게이팅)만 검증.
 jest.mock('@/features/room', () => {
   const ReactLib = require('react');
@@ -186,7 +186,7 @@ jest.mock('@/features/auth', () => ({
   useAuth: () => ({ state: { status: 'authenticated', userId: 'me-uid' } }),
 }));
 
-// 본인 프로필(헤더 로그명/아바타). 배럼만 모킹 — Avatar의 avatarDefault/defaultNickname(서브모듈)는 실 구현 사용.
+// 본인 프로필(헤더 로그명/아바타). 배럴만 모킹 — Avatar의 avatarDefault/defaultNickname(서브모듈)는 실 구현 사용.
 jest.mock('@/features/profile', () => {
   const defaultNicknameMod = jest.requireActual('@/features/profile/defaultNickname');
   return { ...defaultNicknameMod, useProfileContext: jest.fn() };
@@ -200,7 +200,7 @@ jest.mock('@/features/muklog', () => {
   return {
     useMuklogs: () => mockUseMuklogs(),
     usePlaceSearch: () => mockUsePlaceSearch(),
-    // placeFieldsFromItem(검색결과→선택) — 고정 매핑 더블(LogScreen이 AddWishlistInput으로 싷는지 검증).
+    // placeFieldsFromItem(검색결과→선택) — 고정 매핑 더블(LogScreen이 AddWishlistInput으로 싣는지 검증).
     placeFieldsFromItem: ({ item }: { item: { kakaoPlaceId: string } }) => ({
       placeName: '성수동 베이커리',
       category: 'cafe',
@@ -475,7 +475,7 @@ describe('LogScreen', () => {
       room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 1, mode: 'couple' },
     });
     renderWithTheme(<LogScreen />);
-    expect(screen.queryByText('맛집 기록은 곳 추가돼요 🍽️')).toBeNull();
+    expect(screen.queryByText('맛집 기록은 곧 추가돼요 🍽️')).toBeNull();
     expect(screen.getByLabelText('muklog-list')).toBeTruthy();
     expect(screen.getByText('list:r1:me-uid')).toBeTruthy();
   });
@@ -490,7 +490,7 @@ describe('LogScreen', () => {
   });
 
   // 회귀(픽스4 헤더): 네이티브 헤더 headerShown:false로 끄면서 사라진 top inset을 자체 헤더가 보전.
-  //   킷 MK_STATUS_PAD=56(시뮬레이터 근사 고정)을 RN엔 useSafeAreaInsets().top으로 동적 번역해야 노치/다이나믹 아일랜드 미겹침.
+  //   킷 MK_STATUS_PAD=56(시뮬레이터 근사 고정)을 RN에선 useSafeAreaInsets().top으로 동적 번역해야 노치/다이나믹 아일랜드 미겹침.
   //   HomeHeader와 동일 패턴(insets.top + spacing[8])을 lock — inset이 커지면 paddingTop도 그만큼 커진다.
   it('헤더 paddingTop이 safe-area top inset을 반영한다 (회귀: 노치/다이나믹 아일랜드 겹침)', () => {
     setRoomState({
@@ -675,10 +675,10 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
     renderWithTheme(<LogScreen />);
     fireEvent.press(screen.getByLabelText('더보기'));
     fireEvent.press(screen.getByLabelText('probe-select-rename'));
-    fireEvent.changeText(screen.getByLabelText('로그 이름'), '바뀜값');
+    fireEvent.changeText(screen.getByLabelText('로그 이름'), '바뀐값');
     fireEvent.press(screen.getByLabelText('취소'));
     expect(screen.queryByLabelText('로그 이름')).toBeNull();
-    // 재오픈: 폐기된 '바뀜값'이 아니라 현재 로그명으로 draft 재초기화.
+    // 재오픈: 폐기된 '바뀐값'이 아니라 현재 로그명으로 draft 재초기화.
     fireEvent.press(screen.getByLabelText('더보기'));
     fireEvent.press(screen.getByLabelText('probe-select-rename'));
     expect(screen.getByLabelText('로그 이름').props.value).toBe('우리 맛집');
@@ -970,7 +970,7 @@ describe('LogScreen — room-lifecycle 나가기/예약삭제 배선 (T9~T11)', 
   const sheetsText = (): string => screen.getByText(/^menu:/).props.children as string;
   const bannerText = (): string => screen.getByText(/^requester:/).props.children as string;
 
-  // ── T9: ⋯ 메뉴 + 확인 시트 분기 ────────────────────────────────────
+  // ── T9: ⋯ 메뉴 + 확인 시트 분기 ──────────────────────────────────────────
   it('헤더 ⋯ 버튼 탭 → 나가기 메뉴 시트가 열린다 (menuVisible=true)', () => {
     setRoomState(readyCouple());
     renderWithTheme(<LogScreen />);
@@ -1001,7 +1001,7 @@ describe('LogScreen — room-lifecycle 나가기/예약삭제 배선 (T9~T11)', 
     expect(sheetsText()).toContain('couple:false');
   });
 
-  // ── T10: 나가기 액션 배선 ────────────────────────────────────────────
+  // ── T10: 나가기 액션 배선 ─────────────────────────────────────────────────
   it('커플 나가기 확인 → leaveRoom({roomId}) 호출, scheduled 성공 시 확인 닫고 refresh(배너 표시)·goBack 안 함', async () => {
     setRoomState(readyCouple());
     mockLeaveRoom.mockResolvedValue({
@@ -1072,7 +1072,7 @@ describe('LogScreen — room-lifecycle 나가기/예약삭제 배선 (T9~T11)', 
     expect(sheetsText()).toContain('leaving:true');
   });
 
-  // ── T11: 예약삭제 배너 + 취소 ────────────────────────────────────
+  // ── T11: 예약삭제 배너 + 취소 ─────────────────────────────────────────────
   it('deleteScheduledAt가 null이면 예약삭제 배너를 렌더하지 않는다 (게이팅)', () => {
     setRoomState(readyCouple({ deleteScheduledAt: null }));
     renderWithTheme(<LogScreen />);
