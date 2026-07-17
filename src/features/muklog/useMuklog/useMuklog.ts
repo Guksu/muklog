@@ -14,9 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
 
-import { MUKLOG_PHOTOS_BUCKET } from '../photoPath';
-
-const SIGNED_URL_TTL_SECONDS = 3600; // signed URL 만료 1h (plan §3.5)
+import { createSignedUrlMap } from '../signedUrlMap';
 
 // 상세가 소비하는 컬럼 + 전체 사진 임베드(order_index, storage_path). 매핑/정렬 단일 출처.
 const MUKLOG_DETAIL_SELECT_COLUMNS =
@@ -82,33 +80,6 @@ type MuklogDetailRow = {
   created_by: string | null; // 탈퇴자 익명화 시 NULL(ON DELETE SET NULL)
   created_at: string;
   muklog_photos?: MuklogPhotoEmbed[] | null;
-};
-
-/**
- * 사진 path 목록의 signed URL을 1회 배치 발급해 path→URL 맵을 만든다(비용 가드레일 §8).
- * 발급 실패/누락 path는 맵에서 빠져 해당 슬롯이 제외된다(화면은 막지 않는다).
- * @param paths order_index 오름차순 storage_path 목록(빈 값 제외)
- * @returns storage_path → signed URL 맵(빈 입력이면 빈 맵)
- */
-const fetchPhotoSignedUrls = async ({
-  paths,
-}: {
-  paths: string[];
-}): Promise<Record<string, string>> => {
-  if (paths.length === 0) return {};
-  const map: Record<string, string> = {};
-  try {
-    const { data, error } = await supabase.storage
-      .from(MUKLOG_PHOTOS_BUCKET)
-      .createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
-    if (error || !data) return map;
-    for (const item of data) {
-      if (item.path && item.signedUrl) map[item.path] = item.signedUrl;
-    }
-  } catch {
-    // best-effort: 발급 실패는 해당 슬롯 제외(사진 때문에 화면을 막지 않는다).
-  }
-  return map;
 };
 
 /**
@@ -198,7 +169,7 @@ export const useMuklog = ({ muklogId }: { muklogId: string }) => {
     const orderedPaths = [...(row.muklog_photos ?? [])]
       .sort((a, b) => a.order_index - b.order_index)
       .map((p) => p.storage_path);
-    const signedMap = await fetchPhotoSignedUrls({ paths: orderedPaths });
+    const signedMap = await createSignedUrlMap({ paths: orderedPaths });
 
     if (!mountedRef.current) return;
     setState({ status: 'ready', muklog: toMuklogDetail({ row, signedMap }) });

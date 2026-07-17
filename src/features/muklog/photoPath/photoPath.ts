@@ -8,6 +8,9 @@
 /** 먹로그 사진 버킷명(비공개). ⚠️ SQL 정책과 단일 출처. */
 export const MUKLOG_PHOTOS_BUCKET = 'muklog-photos';
 
+/** signed URL 만료(초). 1h — 사진 조회 훅 공통 정책(useMuklogs·useMuklog·useLogPreviewUrls 단일 출처, plan §3.5). */
+export const SIGNED_URL_TTL_SECONDS = 3600;
+
 /**
  * 버킷 내부 사진 키를 만든다. 첫 세그먼트는 반드시 roomId(storage 멤버십 정책 기준).
  * @param roomId 상위 로그(방) id — 첫 세그먼트(= storage.foldername(name)[1])
