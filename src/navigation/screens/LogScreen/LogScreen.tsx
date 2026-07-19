@@ -170,7 +170,7 @@ export const LogScreen = () => {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
 
-  // ── 위시리스트(wishlist 스프린트) — 세그 카운트·본문·추가/삭제/다녀왔어요 데이터 소유 ─────────────
+  // ── 위시리스트(wishlist 스프린트) — 세그 카운트·본문·추가/삭제/다녀왔어요 데이터 소유 ──────────────
   //   먹로그/위시 목록을 LogScreen이 단일 소유(세그 카운트 확보·이중 로드 0). MuklogList/WishlistView는 presentational.
   const { state: muklogsState, refresh: refreshMuklogs } = useMuklogs({ roomId: roomId ?? '' });
   const { state: wishlistState, refresh: refreshWishlist } = useWishlist({ roomId: roomId ?? '' });
@@ -214,7 +214,7 @@ export const LogScreen = () => {
     return <ErrorRetryView message={state.message} onRetry={() => void refresh()} />;
   }
 
-  // ── 위시 세그 카운트 + 핸들러(roomId는 위 가드로 string 확정) ──────────────────
+  // ── 위시 세그 카운트 + 핸들러(roomId는 위 가드로 string 확정) ──────────────────────────────
   const muklogCount = muklogsState.status === 'ready' ? muklogsState.muklogs.length : 0;
   const wishCount = wishlistState.status === 'ready' ? wishlistState.items.length : 0;
 
