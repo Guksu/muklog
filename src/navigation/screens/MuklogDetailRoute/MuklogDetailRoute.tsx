@@ -44,7 +44,7 @@ export const MuklogDetailRoute = () => {
   const { state: profileState } = useProfileContext();
   const meAvatarUrl = profileState.status === 'ready' ? profileState.profile.avatarUrl : null;
 
-  // 작성자 실 닉/아바타 매핑용 멤버 목록(members-display S5b). roomId는 먹로그 로드 후 확정 → 그 전⊻ '' (빈 배열 폴백).
+  // 작성자 실 닉/아바타 매핑용 멤버 목록(members-display S5b). roomId는 먹로그 로드 후 확정 → 그 전엔 '' (빈 배열 폴백).
   //   상세 진입 1회 조회(폴링 0). 미로드/에러면 [] → resolveAuthor가 me/partner 폴백 카피(회귀 0, plan §3.3).
   //   ⚠️ 멤버 소스 택1(plan §3.3): 리스트 전달 대신 상세가 useRoomMembers 자체 호출 —
   //     상세는 리스트 외(지도·딥링크)에서도 진입해 members context 가 없을 수 있어 자체 페치가 안전(+1 RPC/진입, useRoom 정책).

@@ -93,7 +93,7 @@ export const MapTabScreen = () => {
   const [mapErrored, setMapErrored] = useState(false);
   const webviewRef = useRef<MapWebViewHandle>(null);
   // #4: 첫 진입 현위치 자동 센터링 1회 가드. READY 시 coords가 아직 없으면 INIT은 폴백(서울/핀 bbox)
-  //   센터를 쓰므로, GPS 첫 픽스로 coords가 도착하면 1회 RECENTER로 현위치에 맞춴다(이후 사용자 이동은 따라가지 않음).
+  //   센터를 쓰므로, GPS 첫 픽스로 coords가 도착하면 1회 RECENTER로 현위치에 맞춘다(이후 사용자 이동은 따라가지 않음).
   const autoCenteredRef = useRef(false);
 
   // 현재 핀 목록(ready일 때만, 아니면 빈 배열 — 지도/INIT는 항상 유효하게 유지).
@@ -144,7 +144,7 @@ export const MapTabScreen = () => {
 
   // 현재위치 FAB 탭(plan §3.7) — 탭당 1회 위치 재취득 후 RECENTER inject(폴링 없음, 비용 가드 §8).
   //   미결정이면 권한 요청 → 거부면 no-op(기존 permissionDenied 배너가 안내, 중복 금지).
-  //   refreshCoords가 granted 아니거나 실패+직전coords없으면 null → no-op(무한 로딩·에러배너 없음).
+  //   refreshCoords가 granted 아니거나 실패+직전coords없음이면 null → no-op(무한 로딩·에러배너 없음).
   const handleLocate = async () => {
     if (permission.status === LocationPermissionStatus.Undetermined) {
       await permission.request();
@@ -243,7 +243,7 @@ export const MapTabScreen = () => {
     sendInit();
   };
 
-  // kind 3분기: saved → SelectedSpotCard / nearby → NearbySpotCard / wish → WishSpotCard(각 컴렉션 lookup).
+  // kind 3분기: saved → SelectedSpotCard / nearby → NearbySpotCard / wish → WishSpotCard(각 컬렉션 lookup).
   const selectedPin =
     selected?.kind === MapPinKind.Saved
       ? pins.find((p) => p.muklogId === selected.id) ?? null
@@ -373,7 +373,7 @@ export const MapTabScreen = () => {
       ) : null}
 
       {/* 대상 로그 선택 시트 — 로그 2+개일 때만 훅이 choosing을 세팅(visible). 행 탭 → chooseLog(그 roomId로 담기),
-          똤/드래그-다운(onClose) → dismiss(담기 미발생). 로그 0/1개는 시트 없이 훅이 처리. */}
+          딤/드래그-다운(onClose) → dismiss(담기 미발생). 로그 0/1개는 시트 없이 훅이 처리. */}
       <LogPickerSheet
         visible={nearbyWish.choosing !== null}
         onClose={nearbyWish.dismiss}

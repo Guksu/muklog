@@ -1,6 +1,6 @@
 // src/navigation/useRefreshOnFocus.spec.tsx
 // useRefreshOnFocus — 화면 재포커스 시 refresh 재조회 공용 훅 명세.
-//   기존 4개 화면(LogScreen·LogListScreen·MapTabScreen·MuklogDetailRoute)에 횩어진 동일 패턴
+//   기존 4개 화면(LogScreen·LogListScreen·MapTabScreen·MuklogDetailRoute)에 흩어진 동일 패턴
 //   (refreshRef + hasFocusedRef 첫 포커스 스킵 + useCallback + useFocusEffect)을 한 곳으로 흡수.
 //   useFocusEffect 는 콜백만 캡처해 수동 발화(실제 NavigationContainer 불필요).
 import { renderHook } from '@testing-library/react-native';
@@ -44,7 +44,7 @@ describe('useRefreshOnFocus', () => {
     expect(refresh).toHaveBeenCalledTimes(2);
   });
 
-  it('최신 refresh 참조를 호출한다(리렌더로 refresh가 바뀜어도 최신본 발화)', () => {
+  it('최신 refresh 참조를 호출한다(리렌더로 refresh가 바뀌어도 최신본 발화)', () => {
     const first = jest.fn();
     const second = jest.fn();
     const { rerender } = renderHook(({ refresh }) => useRefreshOnFocus({ refresh }), {

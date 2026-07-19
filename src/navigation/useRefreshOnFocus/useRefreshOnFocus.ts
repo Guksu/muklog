@@ -1,6 +1,6 @@
 // src/navigation/useRefreshOnFocus.ts
 // 화면 재포커스 시 refresh 재조회 공용 훅.
-//   LogScreen·LogListScreen·MapTabScreen·MuklogDetailRoute 에 횩어져 있던 동일 보일러플레이트
+//   LogScreen·LogListScreen·MapTabScreen·MuklogDetailRoute 에 흩어져 있던 동일 보일러플레이트
 //   (refreshRef 최신 참조 + hasFocusedRef 첫 포커스 스킵 + useCallback + useFocusEffect)을 흡수한다.
 //   useFocusEffect 는 콜백 참조 안정성이 필수 → 여기서만 예외적으로 useCallback 을 쓴다(컨벤션 허용 예외를 한 곳에 격리).
 //   폴링 아님 — 포커스 단위(비용 가드레일). 여러 개를 갱신하려면 호출부가 refresh 콜백에서 조합한다.
