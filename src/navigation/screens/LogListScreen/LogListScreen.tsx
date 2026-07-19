@@ -14,11 +14,21 @@
 // 생산자(소비): useMyLogsContext(state/refresh) + useCreateRoom(생성) + useProfileContext(공유 닉/아바타·#2) + useNavigation.
 //   ⚠️ 실데이터: spotCount/lastMuklogAt/previewPaths는 MyLog(developer 소유, useMyLogs.ts)에서 직접 읽는다. 추가 페치 0(UI-only).
 import React from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, ScrollView, StyleSheet, View } from 'react-native';
-import { useFocusEffect, useNavigation, type NavigationProp } from '@react-navigation/native';
+import { Alert, FlatList, Image, ScrollView, StyleSheet, View } from 'react-native';
+import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { Avatar, Button, Card, Icon, IconName, MemberBadge, Screen, Text } from '@/components';
+import {
+  Avatar,
+  Card,
+  ErrorRetryView,
+  Icon,
+  IconName,
+  LoadingView,
+  MemberBadge,
+  Screen,
+  Text,
+} from '@/components';
 import { useAuth } from '@/features/auth';
 import { defaultNickname, useProfileContext } from '@/features/profile';
 import {
@@ -32,6 +42,7 @@ import {
 import { heroGradient, useTheme } from '@/theme';
 
 import { Routes, type AppStackParamList } from '../../routes';
+import { useRefreshOnFocus } from '../../useRefreshOnFocus';
 import { formatLogDate } from '../formatLogDate';
 import { relativeTimeLabel } from '../relativeTimeLabel';
 
@@ -388,19 +399,8 @@ export const LogListScreen = () => {
   const self = useSelfDisplay({ userId });
 
   // 화면 재포커스 시 목록 재조회 — 로그 삭제/나가기 후 돌아오면 사라진 로그가 즉시 빠지도록(room-lifecycle 정합).
-  //   useFocusEffect 콜백 참조 안정성 필수 → ref + 빈 deps useCallback(컨벤션 허용 예외, LogScreen 선례).
-  //   첫 포커스 = 마운트 시 Provider 초기 로드와 겹치므로 가드(중복 조회 회피). 이후 재진입에서만 refresh.
-  const refreshRef = React.useRef(refresh);
-  refreshRef.current = refresh;
-  const hasFocusedRef = React.useRef(false);
-  const handleFocus = React.useCallback(function refreshMyLogsOnRefocus() {
-    if (!hasFocusedRef.current) {
-      hasFocusedRef.current = true;
-      return;
-    }
-    void refreshRef.current();
-  }, []);
-  useFocusEffect(handleFocus);
+  //   첫 포커스 = 마운트 시 Provider 초기 로드와 겹치므로 스킵(중복 조회 회피). 이후 재진입에서만 refresh.
+  useRefreshOnFocus({ refresh });
 
   // 카드 썸네일용 — 모든 로그의 preview_paths를 모아 signed URL 1회 배치 발급(path→URL 맵). 폴링 없음.
   //   ⚠️ 훅이라 조건부 return 이전에 호출(state 미준비면 빈 배열). 발급은 경로 집합 변경 시에만.
@@ -421,27 +421,11 @@ export const LogListScreen = () => {
   const handleJoin = () => navigation.navigate(Routes.JoinLog);
 
   if (state.status === 'loading') {
-    return (
-      <Screen center>
-        <ActivityIndicator testID="loglist-loading" color={theme.color.primary} />
-      </Screen>
-    );
+    return <LoadingView testID="loglist-loading" />;
   }
 
   if (state.status === 'error') {
-    return (
-      <Screen center>
-        <Text variant="body" color="error" style={styles.center}>
-          {state.message}
-        </Text>
-        <Button
-          title="다시 시도"
-          variant="secondary"
-          onPress={() => void refresh()}
-          style={{ marginTop: theme.spacing[16] }}
-        />
-      </Screen>
-    );
+    return <ErrorRetryView message={state.message} onRetry={() => void refresh()} />;
   }
 
   // ready & 빈 목록 = 빈 상태(정상, 에러 아님). 킷 EmptyLogs 재현(히어로 + 두 갈래).
