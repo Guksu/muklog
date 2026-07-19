@@ -178,7 +178,7 @@ export const LogScreen = () => {
   const { removeWishlist } = useRemoveWishlist();
   // 추가 플로우 장소검색(muklog-place 재사용 — 신규 Kakao 호출 0, 기존 usePlaceSearch 디바운스/캐싱).
   const placeSearch = usePlaceSearch();
-  // 세그 상태(기본 'log') + 위시 추가 풀스크린 검색 스왝(MuklogEditor searching 패턴 동일).
+  // 세그 상태(기본 'log') + 위시 추가 풀스크린 검색 스왑(MuklogEditor searching 패턴 동일).
   const [seg, setSeg] = React.useState<string>(LogSeg.Log);
   const [wishSearching, setWishSearching] = React.useState(false);
   // 위시 추가 in-flight 가드 — 연속 탭(검색 결과/직접 입력) 중복 insert 차단. state는 비동기 갱신이라
@@ -324,7 +324,7 @@ export const LogScreen = () => {
     }
   };
 
-  // 위시 추가 풀스크린 장소검색(MuklogEditor searching 스왝과 동일 패턴) — 폼 대신 PlaceSearchView로 스왝.
+  // 위시 추가 풀스크린 장소검색(MuklogEditor searching 스왑과 동일 패턴) — 폼 대신 PlaceSearchView로 스왑.
   if (wishSearching) {
     return (
       <PlaceSearchView
@@ -451,7 +451,7 @@ export const LogScreen = () => {
         {/* 로그명 표시(display-only). 헤더 아바타 겹침은 참여자 블록으로 이동(members-display S5b, plan §4.2).
             이름 변경은 ⋯메뉴 "로그 이름 변경"으로 이전(사용자 요청) — 타이틀 탭 동작 없음. */}
         <LogTitleButton title={title} />
-        {/* ⋯ 더보기 — 나가기 메뉴 시트 open(LogTitleButton flex:1로 우측 끕 정렬, ui-spec §3.3-1). */}
+        {/* ⋯ 더보기 — 나가기 메뉴 시트 open(LogTitleButton flex:1로 우측 끝 정렬, ui-spec §3.3-1). */}
         <IconButton
           name={IconName.MoreHorizontal}
           size={24}
