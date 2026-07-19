@@ -11,7 +11,6 @@
 //   ⚠️ 비주얼은 ui-publisher 컴포넌트로만(임의 변경 금지). 상태→tone/message 판단만 여기서 한다.
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 
 import {
   CategoryFilterBar,
@@ -63,6 +62,8 @@ import { useAddNearbyWish } from '@/features/wishlist';
 import { env } from '@/lib/env';
 import { useTheme } from '@/theme';
 
+import { useRefreshOnFocus } from '../../useRefreshOnFocus';
+
 // 상태 안내 카피(ui-spec §4 권고값 — 해요체, 차단 아님). 카피 단일 출처.
 const MAP_COPY = {
   loading: '지도를 불러오는 중이에요',
@@ -92,7 +93,7 @@ export const MapTabScreen = () => {
   const [mapErrored, setMapErrored] = useState(false);
   const webviewRef = useRef<MapWebViewHandle>(null);
   // #4: 첫 진입 현위치 자동 센터링 1회 가드. READY 시 coords가 아직 없으면 INIT은 폴백(서울/핀 bbox)
-  //   센터를 쓰므로, GPS 첫 픽스로 coords가 도착하면 1회 RECENTER로 현위치에 맞춘다(이후 사용자 이동은 따라가지 않음).
+  //   센터를 쓰므로, GPS 첫 픽스로 coords가 도착하면 1회 RECENTER로 현위치에 맞춴다(이후 사용자 이동은 따라가지 않음).
   const autoCenteredRef = useRef(false);
 
   // 현재 핀 목록(ready일 때만, 아니면 빈 배열 — 지도/INIT는 항상 유효하게 유지).
@@ -100,7 +101,7 @@ export const MapTabScreen = () => {
   // 위시 핀 목록(ready일 때만 — 조회 실패/로딩이어도 지도·먹로그·주변은 정상, 위시 핀만 생략 best-effort §4.2).
   const wishPinsList: WishPin[] = wishPins.state.status === 'ready' ? wishPins.state.pins : [];
   // saved(내 맛집) + wish(위시) + nearby(주변) 3-way 머지(좌표 근접 dedup, 우선순위 saved>wish>nearby) → 지도뷰 전체 마커.
-  // map-category-filter: 3소스를 마커 변환 "전에" 카테고리로 필터(순수 파생, 재조회 0). category=null이면 원본 통과.
+  // map-category-filter: 3소스를 마커 변환 "전"에 카테고리로 필터(순수 파생, 재조회 0). category=null이면 원본 통과.
   //   saved/wish는 category 필드 직접 비교(filterByAppCategory), nearby는 mapKakaoCategory 파생 비교(filterNearbyByCategory).
   const savedMarkers = pinsToMapMarkers({ pins: filterByAppCategory({ items: pins, category }) });
   const wishMarkers = wishToMapMarkers({ pins: filterByAppCategory({ items: wishPinsList, category }) });
@@ -124,17 +125,14 @@ export const MapTabScreen = () => {
 
   // 지도 탭 포커스마다 위시 핀 + 먹로그(saved) 핀 재조회(로그에서 추가/삭제·방 나가기 후 복귀 반영). 폴링 아님 — 포커스 단위.
   //   바텀탭 화면은 첫 진입 후 언마운트되지 않으므로 마운트 1회 조회만으로는 세션 내내 stale(H1) — 위시 핀과 대칭으로 saved 핀도 refresh한다.
-  //   useFocusEffect는 콜백 참조 안정성이 필수 → ref + 빈 deps useCallback(컨벤션 허용 예외, LogScreen 선례).
-  //   첫 포커스는 마운트 조회와 중복이나 refresh가 loading으로 되돌리지 않아 무해(§4.3).
-  const wishRefreshRef = useRef(wishPins.refresh);
-  wishRefreshRef.current = wishPins.refresh;
-  const muklogRefreshRef = useRef(refresh);
-  muklogRefreshRef.current = refresh;
-  const handleFocus = React.useCallback(function refreshPinsOnFocus() {
-    void wishRefreshRef.current();
-    void muklogRefreshRef.current();
-  }, []);
-  useFocusEffect(handleFocus);
+  //   첫 포커스도 갱신해야 하므로 skipFirst:false(refresh가 loading으로 되돌리지 않아 마운트 조회와 중복이어도 무해, §4.3).
+  useRefreshOnFocus({
+    refresh: () => {
+      void wishPins.refresh();
+      void refresh();
+    },
+    skipFirst: false,
+  });
 
   const sendInit = () => {
     // INIT center가 이미 현위치면(coords 존재) 자동 RECENTER 불필요 — 1회 가드를 소진한 것으로 본다(#4).
@@ -146,7 +144,7 @@ export const MapTabScreen = () => {
 
   // 현재위치 FAB 탭(plan §3.7) — 탭당 1회 위치 재취득 후 RECENTER inject(폴링 없음, 비용 가드 §8).
   //   미결정이면 권한 요청 → 거부면 no-op(기존 permissionDenied 배너가 안내, 중복 금지).
-  //   refreshCoords가 granted 아니거나 실패+직전coords없음이면 null → no-op(무한 로딩·에러배너 없음).
+  //   refreshCoords가 granted 아니거나 실패+직전coords없으면 null → no-op(무한 로딩·에러배너 없음).
   const handleLocate = async () => {
     if (permission.status === LocationPermissionStatus.Undetermined) {
       await permission.request();
@@ -245,7 +243,7 @@ export const MapTabScreen = () => {
     sendInit();
   };
 
-  // kind 3분기: saved → SelectedSpotCard / nearby → NearbySpotCard / wish → WishSpotCard(각 컬렉션 lookup).
+  // kind 3분기: saved → SelectedSpotCard / nearby → NearbySpotCard / wish → WishSpotCard(각 컴렉션 lookup).
   const selectedPin =
     selected?.kind === MapPinKind.Saved
       ? pins.find((p) => p.muklogId === selected.id) ?? null
@@ -375,7 +373,7 @@ export const MapTabScreen = () => {
       ) : null}
 
       {/* 대상 로그 선택 시트 — 로그 2+개일 때만 훅이 choosing을 세팅(visible). 행 탭 → chooseLog(그 roomId로 담기),
-          딤/드래그-다운(onClose) → dismiss(담기 미발생). 로그 0/1개는 시트 없이 훅이 처리. */}
+          똤/드래그-다운(onClose) → dismiss(담기 미발생). 로그 0/1개는 시트 없이 훅이 처리. */}
       <LogPickerSheet
         visible={nearbyWish.choosing !== null}
         onClose={nearbyWish.dismiss}

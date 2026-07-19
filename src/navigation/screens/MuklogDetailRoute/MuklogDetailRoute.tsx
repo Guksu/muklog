@@ -10,9 +10,8 @@
 //     onEdit → navigate(MuklogEditor, { roomId, muklogId }). 저장은 에디터에서, 복귀 시 포커스 refresh로 상세 갱신.
 //   삭제: useDeleteMuklog(Storage remove → muklogs delete) — photoPaths = useMuklog.photoStoragePaths(추가 쿼리 0).
 //         성공 시 navigation.goBack(리스트 복귀, 목록은 MuklogList 포커스 refresh로 갱신, plan §4.3).
-import React, { useRef } from 'react';
+import React from 'react';
 import {
-  useFocusEffect,
   useNavigation,
   useRoute,
   type NavigationProp,
@@ -26,6 +25,7 @@ import { useDeleteMuklog, useMuklog } from '@/features/muklog';
 import { useRoomMembers } from '@/features/room';
 
 import { Routes, type AppStackParamList } from '../../routes';
+import { useRefreshOnFocus } from '../../useRefreshOnFocus';
 import { MuklogDetailScreen } from '../MuklogDetailScreen';
 
 export const MuklogDetailRoute = () => {
@@ -44,7 +44,7 @@ export const MuklogDetailRoute = () => {
   const { state: profileState } = useProfileContext();
   const meAvatarUrl = profileState.status === 'ready' ? profileState.profile.avatarUrl : null;
 
-  // 작성자 실 닉/아바타 매핑용 멤버 목록(members-display S5b). roomId는 먹로그 로드 후 확정 → 그 전엔 '' (빈 배열 폴백).
+  // 작성자 실 닉/아바타 매핑용 멤버 목록(members-display S5b). roomId는 먹로그 로드 후 확정 → 그 전⊻ '' (빈 배열 폴백).
   //   상세 진입 1회 조회(폴링 0). 미로드/에러면 [] → resolveAuthor가 me/partner 폴백 카피(회귀 0, plan §3.3).
   //   ⚠️ 멤버 소스 택1(plan §3.3): 리스트 전달 대신 상세가 useRoomMembers 자체 호출 —
   //     상세는 리스트 외(지도·딥링크)에서도 진입해 members context 가 없을 수 있어 자체 페치가 안전(+1 RPC/진입, useRoom 정책).
@@ -57,17 +57,7 @@ export const MuklogDetailRoute = () => {
   const { showToast } = useToastController();
 
   // 에디터에서 편집 저장 후 복귀(재포커스) 시 상세 재조회(폴링 아님, plan §4.3). 첫 포커스(마운트 로드)는 건너뜀.
-  const refreshRef = useRef(refresh);
-  refreshRef.current = refresh;
-  const hasFocusedRef = useRef(false);
-  const handleFocus = React.useCallback(function refreshOnRefocus() {
-    if (!hasFocusedRef.current) {
-      hasFocusedRef.current = true; // 첫 포커스 = 마운트 로드 → 중복 조회 가드.
-      return;
-    }
-    void refreshRef.current();
-  }, []);
-  useFocusEffect(handleFocus);
+  useRefreshOnFocus({ refresh });
 
   const muklog = state.status === 'ready' ? state.muklog : null;
   // 작성자만 관리(편집/삭제) 가능 — more 버튼 노출 분기(RLS가 최종 방어, plan §5 ⑤ a).
