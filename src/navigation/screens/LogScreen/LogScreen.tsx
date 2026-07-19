@@ -1,6 +1,6 @@
 // src/navigation/screens/LogScreen.tsx
 // 로그 진입 화면 — 킷 mk-log.jsx:9-77 LogScreen 재현 (plan §5 B2 / §6.1).
-//   상단 헤더: 본인(+커플이면 익명 파트너) 아바타 겹침 + 로그명("{닉}의 기록"/"{닉} · 짝꿍"). 멤버 배지 없음(킷 헤더 정합).
+//   상단 헤더: 본인(+커플이면 익명 파트너) 아바타 걹침 + 로그명("{닉}의 기록"/"{닉} · 짝꿍"). 멤버 배지 없음(킷 헤더 정합).
 //   초대 영역: 솔로=InviteCodeCard 강조 / 커플=컴팩트 1줄(link + "초대코드 XXXXXX" + 복사). (기존 "둘이 함께 기록 중" 교체)
 //   하단: MuklogList(맛집 리스트 + 카테고리 필터 칩 + "우리 맛집 N" 섹션 + FAB) — 칩/필터/섹션 배선은 developer(MuklogList).
 //
@@ -8,7 +8,6 @@
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import {
-  useFocusEffect,
   useNavigation,
   useRoute,
   type NavigationProp,
@@ -19,9 +18,11 @@ import * as Clipboard from 'expo-clipboard';
 
 import {
   Button,
+  ErrorRetryView,
   IconButton,
   IconName,
   InviteCodeCard,
+  LoadingView,
   RenameDialog,
   Screen,
   SegmentControl,
@@ -63,6 +64,7 @@ import {
 import { useTheme } from '@/theme';
 
 import { Routes, type AppStackParamList } from '../../routes';
+import { useRefreshOnFocus } from '../../useRefreshOnFocus';
 
 // 로그 내부 세그먼트 키(enum-style 단일 출처) — 'log'(기록)/'wish'(위시리스트). 기본 'log'.
 const LogSeg = { Log: 'log', Wish: 'wish' } as const;
@@ -168,7 +170,7 @@ export const LogScreen = () => {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
 
-  // ── 위시리스트(wishlist 스프린트) — 세그 카운트·본문·추가/삭제/다녀왔어요 데이터 소유 ──────────────
+  // ── 위시리스트(wishlist 스프린트) — 세그 카운트·본문·추가/삭제/다녀왔어요 데이터 소유 ─────────────
   //   먹로그/위시 목록을 LogScreen이 단일 소유(세그 카운트 확보·이중 로드 0). MuklogList/WishlistView는 presentational.
   const { state: muklogsState, refresh: refreshMuklogs } = useMuklogs({ roomId: roomId ?? '' });
   const { state: wishlistState, refresh: refreshWishlist } = useWishlist({ roomId: roomId ?? '' });
@@ -176,7 +178,7 @@ export const LogScreen = () => {
   const { removeWishlist } = useRemoveWishlist();
   // 추가 플로우 장소검색(muklog-place 재사용 — 신규 Kakao 호출 0, 기존 usePlaceSearch 디바운스/캐싱).
   const placeSearch = usePlaceSearch();
-  // 세그 상태(기본 'log') + 위시 추가 풀스크린 검색 스왑(MuklogEditor searching 패턴 동일).
+  // 세그 상태(기본 'log') + 위시 추가 풀스크린 검색 스왝(MuklogEditor searching 패턴 동일).
   const [seg, setSeg] = React.useState<string>(LogSeg.Log);
   const [wishSearching, setWishSearching] = React.useState(false);
   // 위시 추가 in-flight 가드 — 연속 탭(검색 결과/직접 입력) 중복 insert 차단. state는 비동기 갱신이라
@@ -186,22 +188,13 @@ export const LogScreen = () => {
   const { showToast } = useToastController();
 
   // 재포커스(에디터/상세 복귀) 시 두 목록을 함께 1회 refresh(첫 포커스=마운트 로드와 겹쳐 가드). 폴링 아님(plan §6·§10).
-  //   다녀왔어요 플로우(먹로그+1·위시-1)·삭제·편집 반영을 단일 포커스 훅으로 처리.
-  const refreshMuklogsRef = React.useRef(refreshMuklogs);
-  refreshMuklogsRef.current = refreshMuklogs;
-  const refreshWishlistRef = React.useRef(refreshWishlist);
-  refreshWishlistRef.current = refreshWishlist;
-  const hasFocusedRef = React.useRef(false);
-  // useFocusEffect는 콜백 참조 안정성이 필수 → 예외적으로 useCallback(컨벤션 허용 케이스).
-  const handleFocus = React.useCallback(function refreshListsOnRefocus() {
-    if (!hasFocusedRef.current) {
-      hasFocusedRef.current = true; // 첫 포커스 = 마운트 로드 → 중복 조회 가드.
-      return;
-    }
-    void refreshMuklogsRef.current();
-    void refreshWishlistRef.current();
-  }, []);
-  useFocusEffect(handleFocus);
+  //   다녀왔어요 플로우(먹로그+1·위시-1)·삭제·편집 반영을 단일 포커스 훅으로 처리(두 소스는 콜백에서 조합).
+  useRefreshOnFocus({
+    refresh: () => {
+      void refreshMuklogs();
+      void refreshWishlist();
+    },
+  });
 
   if (!roomId) {
     return (
@@ -214,31 +207,14 @@ export const LogScreen = () => {
   }
 
   if (state.status === 'loading') {
-    return (
-      <Screen center>
-        <ActivityIndicator testID="logscreen-loading" color={theme.color.primary} />
-      </Screen>
-    );
+    return <LoadingView testID="logscreen-loading" />;
   }
 
   if (state.status === 'error') {
-    return (
-      <Screen center>
-        <Text variant="body" color="error" style={styles.center}>
-          {state.message}
-        </Text>
-        <Button
-          title="다시 시도"
-          accessibilityLabel="다시 시도"
-          variant="secondary"
-          onPress={() => void refresh()}
-          style={{ marginTop: theme.spacing[16] }}
-        />
-      </Screen>
-    );
+    return <ErrorRetryView message={state.message} onRetry={() => void refresh()} />;
   }
 
-  // ── 위시 세그 카운트 + 핸들러(roomId는 위 가드로 string 확정) ──────────────────────────────
+  // ── 위시 세그 카운트 + 핸들러(roomId는 위 가드로 string 확정) ──────────────────
   const muklogCount = muklogsState.status === 'ready' ? muklogsState.muklogs.length : 0;
   const wishCount = wishlistState.status === 'ready' ? wishlistState.items.length : 0;
 
@@ -348,7 +324,7 @@ export const LogScreen = () => {
     }
   };
 
-  // 위시 추가 풀스크린 장소검색(MuklogEditor searching 스왑과 동일 패턴) — 폼 대신 PlaceSearchView로 스왑.
+  // 위시 추가 풀스크린 장소검색(MuklogEditor searching 스왝과 동일 패턴) — 폼 대신 PlaceSearchView로 스왝.
   if (wishSearching) {
     return (
       <PlaceSearchView
@@ -450,10 +426,10 @@ export const LogScreen = () => {
     <Screen edges={['left', 'right']} style={styles.screen}>
       {/* 'bottom' 제외: 비-GNB 엣지투엣지 하단 빈 띠 방지 — 최하단 리스트(MuklogList/WishlistView) 스크롤
           paddingBottom에 insets.bottom을 반영해 인디케이터 클리어(배경은 화면 끝까지). */}
-      {/* 상단 헤더 — 뒤로가기 + 아바타 겹침 + 로그명(킷 mk-log:18-29). 킷 헤더엔 멤버 배지 없음(커플 여부는 아바타 겹침으로 표현).
+      {/* 상단 헤더 — 뒤로가기 + 아바타 걹침 + 로그명(킷 mk-log:18-29). 킷 헤더엔 멤버 배지 없음(커플 여부는 아바타 걹침으로 표현).
           네이티브 헤더는 숨김(AppNavigator) — 이 자체 헤더가 단일 헤더(이중 헤더 방지).
           ⚠️ 네이티브 헤더 OFF로 사라진 top inset을 여기서 보전 — 킷 MK_STATUS_PAD=56(시뮬 근사 고정) 대신
-          insets.top + spacing[8](HomeHeader와 동일 패턴)으로 동적 번역해 노치/다이나믹 아일랜드 겹침 방지. */}
+          insets.top + spacing[8](HomeHeader와 동일 패턴)으로 동적 번역해 노치/다이나믹 아일랜드 걹침 방지. */}
       <View
         testID="logscreen-header"
         style={[
@@ -472,10 +448,10 @@ export const LogScreen = () => {
           accessibilityLabel="뒤로 가기"
           onPress={() => navigation.goBack()}
         />
-        {/* 로그명 표시(display-only). 헤더 아바타 겹침은 참여자 블록으로 이동(members-display S5b, plan §4.2).
+        {/* 로그명 표시(display-only). 헤더 아바타 걹침은 참여자 블록으로 이동(members-display S5b, plan §4.2).
             이름 변경은 ⋯메뉴 "로그 이름 변경"으로 이전(사용자 요청) — 타이틀 탭 동작 없음. */}
         <LogTitleButton title={title} />
-        {/* ⋯ 더보기 — 나가기 메뉴 시트 open(LogTitleButton flex:1로 우측 끝 정렬, ui-spec §3.3-1). */}
+        {/* ⋯ 더보기 — 나가기 메뉴 시트 open(LogTitleButton flex:1로 우측 끕 정렬, ui-spec §3.3-1). */}
         <IconButton
           name={IconName.MoreHorizontal}
           size={24}
@@ -501,7 +477,8 @@ export const LogScreen = () => {
         </View>
       ) : null}
 
-      {/* 세그먼트(기록 N / 위시리스트 M) — 킷 mk-log:56-72. 컨테이너 패딩 "6px 20px 2px"(상6/좌우20/하2). */}
+      {/* 세그먼트(기록 N / 위시리스트 M) — 킷 mk-log:56-72. 컨테이너 패딩 "6px 20px 2px"(상6/좌우20/하하... */}
+      {/* 세그먼트(기록 N / 위시리스트 M) — 킷 mk-log:56-72. 컨테이너 패딩 "6px 20px 2px"(상6/좌우20/하하... */}
       <View style={styles.segWrap}>
         <SegmentControl
           segments={[
