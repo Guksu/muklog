@@ -101,7 +101,7 @@ export const MapTabScreen = () => {
   // 위시 핀 목록(ready일 때만 — 조회 실패/로딩이어도 지도·먹로그·주변은 정상, 위시 핀만 생략 best-effort §4.2).
   const wishPinsList: WishPin[] = wishPins.state.status === 'ready' ? wishPins.state.pins : [];
   // saved(내 맛집) + wish(위시) + nearby(주변) 3-way 머지(좌표 근접 dedup, 우선순위 saved>wish>nearby) → 지도뷰 전체 마커.
-  // map-category-filter: 3소스를 마커 변환 "전"에 카테고리로 필터(순수 파생, 재조회 0). category=null이면 원본 통과.
+  // map-category-filter: 3소스를 마커 변환 "전에" 카테고리로 필터(순수 파생, 재조회 0). category=null이면 원본 통과.
   //   saved/wish는 category 필드 직접 비교(filterByAppCategory), nearby는 mapKakaoCategory 파생 비교(filterNearbyByCategory).
   const savedMarkers = pinsToMapMarkers({ pins: filterByAppCategory({ items: pins, category }) });
   const wishMarkers = wishToMapMarkers({ pins: filterByAppCategory({ items: wishPinsList, category }) });
