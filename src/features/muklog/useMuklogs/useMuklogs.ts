@@ -9,14 +9,11 @@
 // 정책: 진입(roomId 변경) 1회 조회 + 명시적 refresh()(저장 후 호출)만. 폴링/Realtime 미도입(비용 가드레일 §8).
 //   signed URL은 목록의 대표 path만 1회 배치 발급(개별 N회 호출 금지, §8). 발급 실패는 coverUri null로 폴백(목록은 유지).
 //   임베드는 대표 path 추출용 (storage_path, order_index)만 — 전체 5장 바이너리 미조회(전송량 절감 §8).
-import { useEffect, useRef, useState } from 'react';
-
 import { supabase } from '@/lib/supabase';
+import { useOneShotQuery } from '@/lib/useOneShotQuery';
 
-import { MUKLOG_PHOTOS_BUCKET } from '../photoPath';
+import { createSignedUrlMap } from '../signedUrlMap';
 import { type Muklog, type MuklogsState } from '../types';
-
-const SIGNED_URL_TTL_SECONDS = 3600; // signed URL 만료 1h (plan §3.5)
 
 // 카드가 소비하는 컬럼 + muklog_photos 임베드(대표 추출용 메타만). 정렬/매핑 단일 출처.
 const MUKLOG_SELECT_COLUMNS =
@@ -78,57 +75,25 @@ const toMuklogWithCoverPath = ({ row }: { row: MuklogRow }): MuklogWithCoverPath
   };
 };
 
-/**
- * 대표 path 목록의 signed URL을 1회 배치 발급해 path→URL 맵을 만든다(비용 가드레일 §8).
- * 발급 실패/누락 path는 맵에서 빠져 coverUri null로 폴백된다(목록은 막지 않음).
- * @param paths 대표 storage_path 목록(중복/빈 값 제외)
- * @returns storage_path → signed URL 맵(빈 입력이면 빈 맵)
- */
-const fetchCoverSignedUrls = async ({
-  paths,
-}: {
-  paths: string[];
-}): Promise<Record<string, string>> => {
-  if (paths.length === 0) return {};
-  const map: Record<string, string> = {};
-  try {
-    const { data, error } = await supabase.storage
-      .from(MUKLOG_PHOTOS_BUCKET)
-      .createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
-    if (error || !data) return map;
-    for (const item of data) {
-      if (item.path && item.signedUrl) map[item.path] = item.signedUrl;
-    }
-  } catch {
-    // best-effort: 발급 실패는 coverUri null 폴백(사진 때문에 목록을 막지 않는다).
-  }
-  return map;
-};
 
 /**
  * 한 로그(roomId)의 먹로그 목록을 1회 조회하고 상태/재조회 함수를 제공하는 훅.
  * @param roomId 조회할 로그 id — 변경 시에만 재조회(폴링 방지)
  * @returns state(목록 상태)와 refresh(재조회 함수)
  */
-export const useMuklogs = ({ roomId }: { roomId: string }) => {
-  const [state, setState] = useState<MuklogsState>({ status: 'loading' });
-  const mountedRef = useRef(true);
-
-  // 일반 함수로 정의(컨벤션상 useCallback 지양). effect는 [roomId]에만 의존하므로
-  // 매 렌더 새 함수 참조가 만들어져도 재조회 루프가 발생하지 않는다.
-  const fetchMuklogs = async () => {
+export const useMuklogs = ({ roomId }: { roomId: string }): {
+  state: MuklogsState;
+  refresh: () => Promise<void>;
+} => {
+  // 쿼리 + 대표 사진 signed URL 매핑만 정의 — 로딩/에러/마운트 가드/refresh 는 useOneShotQuery 가 소유.
+  const fetchMuklogs = async (): Promise<{ muklogs: Muklog[] }> => {
     const { data, error } = await supabase
       .from('muklogs')
       .select(MUKLOG_SELECT_COLUMNS)
       .eq('room_id', roomId)
       .order('visited_at', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false });
-
-    if (error) {
-      if (!mountedRef.current) return;
-      setState({ status: 'error', message: '맛집 목록을 불러오지 못했어요. 다시 시도해 주세요.' });
-      return;
-    }
+    if (error) throw error;
 
     const rows = (data ?? []) as MuklogRow[];
     const withCoverPath = rows.map((row) => toMuklogWithCoverPath({ row }));
@@ -137,29 +102,19 @@ export const useMuklogs = ({ roomId }: { roomId: string }) => {
     const coverPaths = withCoverPath
       .map((m) => m.coverPath)
       .filter((p): p is string => p !== null);
-    const signedMap = await fetchCoverSignedUrls({ paths: coverPaths });
-
-    if (!mountedRef.current) return;
+    const signedMap = await createSignedUrlMap({ paths: coverPaths });
 
     const muklogs: Muklog[] = withCoverPath.map(({ coverPath, ...muklog }) => ({
       ...muklog,
       coverUri: coverPath ? (signedMap[coverPath] ?? null) : null,
     }));
-    setState({ status: 'ready', muklogs });
+    return { muklogs };
   };
 
-  useEffect(
-    function loadMuklogsOnRoom() {
-      mountedRef.current = true;
-      // 진입 1회(또는 roomId 변경 시) 조회. fetchMuklogs는 최신 렌더 클로저를 사용한다.
-      void fetchMuklogs();
-      return function cleanupMuklogs() {
-        mountedRef.current = false;
-      };
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- roomId 변경 시에만 재조회(폴링 방지). fetchMuklogs 의존 시 매 렌더 재조회됨.
-    [roomId],
-  );
-
-  return { state, refresh: fetchMuklogs };
+  return useOneShotQuery<{ muklogs: Muklog[] }>({
+    deps: [roomId],
+    fetch: fetchMuklogs,
+    // 목록 조회 실패는 고정 카피(토큰 매핑 대상 아님).
+    mapError: () => '맛집 목록을 불러오지 못했어요. 다시 시도해 주세요.',
+  });
 };

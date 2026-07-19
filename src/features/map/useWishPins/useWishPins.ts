@@ -7,10 +7,9 @@
 // 소비자: MapTabScreen(상태 분기) + wishToMapMarkers(지도뷰 마커).
 //
 // 정책: 마운트 1회 조회 + 명시적 refresh()(포커스·스프린트1 add-후)만. 폴링/Realtime/캐시 미도입(비용 가드레일 §8).
-//   refresh는 loading으로 되돌리지 않는다(지도가 떠 있는 채 갱신). 조회 실패는 error 상태(위시 핀만 생략, best-effort는 화면에서).
-import { useEffect, useRef, useState } from 'react';
-
+//   로딩/에러/마운트 가드/refresh 는 useOneShotQuery 가 소유(refresh는 loading으로 되돌리지 않음).
 import { supabase } from '@/lib/supabase';
+import { useOneShotQuery } from '@/lib/useOneShotQuery';
 
 import { toWishPin, type WishPinRow } from '../toWishPin';
 import { type WishPin, type WishPinsState } from '../types';
@@ -22,13 +21,12 @@ const WISH_PIN_SELECT_COLUMNS = 'id, room_id, place_name, category, area, lat, l
  * 내가 속한 모든 로그의 좌표 있는 위시 핀을 마운트 1회 크로스-로그 조회하고 상태/재조회 함수를 제공하는 훅.
  * @returns state(핀 상태)와 refresh(재조회 함수)
  */
-export const useWishPins = () => {
-  const [state, setState] = useState<WishPinsState>({ status: 'loading' });
-  const mountedRef = useRef(true);
-
-  // 일반 함수로 정의(컨벤션상 useCallback 지양). effect는 의존성이 없어 마운트 1회만 실행된다.
-  //   loadWishPins는 refresh로도 재사용된다(동일 조회 경로).
-  const loadWishPins = async () => {
+export const useWishPins = (): {
+  state: WishPinsState;
+  refresh: () => Promise<void>;
+} => {
+  // 쿼리+매핑만 정의 — 로딩/에러/마운트 가드/refresh 는 useOneShotQuery 가 소유.
+  const loadWishPins = async (): Promise<{ pins: WishPin[] }> => {
     const { data, error } = await supabase
       .from('wishlist_items')
       .select(WISH_PIN_SELECT_COLUMNS)
@@ -36,12 +34,7 @@ export const useWishPins = () => {
       .not('lng', 'is', null)
       .order('created_at', { ascending: false });
 
-    if (!mountedRef.current) return;
-
-    if (error) {
-      setState({ status: 'error', message: '위시 장소를 불러오지 못했어요.' });
-      return;
-    }
+    if (error) throw error;
 
     const rows = (data ?? []) as WishPinRow[];
     const pins: WishPin[] = [];
@@ -49,17 +42,12 @@ export const useWishPins = () => {
       const pin = toWishPin({ row });
       if (pin) pins.push(pin); // 좌표 비유한 행은 toWishPin이 null → 제외(지도 핀 보호).
     }
-    setState({ status: 'ready', pins });
+    return { pins };
   };
 
-  useEffect(function loadWishPinsOnMount() {
-    mountedRef.current = true;
-    void loadWishPins();
-    return function cleanupWishPins() {
-      mountedRef.current = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 1회 조회(폴링 방지). loadWishPins 의존 시 매 렌더 재조회됨.
-  }, []);
-
-  return { state, refresh: loadWishPins };
+  return useOneShotQuery<{ pins: WishPin[] }>({
+    deps: [],
+    fetch: loadWishPins,
+    mapError: () => '위시 장소를 불러오지 못했어요.',
+  });
 };
