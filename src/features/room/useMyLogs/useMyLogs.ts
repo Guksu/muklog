@@ -6,11 +6,10 @@
 //   solo/couple 파생(C2) + 카드 통계행(맛집 수·마지막 기록, home-fidelity).
 // 소비자: MyLogsProvider → LogListScreen(목록/빈상태/에러) + PlusHeaderButton(생성 성공 후 refresh).
 //
-// 정책: 앱 진입(Provider 마운트) 1회 조회 + 성공 후 refresh()만. 폴링/주기 조회 금지(비용 가드레일 §8,
-//   기존 useMembership "진입 1회 + 성공 후 refresh" 정책 계승). refresh는 의도적으로 loading으로 되돌리지 않는다.
-import { useEffect, useRef, useState } from 'react';
-
+// 정책: 앱 진입(Provider 마운트) 1회 조회 + 성공 후 refresh()만. 폴링/주기 조회 금지(비용 가드레일 §8).
+//   로딩/에러/마운트 가드/refresh 는 useOneShotQuery 가 소유(진입 1회 + 명시적 refresh).
 import { supabase } from '@/lib/supabase';
+import { useOneShotQuery } from '@/lib/useOneShotQuery';
 
 import { type RoomMode } from '../modes';
 
@@ -73,39 +72,23 @@ const toMyLog = ({ row }: { row: MyLogRow }): MyLog => ({
  * @param userId 인증된(익명) 사용자 id — 변경 시에만 재조회(폴링 방지)
  * @returns state(목록 상태)와 refresh(재조회 함수)
  */
-export const useMyLogs = ({ userId }: { userId: string }) => {
-  const [state, setState] = useState<MyLogsState>({ status: 'loading' });
-  const mountedRef = useRef(true);
-
-  // 일반 함수로 정의(컨벤션상 useCallback 지양). effect는 [userId]에만 의존하므로
-  // 매 렌더 새 함수 참조가 만들어져도 재조회 루프가 발생하지 않는다.
-  const fetchMyLogs = async () => {
+export const useMyLogs = ({ userId }: { userId: string }): {
+  state: MyLogsState;
+  refresh: () => Promise<void>;
+} => {
+  // 쿼리+매핑만 정의 — 로딩/에러/마운트 가드/refresh 는 useOneShotQuery 가 소유.
+  const fetchMyLogs = async (): Promise<{ logs: MyLog[] }> => {
     // 무인자 RPC. 행 집합 반환(0행=빈 목록=정상).
     const { data, error } = await supabase.rpc('list_my_rooms');
-
-    if (!mountedRef.current) return;
-
-    if (error) {
-      setState({ status: 'error', message: '로그 목록을 불러오지 못했어요. 다시 시도해 주세요.' });
-      return;
-    }
+    if (error) throw error;
 
     const rows = (data ?? []) as MyLogRow[];
-    setState({ status: 'ready', logs: rows.map((row) => toMyLog({ row })) });
+    return { logs: rows.map((row) => toMyLog({ row })) };
   };
 
-  useEffect(
-    function loadMyLogsOnUser() {
-      mountedRef.current = true;
-      // 진입 1회(또는 userId 변경 시) 조회. fetchMyLogs는 최신 렌더 클로저를 사용한다.
-      void fetchMyLogs();
-      return function cleanupMyLogs() {
-        mountedRef.current = false;
-      };
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- userId 변경 시에만 재조회(폴링 방지). fetchMyLogs 의존 시 매 렌더 재조회됨.
-    [userId],
-  );
-
-  return { state, refresh: fetchMyLogs };
+  return useOneShotQuery<{ logs: MyLog[] }>({
+    deps: [userId],
+    fetch: fetchMyLogs,
+    mapError: () => '로그 목록을 불러오지 못했어요. 다시 시도해 주세요.',
+  });
 };

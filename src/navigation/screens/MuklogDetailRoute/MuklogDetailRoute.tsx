@@ -10,9 +10,8 @@
 //     onEdit → navigate(MuklogEditor, { roomId, muklogId }). 저장은 에디터에서, 복귀 시 포커스 refresh로 상세 갱신.
 //   삭제: useDeleteMuklog(Storage remove → muklogs delete) — photoPaths = useMuklog.photoStoragePaths(추가 쿼리 0).
 //         성공 시 navigation.goBack(리스트 복귀, 목록은 MuklogList 포커스 refresh로 갱신, plan §4.3).
-import React, { useRef } from 'react';
+import React from 'react';
 import {
-  useFocusEffect,
   useNavigation,
   useRoute,
   type NavigationProp,
@@ -26,6 +25,7 @@ import { useDeleteMuklog, useMuklog } from '@/features/muklog';
 import { useRoomMembers } from '@/features/room';
 
 import { Routes, type AppStackParamList } from '../../routes';
+import { useRefreshOnFocus } from '../../useRefreshOnFocus';
 import { MuklogDetailScreen } from '../MuklogDetailScreen';
 
 export const MuklogDetailRoute = () => {
@@ -57,17 +57,7 @@ export const MuklogDetailRoute = () => {
   const { showToast } = useToastController();
 
   // 에디터에서 편집 저장 후 복귀(재포커스) 시 상세 재조회(폴링 아님, plan §4.3). 첫 포커스(마운트 로드)는 건너뜀.
-  const refreshRef = useRef(refresh);
-  refreshRef.current = refresh;
-  const hasFocusedRef = useRef(false);
-  const handleFocus = React.useCallback(function refreshOnRefocus() {
-    if (!hasFocusedRef.current) {
-      hasFocusedRef.current = true; // 첫 포커스 = 마운트 로드 → 중복 조회 가드.
-      return;
-    }
-    void refreshRef.current();
-  }, []);
-  useFocusEffect(handleFocus);
+  useRefreshOnFocus({ refresh });
 
   const muklog = state.status === 'ready' ? state.muklog : null;
   // 작성자만 관리(편집/삭제) 가능 — more 버튼 노출 분기(RLS가 최종 방어, plan §5 ⑤ a).

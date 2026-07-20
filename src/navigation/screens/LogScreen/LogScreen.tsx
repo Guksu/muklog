@@ -8,7 +8,6 @@
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import {
-  useFocusEffect,
   useNavigation,
   useRoute,
   type NavigationProp,
@@ -19,9 +18,11 @@ import * as Clipboard from 'expo-clipboard';
 
 import {
   Button,
+  ErrorRetryView,
   IconButton,
   IconName,
   InviteCodeCard,
+  LoadingView,
   RenameDialog,
   Screen,
   SegmentControl,
@@ -63,6 +64,7 @@ import {
 import { useTheme } from '@/theme';
 
 import { Routes, type AppStackParamList } from '../../routes';
+import { useRefreshOnFocus } from '../../useRefreshOnFocus';
 
 // 로그 내부 세그먼트 키(enum-style 단일 출처) — 'log'(기록)/'wish'(위시리스트). 기본 'log'.
 const LogSeg = { Log: 'log', Wish: 'wish' } as const;
@@ -186,22 +188,13 @@ export const LogScreen = () => {
   const { showToast } = useToastController();
 
   // 재포커스(에디터/상세 복귀) 시 두 목록을 함께 1회 refresh(첫 포커스=마운트 로드와 겹쳐 가드). 폴링 아님(plan §6·§10).
-  //   다녀왔어요 플로우(먹로그+1·위시-1)·삭제·편집 반영을 단일 포커스 훅으로 처리.
-  const refreshMuklogsRef = React.useRef(refreshMuklogs);
-  refreshMuklogsRef.current = refreshMuklogs;
-  const refreshWishlistRef = React.useRef(refreshWishlist);
-  refreshWishlistRef.current = refreshWishlist;
-  const hasFocusedRef = React.useRef(false);
-  // useFocusEffect는 콜백 참조 안정성이 필수 → 예외적으로 useCallback(컨벤션 허용 케이스).
-  const handleFocus = React.useCallback(function refreshListsOnRefocus() {
-    if (!hasFocusedRef.current) {
-      hasFocusedRef.current = true; // 첫 포커스 = 마운트 로드 → 중복 조회 가드.
-      return;
-    }
-    void refreshMuklogsRef.current();
-    void refreshWishlistRef.current();
-  }, []);
-  useFocusEffect(handleFocus);
+  //   다녀왔어요 플로우(먹로그+1·위시-1)·삭제·편집 반영을 단일 포커스 훅으로 처리(두 소스는 콜백에서 조합).
+  useRefreshOnFocus({
+    refresh: () => {
+      void refreshMuklogs();
+      void refreshWishlist();
+    },
+  });
 
   if (!roomId) {
     return (
@@ -214,28 +207,11 @@ export const LogScreen = () => {
   }
 
   if (state.status === 'loading') {
-    return (
-      <Screen center>
-        <ActivityIndicator testID="logscreen-loading" color={theme.color.primary} />
-      </Screen>
-    );
+    return <LoadingView testID="logscreen-loading" />;
   }
 
   if (state.status === 'error') {
-    return (
-      <Screen center>
-        <Text variant="body" color="error" style={styles.center}>
-          {state.message}
-        </Text>
-        <Button
-          title="다시 시도"
-          accessibilityLabel="다시 시도"
-          variant="secondary"
-          onPress={() => void refresh()}
-          style={{ marginTop: theme.spacing[16] }}
-        />
-      </Screen>
-    );
+    return <ErrorRetryView message={state.message} onRetry={() => void refresh()} />;
   }
 
   // ── 위시 세그 카운트 + 핸들러(roomId는 위 가드로 string 확정) ──────────────────────────────

@@ -7,9 +7,8 @@
 //
 // 정책: 진입(roomId 변경) 1회 조회 + 명시적 refresh()만. 폴링/주기 조회·Realtime 미도입(비용 가드레일 §10).
 //   useMyLogs의 "진입 1회 + refresh" 정책 계승. refresh는 의도적으로 loading으로 되돌리지 않는다.
-import { useEffect, useRef, useState } from 'react';
-
 import { supabase } from '@/lib/supabase';
+import { useOneShotQuery } from '@/lib/useOneShotQuery';
 
 import { mapRoomError } from '../errors';
 import { type RoomMode } from '../modes';
@@ -46,33 +45,23 @@ type RoomRow = {
  * @param roomId 조회할 로그 id — 변경 시에만 재조회(폴링 방지)
  * @returns state(상세 상태)와 refresh(재조회 함수)
  */
-export const useRoom = ({ roomId }: { roomId: string }) => {
-  const [state, setState] = useState<RoomDetailState>({ status: 'loading' });
-  const mountedRef = useRef(true);
-
-  // 일반 함수로 정의(컨벤션상 useCallback 지양). effect는 [roomId]에만 의존하므로
-  // 매 렌더 새 함수 참조가 만들어져도 재조회 루프가 발생하지 않는다.
-  const fetchRoom = async () => {
+export const useRoom = ({ roomId }: { roomId: string }): {
+  state: RoomDetailState;
+  refresh: () => Promise<void>;
+} => {
+  // 쿼리+매핑만 정의 — 로딩/에러/마운트 가드/refresh 는 useOneShotQuery 가 소유(진입 1회 + 명시적 refresh).
+  const fetchRoom = async (): Promise<{ room: RoomDetail }> => {
     // 인자명은 RPC 시그니처(p_room_id)와 일치해야 한다(C3).
     const { data, error } = await supabase.rpc('get_room', { p_room_id: roomId });
-
-    if (!mountedRef.current) return;
-
-    if (error) {
-      setState({ status: 'error', message: mapRoomError({ error }) });
-      return;
-    }
+    if (error) throw error;
 
     const row = (data ?? {}) as RoomRow;
     // ⚠️ name은 누락 검사에 포함하지 않는다(nullable → 누락/null=정상, BAD_RESPONSE로 오판 금지, C4).
     if (!row.room_id || !row.invite_code || row.member_count == null || !row.mode) {
-      // 응답 형 누락 → BAD_RESPONSE 패턴(기본 메시지). 토큰 미일치라 mapRoomError가 기본 메시지로 흡수.
-      setState({ status: 'error', message: mapRoomError({ error: new Error('GET_ROOM_BAD_RESPONSE') }) });
-      return;
+      throw new Error('GET_ROOM_BAD_RESPONSE'); // 토큰 미일치라 mapRoomError가 기본 메시지로 흡수.
     }
 
-    setState({
-      status: 'ready',
+    return {
       room: {
         roomId: row.room_id,
         inviteCode: row.invite_code,
@@ -82,21 +71,12 @@ export const useRoom = ({ roomId }: { roomId: string }) => {
         deleteScheduledAt: row.delete_scheduled_at ?? null,
         deleteRequestedBy: row.delete_requested_by ?? null,
       },
-    });
+    };
   };
 
-  useEffect(
-    function loadRoomOnId() {
-      mountedRef.current = true;
-      // 진입 1회(또는 roomId 변경 시) 조회. fetchRoom은 최신 렌더 클로저를 사용한다.
-      void fetchRoom();
-      return function cleanupRoom() {
-        mountedRef.current = false;
-      };
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- roomId 변경 시에만 재조회(폴링 방지). fetchRoom 의존 시 매 렌더 재조회됨.
-    [roomId],
-  );
-
-  return { state, refresh: fetchRoom };
+  return useOneShotQuery<{ room: RoomDetail }>({
+    deps: [roomId],
+    fetch: fetchRoom,
+    mapError: (error) => mapRoomError({ error }),
+  });
 };

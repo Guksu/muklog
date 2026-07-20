@@ -6,10 +6,7 @@
 //   경로 집합(key)이 바뀔 때만 재발급 — 폴링/주기 호출 없음.
 import { useEffect, useRef, useState } from 'react';
 
-import { supabase } from '@/lib/supabase';
-
-const MUKLOG_PHOTOS_BUCKET = 'muklog-photos'; // muklog-photos 스프린트 비공개 버킷(단일 출처).
-const SIGNED_URL_TTL_SECONDS = 3600; // 1h — useMuklog와 동일 정책.
+import { createSignedUrlMap } from '@/features/muklog/signedUrlMap';
 
 /**
  * 로그 미리보기 사진 경로들의 signed URL을 1회 배치 발급해 path→URL 맵을 제공한다.
@@ -36,19 +33,8 @@ export const useLogPreviewUrls = ({ paths }: { paths: string[] }): { urls: Recor
         };
       }
       const run = async () => {
-        const map: Record<string, string> = {};
-        try {
-          const { data, error } = await supabase.storage
-            .from(MUKLOG_PHOTOS_BUCKET)
-            .createSignedUrls(unique, SIGNED_URL_TTL_SECONDS);
-          if (!error && data) {
-            for (const item of data) {
-              if (item.path && item.signedUrl) map[item.path] = item.signedUrl;
-            }
-          }
-        } catch {
-          // best-effort: 발급 실패는 해당 슬롯 제외(목록을 막지 않는다).
-        }
+        // 공용 유틸로 배치 발급(버킷·TTL·best-effort 는 createSignedUrlMap 단일 출처).
+        const map = await createSignedUrlMap({ paths: unique });
         if (mountedRef.current) setUrls(map);
       };
       void run();

@@ -17,8 +17,10 @@ import * as WebBrowser from 'expo-web-browser';
 import {
   Avatar,
   Button,
+  ErrorRetryView,
   Icon,
   IconName,
+  LoadingView,
   RenameDialog,
   Screen,
   SubBar,
@@ -114,27 +116,11 @@ const ProfileContent = ({ userId }: { userId: string }) => {
   );
 
   if (state.status === 'loading') {
-    return (
-      <Screen center>
-        <ActivityIndicator testID="profile-loading" color={theme.color.primary} />
-      </Screen>
-    );
+    return <LoadingView testID="profile-loading" />;
   }
 
   if (state.status === 'error') {
-    return (
-      <Screen center>
-        <Text variant="body" color="error" style={styles.center}>
-          {state.message}
-        </Text>
-        <Button
-          title="다시 시도"
-          variant="secondary"
-          onPress={() => void refresh()}
-          style={{ marginTop: theme.spacing[16] }}
-        />
-      </Screen>
-    );
+    return <ErrorRetryView message={state.message} onRetry={() => void refresh()} />;
   }
 
   const { profile } = state;

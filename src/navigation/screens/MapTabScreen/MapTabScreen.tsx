@@ -11,7 +11,6 @@
 //   ⚠️ 비주얼은 ui-publisher 컴포넌트로만(임의 변경 금지). 상태→tone/message 판단만 여기서 한다.
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 
 import {
   CategoryFilterBar,
@@ -62,6 +61,8 @@ import { displayLogName } from '@/features/room/logName';
 import { useAddNearbyWish } from '@/features/wishlist';
 import { env } from '@/lib/env';
 import { useTheme } from '@/theme';
+
+import { useRefreshOnFocus } from '../../useRefreshOnFocus';
 
 // 상태 안내 카피(ui-spec §4 권고값 — 해요체, 차단 아님). 카피 단일 출처.
 const MAP_COPY = {
@@ -124,17 +125,14 @@ export const MapTabScreen = () => {
 
   // 지도 탭 포커스마다 위시 핀 + 먹로그(saved) 핀 재조회(로그에서 추가/삭제·방 나가기 후 복귀 반영). 폴링 아님 — 포커스 단위.
   //   바텀탭 화면은 첫 진입 후 언마운트되지 않으므로 마운트 1회 조회만으로는 세션 내내 stale(H1) — 위시 핀과 대칭으로 saved 핀도 refresh한다.
-  //   useFocusEffect는 콜백 참조 안정성이 필수 → ref + 빈 deps useCallback(컨벤션 허용 예외, LogScreen 선례).
-  //   첫 포커스는 마운트 조회와 중복이나 refresh가 loading으로 되돌리지 않아 무해(§4.3).
-  const wishRefreshRef = useRef(wishPins.refresh);
-  wishRefreshRef.current = wishPins.refresh;
-  const muklogRefreshRef = useRef(refresh);
-  muklogRefreshRef.current = refresh;
-  const handleFocus = React.useCallback(function refreshPinsOnFocus() {
-    void wishRefreshRef.current();
-    void muklogRefreshRef.current();
-  }, []);
-  useFocusEffect(handleFocus);
+  //   첫 포커스도 갱신해야 하므로 skipFirst:false(refresh가 loading으로 되돌리지 않아 마운트 조회와 중복이어도 무해, §4.3).
+  useRefreshOnFocus({
+    refresh: () => {
+      void wishPins.refresh();
+      void refresh();
+    },
+    skipFirst: false,
+  });
 
   const sendInit = () => {
     // INIT center가 이미 현위치면(coords 존재) 자동 RECENTER 불필요 — 1회 가드를 소진한 것으로 본다(#4).
