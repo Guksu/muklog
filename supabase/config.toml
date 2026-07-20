@@ -1,0 +1,27 @@
+# supabase/config.toml
+# Edge Function 인증 정책을 코드로 고정한다(보안 하드닝).
+#
+# 각 함수 코드 주석이 "verify_jwt = true (config.toml)" 를 의도 정책으로 명시하지만 실제 파일이 없어
+# 그동안 플랫폼 배포 기본값에만 의존했다. 배포 설정 실수(예: --no-verify-jwt)로 인증 게이트가 꺼지면
+# place-search/nearby-search 가 Kakao API 오픈 프록시가 되고, delete-account/send-muklog-push 는
+# 함수 내부 getUser() 재검증이 있으나 미인증 트래픽을 함수까지 통과시킨다. 아래로 4개 함수 모두 명시 고정.
+#
+# ⚠️ 이 파일은 `supabase` CLI 배포(`supabase functions deploy`) 시에만 적용된다. 대시보드 배포를 쓰면
+#    보안 의도의 문서 역할만 한다(플랫폼 기본값 verify_jwt=true 와 동일 방향). CLI 로컬 스택(`supabase start`)을
+#    쓸 경우 이 파일 상단에 `project_id = "<your-project-ref>"` 를 추가해야 한다(라이브 프로젝트 ref 는 커밋 금지).
+
+[functions.place-search]
+# 인증 사용자만 — Kakao Local 쿼터 보호(공개 프록시 차단).
+verify_jwt = true
+
+[functions.nearby-search]
+# place-search 와 동일 정책.
+verify_jwt = true
+
+[functions.send-muklog-push]
+# 미인증 트래픽 차단 + 함수 내부 JWT callerId 재검증(이중 방어).
+verify_jwt = true
+
+[functions.delete-account]
+# 미인증 트래픽 차단 + 함수 내부 getUser() 본인 재검증(이중 방어).
+verify_jwt = true
