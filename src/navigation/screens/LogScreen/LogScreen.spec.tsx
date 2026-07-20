@@ -249,11 +249,13 @@ const mockUseWishlist = jest.fn();
 const refreshWishlist = jest.fn();
 const mockAddWishlist = jest.fn();
 const mockRemoveWishlist = jest.fn();
+const mockWishlistExists = jest.fn();
 jest.mock('@/features/wishlist', () => {
   const { View, Text, Pressable } = require('react-native');
   return {
     useWishlist: () => mockUseWishlist(),
     useAddWishlist: () => ({ addWishlist: mockAddWishlist, loading: false, error: null }),
+    wishlistExists: (args: { roomId: string; kakaoPlaceId: string }) => mockWishlistExists(args),
     useRemoveWishlist: () => ({ removeWishlist: mockRemoveWishlist, loading: false, error: null }),
     WishlistView: (props: Record<string, unknown>) => {
       const items = props.items as { id: string; placeName: string }[];
@@ -344,6 +346,8 @@ beforeEach(() => {
   });
   mockAddWishlist.mockResolvedValue({ id: 'w-new' });
   mockRemoveWishlist.mockResolvedValue(undefined);
+  mockWishlistExists.mockReset();
+  mockWishlistExists.mockResolvedValue(false);
   // room-lifecycle 더블 초기화.
   mockLeaveRoom.mockReset();
   mockCancelRoomDeletion.mockReset();
@@ -847,6 +851,42 @@ describe('LogScreen — 위시리스트 세그먼트(wishlist, TC-6/B7 · TC-1·
     expect(screen.queryByLabelText('place-search')).toBeNull();
     // 토스트 "위시리스트에 담았어요 📍"(킷 mk-log:33) 노출.
     expect(screen.getByText('위시리스트에 담았어요 📍')).toBeTruthy();
+  });
+
+  it('M4: 이미 담은 장소(중복) 선택 → addWishlist 미호출 + "이미 담은 곳이에요" 안내 + 검색뷰 복귀', async () => {
+    mockWishlistExists.mockResolvedValue(true);
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByText('위시리스트 0'));
+    fireEvent.press(screen.getByLabelText('wish-add'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('search-pick'));
+    });
+    expect(mockWishlistExists).toHaveBeenCalledWith({ roomId: 'r1', kakaoPlaceId: '12345' });
+    expect(mockAddWishlist).not.toHaveBeenCalled();
+    expect(screen.getByText('이미 담은 곳이에요')).toBeTruthy();
+    expect(screen.queryByLabelText('place-search')).toBeNull();
+  });
+
+  it('M4: 검색 결과 연타 → in-flight 가드로 addWishlist가 1회만 호출된다', async () => {
+    let resolveAdd: (v: { id: string }) => void = () => {};
+    mockAddWishlist.mockImplementation(
+      () =>
+        new Promise<{ id: string }>((resolve) => {
+          resolveAdd = resolve;
+        }),
+    );
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByText('위시리스트 0'));
+    fireEvent.press(screen.getByLabelText('wish-add'));
+    await act(async () => {
+      // 첫 탭 → insert in-flight, 둘째 탭은 가드로 무시.
+      fireEvent.press(screen.getByLabelText('search-pick'));
+      fireEvent.press(screen.getByLabelText('search-pick'));
+    });
+    await act(async () => {
+      resolveAdd({ id: 'w-new' });
+    });
+    expect(mockAddWishlist).toHaveBeenCalledTimes(1);
   });
 
   it('직접 입력(0건 폴백) → 검색어를 placeName으로 addWishlist(좌표 null)', async () => {

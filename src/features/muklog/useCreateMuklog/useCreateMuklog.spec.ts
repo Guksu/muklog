@@ -225,6 +225,24 @@ describe('useCreateMuklog', () => {
     expect(result.current.error).toBe('사진 업로드에 실패했어요. 다시 시도해 주세요.');
   });
 
+  it('L1: 롤백 delete가 {error} 반환(RLS 등 실패) 시 진단 로그를 남기고 원본 사진 에러를 throw한다', async () => {
+    wireInsert({ data: { id: 'new-id' }, error: null });
+    uploadMock.mockRejectedValueOnce(new Error('PHOTO_UPLOAD_FAILED'));
+    // delete().eq()가 throw가 아니라 {error} 페이로드로 실패 — try/catch로는 안 잡히던 경로.
+    deleteEqMock.mockResolvedValueOnce({ error: { message: 'RLS denied' } });
+    const photos = [{ uri: 'a' }];
+    const { result } = renderHook(() => useCreateMuklog());
+
+    await act(async () => {
+      await expect(
+        result.current.createMuklog({ input: { ...validInput, photos } }),
+      ).rejects.toThrow('PHOTO_UPLOAD_FAILED');
+    });
+
+    // 롤백 실패가 조용히 사라지지 않고 로그로 드러난다(진단 가능).
+    expect(console.warn as jest.Mock).toHaveBeenCalled();
+  });
+
   // 발송 트리거(push-send §3) — 생성 성공 직후 best-effort fire-and-forget invoke(편집 미발송은 MuklogEditor 경로).
   it('생성 성공 후 send-muklog-push 를 { roomId, muklogId } 로 1회 invoke 한다 (push-send AC4)', async () => {
     wireInsert({ data: { id: 'new-id' }, error: null });

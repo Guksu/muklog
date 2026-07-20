@@ -58,9 +58,15 @@ export const useCreateMuklog = () => {
   //   정리 자체 실패는 무시한다(원본 사진 에러를 사용자에게 노출하는 게 우선).
   const rollbackMuklog = async ({ muklogId }: { muklogId: string }) => {
     try {
-      await supabase.from('muklogs').delete().eq('id', muklogId);
-    } catch {
-      // best-effort: 롤백 실패는 무시(차기 정리 잡 위임).
+      // delete()는 DB 실패를 throw가 아니라 { error } 페이로드로 반환 — try/catch만으론 못 잡는다.
+      //   best-effort라 사용자엔 노출 안 하지만(원본 사진 에러 우선), 롤백 실패는 "사진 없는 먹로그" 잔존을
+      //   낳으므로 진단 가능하도록 로그는 남긴다(무음 실패 방지).
+      const { error: deleteError } = await supabase.from('muklogs').delete().eq('id', muklogId);
+      if (deleteError) {
+        console.warn('[useCreateMuklog] 롤백(muklog 삭제) 실패 — 사진 없는 먹로그 잔존 가능:', deleteError);
+      }
+    } catch (error) {
+      console.warn('[useCreateMuklog] 롤백(muklog 삭제) 예외:', error);
     }
   };
 

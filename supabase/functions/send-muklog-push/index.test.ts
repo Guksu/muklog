@@ -112,14 +112,15 @@ Deno.test('발송 내용: to/title/body/data shape + 닉네임 본문(AC3)', asy
   assertEquals(messages[0].data, { roomId: 'room-1', muklogId: 'mk-1' });
 });
 
-Deno.test('카피 폴백: 닉네임 없으면 "연인이 ...", 로그명 없으면 폴백 title', async () => {
+Deno.test('카피 폴백: 닉네임 없으면 "연인님이 ...", 로그명 없으면 폴백 title', async () => {
   const { deps, calls } = makeDeps({
     getActorNickname: () => Promise.resolve(null),
     getRoomName: () => Promise.resolve(null),
   });
   await handleSendMuklogPush(reqWith({ auth: 'Bearer valid', body: validBody }), deps);
   const messages = calls.sentMessages[0] as Array<Record<string, unknown>>;
-  assertEquals(messages[0].body, '연인이 새 맛집을 기록했어요 🍽️');
+  // 폴백 저자도 닉네임 케이스("민지님이")와 동일하게 "님이" 접미(구현 buildCopy와 정합).
+  assertEquals(messages[0].body, '연인님이 새 맛집을 기록했어요 🍽️');
   assert(typeof messages[0].title === 'string' && (messages[0].title as string).length > 0);
 });
 

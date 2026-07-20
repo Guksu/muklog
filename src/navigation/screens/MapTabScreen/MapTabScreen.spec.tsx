@@ -694,6 +694,18 @@ describe('MapTabScreen', () => {
     expect(wishRefreshSpy).toHaveBeenCalled();
   });
 
+  it('H1: 지도 탭 포커스 시 먹로그(saved) 핀도 refresh한다(생성/삭제·방 나가기 후 복귀 반영)', () => {
+    useMuklogPinsMock.mockReturnValue({
+      state: { status: 'ready', pins: [] },
+      refresh: muklogRefreshSpy,
+    });
+    renderWithTheme(<MapTabScreen />);
+    // useFocusEffect 콜백을 수동 발화 → 먹로그 핀 refresh도 호출(위시 핀과 대칭).
+    expect(mockFocus.cb).not.toBeNull();
+    mockFocus.cb?.();
+    expect(muklogRefreshSpy).toHaveBeenCalled();
+  });
+
   it('T7: "위시에 담기" 성공 콜백(onAdded)이 위시 핀 refresh에 배선된다', () => {
     useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
     renderWithTheme(<MapTabScreen />);

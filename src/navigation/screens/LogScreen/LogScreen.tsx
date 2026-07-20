@@ -56,6 +56,7 @@ import {
   useAddWishlist,
   useRemoveWishlist,
   useWishlist,
+  wishlistExists,
   WishlistView,
   type WishlistState,
 } from '@/features/wishlist';
@@ -68,6 +69,8 @@ const LogSeg = { Log: 'log', Wish: 'wish' } as const;
 
 // 위시 추가 성공 토스트 카피(킷 mk-log:33).
 const WISH_ADDED_TOAST = '위시리스트에 담았어요 📍';
+// 이미 담은 장소 안내 카피 — 지도 주변 담기(NEARBY_WISH_COPY.duplicate)와 동일 문구로 흐름 간 동작 통일.
+const WISH_DUPLICATE_TOAST = '이미 담은 곳이에요';
 
 // 초대코드 복사 토스트 카피(킷 mk-log:94, tone positive). {code}는 배선 시 치환.
 const INVITE_COPIED_TOAST = (code: string) => `초대코드를 복사했어요 · ${code}`;
@@ -176,6 +179,9 @@ export const LogScreen = () => {
   // 세그 상태(기본 'log') + 위시 추가 풀스크린 검색 스왑(MuklogEditor searching 패턴 동일).
   const [seg, setSeg] = React.useState<string>(LogSeg.Log);
   const [wishSearching, setWishSearching] = React.useState(false);
+  // 위시 추가 in-flight 가드 — 연속 탭(검색 결과/직접 입력) 중복 insert 차단. state는 비동기 갱신이라
+  //   레이스를 못 막으므로 ref로 동기 잠금(지도 주변 담기 useAddNearbyWish.submittingRef 선례).
+  const submittingWishRef = React.useRef(false);
   // 위시 추가 성공/예약취소 에러 토스트 — 전역 토스트 컨트롤러(루트 단일 <Toast>). 트리거만 호출(비주얼·타이머는 Toast 소유).
   const { showToast } = useToastController();
 
@@ -242,12 +248,29 @@ export const LogScreen = () => {
   }: {
     input: Parameters<typeof addWishlist>[0]['input'];
   }) => {
+    if (submittingWishRef.current) return; // 연타 중복 insert 차단(동기 잠금).
+    submittingWishRef.current = true;
     try {
+      // 중복 pre-check — 카카오 장소 id가 있는 검색 결과만(직접 입력은 id 없어 dedup 불가·스킵).
+      //   이미 담은 곳이면 insert 스킵 + 안내 토스트(지도 주변 담기와 동작 통일, best-effort). 검색뷰는 복귀.
+      if (input.kakaoPlaceId) {
+        const duplicate = await wishlistExists({
+          roomId: input.roomId,
+          kakaoPlaceId: input.kakaoPlaceId,
+        });
+        if (duplicate) {
+          showToast({ message: WISH_DUPLICATE_TOAST, tone: 'neutral' });
+          setWishSearching(false);
+          return;
+        }
+      }
       await addWishlist({ input });
       await refreshWishlist();
       showToast({ message: WISH_ADDED_TOAST, tone: 'positive' });
     } catch {
-      // addWishlist가 error 상태로 노출 — 목록 불변, 토스트 없음(plan TC-2 실패).
+      // addWishlist/pre-check가 error 상태로 노출 — 목록 불변, 토스트 없음(plan TC-2 실패).
+    } finally {
+      submittingWishRef.current = false;
     }
     setWishSearching(false);
   };

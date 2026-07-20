@@ -11,6 +11,10 @@ export const ProfileErrorToken = {
   NicknameTooLong: 'NICKNAME_TOO_LONG',
   PermissionDenied: 'PERMISSION_DENIED',
   AvatarUploadFailed: 'AVATAR_UPLOAD_FAILED',
+  // 회원 탈퇴(delete-account Edge Function) 경로 토큰 — useDeleteAccount / 함수 응답 body 에서 유입.
+  Unauthenticated: 'UNAUTHENTICATED', // 401(세션 만료·미인증)
+  DeleteFailed: 'DELETE_FAILED', // 500(deleteUser 실패, 재시도 가능·세션 유지)
+  DeleteAccountIncomplete: 'DELETE_ACCOUNT_INCOMPLETE', // deleted:true 아님(미완료 삭제, 재시도)
 } as const;
 
 export type ProfileErrorToken = (typeof ProfileErrorToken)[keyof typeof ProfileErrorToken];
@@ -21,6 +25,9 @@ export const PROFILE_ERROR_MESSAGES: Record<ProfileErrorToken, string> = {
   [ProfileErrorToken.NicknameTooLong]: '닉네임은 20자까지 입력할 수 있어요.',
   [ProfileErrorToken.PermissionDenied]: '사진 접근 권한이 필요해요. 설정에서 허용해 주세요.',
   [ProfileErrorToken.AvatarUploadFailed]: '이미지 업로드에 실패했어요. 다시 시도해 주세요.',
+  [ProfileErrorToken.Unauthenticated]: '로그인이 만료됐어요. 다시 로그인한 뒤 시도해 주세요.',
+  [ProfileErrorToken.DeleteFailed]: '계정 삭제에 실패했어요. 잠시 후 다시 시도해 주세요.',
+  [ProfileErrorToken.DeleteAccountIncomplete]: '계정 삭제에 실패했어요. 잠시 후 다시 시도해 주세요.',
 };
 
 /** 토큰 미일치(네트워크/그 외) 시 기본 메시지. */
