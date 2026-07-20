@@ -4,11 +4,17 @@
 //   ⚠️ wishlist 스프린트: 데이터 조회·포커스 refresh가 LogScreen으로 이관 → 이 spec은 props 기반 렌더만 검증.
 //   ⚠️ FLAG-1: 입력 시트→풀스크린 에디터 라우트 전환. FAB는 navigate(MuklogEditor)만(장소검색은 에디터 컨테이너로 이동).
 import React from 'react';
+import { View } from 'react-native';
 import { fireEvent, screen } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
+import { spacing } from '@/theme';
 
 import { type Muklog, type MuklogsState } from '../types';
+
+// RN 스타일 배열/중첩을 단일 객체로 평탄화(테스트 단언용).
+const flattenStyle = (style: unknown): Record<string, number> =>
+  Object.assign({}, ...[].concat(style as never).filter(Boolean));
 
 // 카드 탭 → navigate(MuklogDetail, { muklogId }) / FAB → navigate(MuklogEditor, { roomId }) 배선 검증용 navigation 모킹.
 const mockNavigate = jest.fn();
@@ -87,6 +93,52 @@ describe('MuklogList', () => {
     renderList({ state: { status: 'ready', muklogs: [] } });
     fireEvent.press(screen.getByLabelText('새 먹로그'));
     expect(mockNavigate).toHaveBeenCalledWith('MuklogEditor', { roomId: 'r1' });
+  });
+});
+
+describe('MuklogList — 헤더 슬롯 정렬(참여자 블록 ↔ "우리 맛집" 라인 정합)', () => {
+  const renderWithHeader = () =>
+    renderWithTheme(
+      <MuklogList
+        roomId="r1"
+        meId="me-uid"
+        state={{ status: 'ready', muklogs: [] }}
+        refresh={refresh}
+        header={<View testID="injected-header" />}
+      />,
+    );
+
+  // 킷 mk-log.jsx: scroll 컨테이너는 무패딩이고 각 섹션이 자체 20px 좌우 패딩을 소유(참여자 :81, "우리 맛집" :108).
+  //   RN은 contentContainer에 일괄 패딩(20)을 두므로, 주입 블록(자체 20 소유)이 이중 패딩이 되지 않게
+  //   헤더 슬롯이 컨테이너 좌우/상단 패딩을 negative margin으로 상쇄해야 두 요소가 같은 20px 그리드에 선다.
+  it('헤더 슬롯이 컨테이너 좌우 패딩을 정확히 상쇄해 주입 블록을 20px 그리드에 정렬한다 (AC1)', () => {
+    renderWithHeader();
+    const containerPad = flattenStyle(
+      screen.getByTestId('muklog-list-scroll').props.contentContainerStyle,
+    ).padding;
+    const wrapper = flattenStyle(screen.getByTestId('muklog-list-header').props.style);
+    expect(wrapper.marginHorizontal).toBe(-containerPad);
+  });
+
+  it('헤더 슬롯이 컨테이너 상단 패딩을 상쇄해 이중 상단 패딩을 제거한다 (AC2)', () => {
+    renderWithHeader();
+    const containerPad = flattenStyle(
+      screen.getByTestId('muklog-list-scroll').props.contentContainerStyle,
+    ).padding;
+    const wrapper = flattenStyle(screen.getByTestId('muklog-list-header').props.style);
+    // 상단 패딩(=padding)을 상쇄 → segment→participant 리듬은 블록 자체 top(킷 12)이 결정.
+    expect(wrapper.marginTop).toBe(-containerPad);
+  });
+
+  it('헤더 슬롯 하단 여백 = 킷 참여자→"우리 맛집" 리듬(블록 bottom 2 + 슬롯 16 = 18) (AC2)', () => {
+    renderWithHeader();
+    const wrapper = flattenStyle(screen.getByTestId('muklog-list-header').props.style);
+    expect(wrapper.marginBottom).toBe(spacing[16]);
+  });
+
+  it('header가 없으면 헤더 슬롯을 렌더하지 않는다(회귀: 로딩/미로드 상태)', () => {
+    renderList({ state: { status: 'loading' } });
+    expect(screen.queryByTestId('muklog-list-header')).toBeNull();
   });
 });
 

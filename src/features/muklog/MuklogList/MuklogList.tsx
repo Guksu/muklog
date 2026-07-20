@@ -51,13 +51,33 @@ export const MuklogList = ({ roomId, meId, state, refresh, header }: MuklogListP
   // FAB → 풀스크린 에디터(작성 모드) 진입. 저장은 에디터에서, 복귀 시 포커스 refresh로 목록 갱신.
   const handleOpenEditor = () => navigation.navigate(Routes.MuklogEditor, { roomId });
 
+  // 스크롤 콘텐츠 좌우/상단 일괄 패딩. 킷(mk-log)은 scroll 무패딩·섹션별 20 소유지만 RN은 여기서 일괄 적용하고,
+  //   자체 20을 소유하는 주입 헤더(ParticipantBlock)는 아래 슬롯에서 이 값을 상쇄해 이중 패딩을 막는다.
+  const contentPadding = theme.spacing[20];
+
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={{ padding: theme.spacing[20], paddingBottom: theme.spacing[80] + insets.bottom }}
+        testID="muklog-list-scroll"
+        contentContainerStyle={{ padding: contentPadding, paddingBottom: theme.spacing[80] + insets.bottom }}
       >
-        {/* 스크롤 헤더(초대 영역 등) — 고정이 아니라 콘텐츠와 함께 스크롤돼 위로 사라진다(사용자 요청). */}
-        {header ? <View style={{ marginBottom: theme.spacing[12] }}>{header}</View> : null}
+        {/* 스크롤 헤더(참여자 블록 등) 슬롯 — 고정이 아니라 콘텐츠와 함께 스크롤돼 위로 사라진다(사용자 요청).
+            주입 블록(ParticipantBlock)은 킷 mk-log:81의 자체 패딩 "12px 20px 2px"를 소유하므로, 컨테이너의 좌우/상단
+            패딩을 negative margin으로 상쇄해야 블록이 "우리 맛집"(:108)과 같은 화면 20px 그리드에 선다(이중 패딩 제거).
+            좌우 상쇄는 아래 필터 칩 edge-bleed(marginHorizontal −20)와 동일 패턴, 상단 상쇄는 segment→participant
+            리듬을 블록 자체 top(킷 12)이 결정하게 한다. marginBottom 16 = 킷 참여자 bottom 2 + 섹션 헤더 top 16 = 18 중 슬롯 몫. */}
+        {header ? (
+          <View
+            testID="muklog-list-header"
+            style={{
+              marginTop: -contentPadding,
+              marginHorizontal: -contentPadding,
+              marginBottom: theme.spacing[16],
+            }}
+          >
+            {header}
+          </View>
+        ) : null}
 
         {/* 섹션 헤더 */}
         <View style={[styles.headerRow, { marginBottom: theme.spacing[10] }]}>

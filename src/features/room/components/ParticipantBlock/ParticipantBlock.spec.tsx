@@ -104,4 +104,18 @@ describe('ParticipantBlock — 킷 mk-log:79-103', () => {
     expect(screen.getByText('참여자 1')).toBeTruthy();
     expect(screen.getByTestId('participant-invite')).toBeTruthy();
   });
+
+  // 블록은 킷 mk-log:81 padding "12px 20px 2px"를 자체 소유한다(무패딩 컨테이너 전제).
+  //   좌우 20을 자체 소유하므로, 주입 컨테이너(MuklogList)는 자기 패딩을 상쇄해야 이중 패딩이 안 생김
+  //   → 이 계약이 "우리 맛집" 라인과의 정합 기준(회귀 가드). MuklogList.spec의 헤더 슬롯 상쇄와 짝.
+  it('킷 mk-log:81 padding "12px 20px 2px"를 자체 소유한다 (AC1)', () => {
+    renderBlock({ members: [member({ userId: meId, nickname: '민' })] });
+    const s = Object.assign(
+      {},
+      ...[].concat(screen.getByTestId('participant-block').props.style as never).filter(Boolean),
+    ) as Record<string, number>;
+    expect(s.paddingHorizontal).toBe(20);
+    expect(s.paddingTop).toBe(12);
+    expect(s.paddingBottom).toBe(2);
+  });
 });
