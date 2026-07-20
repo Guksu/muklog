@@ -57,10 +57,12 @@ export const normalizeMuklogInput = ({
     throw new Error(MuklogErrorToken.PlaceNameRequired);
   }
 
-  // rating: 0/null/undefined = 미평가(null). 그 외는 1~5만 허용.
+  // rating: 0/null/undefined = 미평가(null). 그 외는 1~5 + 0.5 단위(rating×2가 정수)만 허용.
+  //   0.5 단위는 이진 표현이 정확(1.5·2.5·…·4.5 exact)해 부동소수 오차 없음. DB 트리거가 최종 방어(동일 규칙).
   let rating: number | null = null;
   if (input.rating != null && input.rating !== 0) {
-    if (input.rating < 1 || input.rating > 5) {
+    const isHalfStep = input.rating * 2 === Math.trunc(input.rating * 2);
+    if (input.rating < 1 || input.rating > 5 || !isHalfStep) {
       throw new Error(MuklogErrorToken.RatingOutOfRange);
     }
     rating = input.rating;

@@ -37,6 +37,26 @@ describe('normalizeMuklogInput', () => {
     );
   });
 
+  it('rating 0.5 단위(4.5·5.0)를 허용한다 (AC1)', () => {
+    expect(normalizeMuklogInput({ input: { ...baseInput, rating: 4.5 } }).rating).toBe(4.5);
+    expect(normalizeMuklogInput({ input: { ...baseInput, rating: 5.0 } }).rating).toBe(5);
+  });
+
+  it('rating이 0.5 단위가 아니면 RATING_OUT_OF_RANGE를 throw한다 (AC1)', () => {
+    expect(() => normalizeMuklogInput({ input: { ...baseInput, rating: 4.3 } })).toThrow(
+      MuklogErrorToken.RatingOutOfRange,
+    );
+  });
+
+  it('rating이 범위 밖(0.5<1·5.5>5)이면 RATING_OUT_OF_RANGE를 throw한다 (AC1)', () => {
+    expect(() => normalizeMuklogInput({ input: { ...baseInput, rating: 0.5 } })).toThrow(
+      MuklogErrorToken.RatingOutOfRange,
+    );
+    expect(() => normalizeMuklogInput({ input: { ...baseInput, rating: 5.5 } })).toThrow(
+      MuklogErrorToken.RatingOutOfRange,
+    );
+  });
+
   it('rating 0/null은 미평가로 허용하고 null로 정규화한다 (AC4)', () => {
     expect(normalizeMuklogInput({ input: { ...baseInput, rating: 0 } }).rating).toBeNull();
     expect(normalizeMuklogInput({ input: { ...baseInput, rating: null } }).rating).toBeNull();

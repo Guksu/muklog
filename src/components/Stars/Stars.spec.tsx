@@ -49,4 +49,44 @@ describe('Stars', () => {
     const filledIcons = screen.getAllByTestId('icon-star-fill');
     expect(filledIcons[0].props.color).toBe('#FFB23E');
   });
+
+  it('value=3.5면 꽉 3 + 반 1 + 빈 1을 렌더한다 (AC2)', () => {
+    renderWithTheme(<Stars value={3.5} />);
+    expect(screen.getAllByTestId('star-filled')).toHaveLength(3);
+    expect(screen.getAllByTestId('star-half')).toHaveLength(1);
+    expect(screen.getAllByTestId('star-empty')).toHaveLength(1);
+    expect(screen.getAllByTestId(/^star-/)).toHaveLength(5);
+  });
+
+  it('정수 value=3은 반 별 없이 꽉 3 + 빈 2 (AC2 회귀)', () => {
+    renderWithTheme(<Stars value={3} />);
+    expect(screen.getAllByTestId('star-filled')).toHaveLength(3);
+    expect(screen.getAllByTestId('star-empty')).toHaveLength(2);
+    expect(screen.queryByTestId('star-half')).toBeNull();
+  });
+
+  it('반 별은 좌측 절반에 채운 별을 겹쳐 근사한다 (AC2)', () => {
+    renderWithTheme(<Stars value={3.5} />);
+    // 반 별 위치엔 빈 별 위에 채운 별 오버레이가 겹쳐진다 → icon-star-fill 총 4개(꽉 3 + 반 1).
+    expect(screen.getAllByTestId('icon-star-fill')).toHaveLength(4);
+  });
+
+  it('editable에서 4번째 별 좌측 탭 → onChange(3.5), 우측 탭 → onChange(4) (AC3)', () => {
+    const onChange = jest.fn();
+    renderWithTheme(<Stars value={0} editable onChange={onChange} />);
+    fireEvent.press(screen.getByLabelText('별점 3.5점'));
+    expect(onChange).toHaveBeenCalledWith(3.5);
+    fireEvent.press(screen.getByLabelText('별점 4점'));
+    expect(onChange).toHaveBeenCalledWith(4);
+  });
+
+  it('editable에서 별1은 단일 탭 영역이고 탭 시 onChange(1)을 호출한다 (클램프 결정)', () => {
+    const onChange = jest.fn();
+    renderWithTheme(<Stars value={0} editable onChange={onChange} />);
+    // 별1은 클램프로 좌/우 방출값이 동일(1) → 반 분할 없이 단일 Pressable(라벨 유일).
+    expect(screen.getAllByLabelText('별점 1점')).toHaveLength(1);
+    fireEvent.press(screen.getByLabelText('별점 1점'));
+    expect(onChange).toHaveBeenCalledWith(1);
+    expect(onChange).not.toHaveBeenCalledWith(0.5);
+  });
 });

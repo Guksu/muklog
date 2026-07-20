@@ -12,7 +12,7 @@ export type Muklog = {
   category: string | null; // CAT key(8종) | null
   area: string | null;
   memo: string | null;
-  rating: number | null; // 1~5
+  rating: number | null; // 1~5, 0.5 단위
   visitedAt: string | null; // 'YYYY-MM-DD'
   createdBy: string | null; // uuid | null(탈퇴자 익명화 — ON DELETE SET NULL, plan §1·§5)
   createdAt: string; // ISO
@@ -76,7 +76,7 @@ export type CreateMuklogInput = {
   placeName: string; // 필수, trim 후 비면 차단
   category?: string | null; // CAT key
   area?: string | null;
-  rating?: number | null; // 1~5(0/null=미평가)
+  rating?: number | null; // 1~5, 0.5 단위(0/null=미평가)
   memo?: string | null;
   visitedAt?: string | null; // 'YYYY-MM-DD', 기본 today, 미래 차단
   photos?: PickedPhoto[]; // 0~5장, 선택 순서 = order_index. 업로드/insert는 developer(useCreateMuklog)
