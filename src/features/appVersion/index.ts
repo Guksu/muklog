@@ -20,3 +20,6 @@ export {
 // 슬라이스 B — 게이트 훅·래퍼(App.tsx가 AuthGate를 AppVersionGate로 래핑).
 export { useAppVersionGate, type VersionGateState } from './useAppVersionGate';
 export { AppVersionGate, type AppVersionGateProps } from './AppVersionGate';
+
+// app-update-actions — 설정 화면 업데이트 상태 훅(dismissal 미참조, 항상 노출). ProfileScreen이 소비.
+export { useAppUpdateStatus, type AppUpdateStatus } from './useAppUpdateStatus';

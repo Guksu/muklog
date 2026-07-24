@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 
 import {
   Avatar,
@@ -30,6 +31,7 @@ import {
 import { Routes, type AppStackParamList } from '../../routes';
 import { AppVersionRow } from '@/features/appVersion/AppVersionRow';
 import { getCurrentAppVersion } from '@/features/appVersion/currentAppVersion';
+import { useAppUpdateStatus } from '@/features/appVersion/useAppUpdateStatus';
 import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { useAuth } from '@/features/auth';
 import {
@@ -203,6 +205,19 @@ const ProfileContent = ({ userId }: { userId: string }) => {
 
   // 현재 앱 버전(expo-constants) — 미확보면 null → 버전 행 미렌더(fail-open 톤과 일관).
   const appVersion = getCurrentAppVersion();
+  // 설정용 업데이트 상태(마운트 1회 app_config 조회) — dismissal 미참조(항상 노출). 폴링 0(비용 가드레일 §8).
+  const { status: updateStatus } = useAppUpdateStatus();
+
+  // 스토어 이동 — URL 없으면 no-op(Android 미출시 이중 방어). expo-linking(네이티브 모듈 아님, AppVersionGate와 동일 패턴).
+  const openStore = ({ storeUrl }: { storeUrl: string | null }) => {
+    if (!storeUrl) return;
+    void Linking.openURL(storeUrl);
+  };
+
+  // 업데이트 액션 탭 — available일 때만 그 storeUrl로 스토어 이동(null이면 openStore가 no-op).
+  const handleUpdatePress = () => {
+    if (updateStatus.kind === 'available') openStore({ storeUrl: updateStatus.storeUrl });
+  };
 
   return (
     <Screen edges={['left', 'right']} style={styles.flush}>
@@ -352,8 +367,11 @@ const ProfileContent = ({ userId }: { userId: string }) => {
           </Text>
         </Pressable>
 
-        {/* 앱 버전 행(app-version-gate T10) — 회원탈퇴 아래 약톤 표시. 미확보(expo-constants null)면 미렌더. */}
-        {appVersion ? <AppVersionRow version={appVersion} /> : null}
+        {/* 앱 버전 행(app-version-gate T10 + app-update-actions T4) — 회원탈퇴 아래 약톤 표시.
+            미확보(expo-constants null)면 미렌더. available면 업데이트 액션(탭→스토어), latest면 최신 라벨. */}
+        {appVersion ? (
+          <AppVersionRow version={appVersion} status={updateStatus} onUpdatePress={handleUpdatePress} />
+        ) : null}
       </ScrollView>
 
       {/* 닉네임 편집 다이얼로그(킷 mk-extra:24-64 RenameDialog 공용화) — controlled(draft는 ProfileContent 소유).

@@ -38,6 +38,12 @@ jest.mock('@/features/room', () => ({ useMyLogs: jest.fn() }));
 jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn(() => Promise.resolve()) }));
 // app-version-gate T10: 앱 버전 행 — getCurrentAppVersion(expo-constants)을 결정적으로 고정.
 jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { version: '1.2.3' } } }));
+// app-update-actions T4: 앱 버전 행의 현재 버전 — 기본 '1.2.3'(회귀), null 오버라이드로 행 미렌더 가드 검증.
+jest.mock('@/features/appVersion/currentAppVersion', () => ({ getCurrentAppVersion: jest.fn(() => '1.2.3') }));
+// app-update-actions T4: 설정 업데이트 상태 훅 — 상태를 결정적으로 주입(supabase 미연결).
+jest.mock('@/features/appVersion/useAppUpdateStatus', () => ({ useAppUpdateStatus: jest.fn() }));
+// app-update-actions T4: 업데이트 액션 탭 → 스토어 이동(expo-linking) 모킹.
+jest.mock('expo-linking', () => ({ openURL: jest.fn() }));
 // SubBar(뒤로) + 설정 행 진입을 위한 navigation 모킹 — goBack/navigate.
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
@@ -51,6 +57,9 @@ jest.spyOn(Alert, 'alert');
 import { defaultNickname, useDeleteAccount, useProfileContext, useUpdateProfile } from '@/features/profile';
 import { useAuth } from '@/features/auth';
 import { useMyLogs } from '@/features/room';
+import * as Linking from 'expo-linking';
+import { getCurrentAppVersion } from '@/features/appVersion/currentAppVersion';
+import { useAppUpdateStatus } from '@/features/appVersion/useAppUpdateStatus';
 import { ProfileScreen } from './ProfileScreen';
 
 const useProfileMock = useProfileContext as jest.Mock;
@@ -58,6 +67,14 @@ const useUpdateProfileMock = useUpdateProfile as jest.Mock;
 const useDeleteAccountMock = useDeleteAccount as jest.Mock;
 const useAuthMock = useAuth as jest.Mock;
 const useMyLogsMock = useMyLogs as jest.Mock;
+const useAppUpdateStatusMock = useAppUpdateStatus as jest.Mock;
+const getCurrentAppVersionMock = getCurrentAppVersion as jest.Mock;
+const openURLMock = Linking.openURL as jest.Mock;
+
+// app-update-actions T4: 설정 업데이트 상태 주입 헬퍼 — 기본 checking(버전만).
+const setupUpdateStatus = (status: unknown = { kind: 'checking' }) => {
+  useAppUpdateStatusMock.mockReturnValue({ status });
+};
 
 const refresh = jest.fn();
 const saveNickname = jest.fn();
@@ -106,6 +123,8 @@ beforeEach(() => {
   setupUpdate();
   setupDelete();
   setupMyLogs();
+  setupUpdateStatus();
+  getCurrentAppVersionMock.mockReturnValue('1.2.3');
 });
 
 const openNicknameSheet = () => fireEvent.press(screen.getByLabelText('닉네임 편집'));
@@ -411,5 +430,46 @@ describe('ProfileScreen — 닉네임 편집 시트', () => {
     renderWithTheme(<ProfileScreen />);
     expect(screen.getByTestId('app-version-row')).toBeTruthy();
     expect(screen.getByText('앱 버전 1.2.3')).toBeTruthy();
+  });
+});
+
+// ── app-update-actions T4: 설정 업데이트 액션 배선 ────────────────────
+describe('ProfileScreen — 앱 업데이트 액션(T4)', () => {
+  const STORE_URL = 'https://apps.apple.com/kr/app/%EB%A8%B9%EB%A1%9C%EA%B7%B8-muklog/id6782955594';
+
+  it('available + storeUrl이면 업데이트 액션을 탭 시 그 URL로 스토어를 연다(1회)', () => {
+    setupUpdateStatus({ kind: 'available', storeUrl: STORE_URL });
+    renderWithTheme(<ProfileScreen />);
+    fireEvent.press(screen.getByTestId('app-version-update'));
+    expect(openURLMock).toHaveBeenCalledTimes(1);
+    expect(openURLMock).toHaveBeenCalledWith(STORE_URL);
+  });
+
+  it('available이지만 storeUrl null(Android 미출시)이면 업데이트 액션이 없다', () => {
+    setupUpdateStatus({ kind: 'available', storeUrl: null });
+    renderWithTheme(<ProfileScreen />);
+    // 액션 미노출 → 버전만. (openStore null no-op 이중 방어와 정합)
+    expect(screen.queryByTestId('app-version-update')).toBeNull();
+    expect(openURLMock).not.toHaveBeenCalled();
+    expect(screen.getByText('앱 버전 1.2.3')).toBeTruthy();
+  });
+
+  it('latest면 최신 상태를 표시하고 업데이트 액션은 없다', () => {
+    setupUpdateStatus({ kind: 'latest' });
+    renderWithTheme(<ProfileScreen />);
+    expect(screen.getByText('최신 버전이에요')).toBeTruthy();
+    expect(screen.queryByTestId('app-version-update')).toBeNull();
+  });
+
+  it('checking(기본)이면 버전만 표시하고 액션은 없다', () => {
+    renderWithTheme(<ProfileScreen />);
+    expect(screen.getByText('앱 버전 1.2.3')).toBeTruthy();
+    expect(screen.queryByTestId('app-version-update')).toBeNull();
+  });
+
+  it('현재 버전 미확보(null)면 앱 버전 행 자체를 렌더하지 않는다(기존 가드)', () => {
+    getCurrentAppVersionMock.mockReturnValue(null);
+    renderWithTheme(<ProfileScreen />);
+    expect(screen.queryByTestId('app-version-row')).toBeNull();
   });
 });
