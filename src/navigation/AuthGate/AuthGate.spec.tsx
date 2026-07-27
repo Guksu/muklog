@@ -39,10 +39,20 @@ jest.mock('@/features/profile', () => ({
   },
 }));
 
-// NavigationContainer: passthrough.
+// NavigationContainer: passthrough + onReady 캡처(딥링크 소비 배선 검증, T5). createNavigationContainerRef stub.
+const mockNavContainer = jest.fn();
 jest.mock('@react-navigation/native', () => ({
-  NavigationContainer: ({ children }: { children: React.ReactNode }) => children,
+  NavigationContainer: (props: { children: React.ReactNode; onReady?: () => void }) => {
+    mockNavContainer(props);
+    return props.children;
+  },
+  createNavigationContainerRef: () => ({ isReady: jest.fn(), navigate: jest.fn() }),
 }));
+
+// 딥링크 소비 디스패처 — onReady가 이걸 부르는지만 검증(디스패처 로직은 deepLinkRouter 유닛에서).
+jest.mock('@/features/notif/deepLinkRouter', () => ({ consumePendingDeepLink: jest.fn() }));
+import { consumePendingDeepLink } from '@/features/notif/deepLinkRouter';
+const consumePendingMock = consumePendingDeepLink as jest.Mock;
 
 // AppNavigator: 마커로 대체(HomeTabs 직행 여부는 AppNavigator 자체 책임 → 여기선 렌더만 확인).
 jest.mock('../AppNavigator', () => ({
@@ -81,6 +91,8 @@ beforeEach(() => {
   mockMyLogsProvider.mockReset();
   mockProfileProvider.mockReset();
   mockLoginScreen.mockReset();
+  mockNavContainer.mockReset();
+  consumePendingMock.mockReset();
 });
 
 describe('AuthGate', () => {
@@ -147,6 +159,17 @@ describe('AuthGate', () => {
       expect(screen.queryByText('MAP_PREWARM')).toBeNull();
       unmount();
     });
+  });
+
+  it('authenticated에서 NavigationContainer onReady → consumePendingDeepLink 배선(알림 딥링크 소비, T5)', () => {
+    useAuthMock.mockReturnValue(authValue({ status: 'authenticated', userId: 'u1' }));
+    renderWithTheme(<AuthGate />);
+    const props = mockNavContainer.mock.calls[0][0] as { onReady?: () => void };
+    expect(props.onReady).toBeInstanceOf(Function);
+    // onReady 발화 전에는 소비 안 함, 발화 시 1회 소비.
+    expect(consumePendingMock).not.toHaveBeenCalled();
+    props.onReady?.();
+    expect(consumePendingMock).toHaveBeenCalledTimes(1);
   });
 
   it('LoginScreen에 onGoogle=signInWithGoogle / onApple=signInWithApple을 배선한다', () => {

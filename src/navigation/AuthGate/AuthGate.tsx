@@ -11,7 +11,10 @@ import { useAuth } from '@/features/auth';
 import { MapPrewarm } from '@/features/map/MapPrewarm';
 import { ProfileProvider } from '@/features/profile';
 import { MyLogsProvider } from '@/features/room';
+// 알림 딥링크 소비(push-receive-ux T5) — nav 준비(authenticated 트리 렌더) 시 대기 큐를 1회 소비.
+import { consumePendingDeepLink } from '@/features/notif/deepLinkRouter';
 
+import { navigationRef } from '../navigationRef';
 import { AppNavigator } from '../AppNavigator';
 import { AuthErrorView } from '../screens/AuthErrorView';
 import { LoginScreen } from '../screens/LoginScreen';
@@ -19,6 +22,9 @@ import { SplashView } from '../screens/SplashView';
 
 export const AuthGate = () => {
   const { state, retry, loginError, signInWithGoogle, signInWithApple } = useAuth();
+
+  // NavigationContainer 준비 완료 시점 — 콜드스타트/로그인 전 도착해 대기 중이던 알림 딥링크를 소비한다(§3.4 D4).
+  const handleNavReady = () => consumePendingDeepLink();
 
   switch (state.status) {
     case 'loading':
@@ -42,7 +48,7 @@ export const AuthGate = () => {
         //   모든 소비자에 즉시 전파되도록 인증 트리 최상위에서 1회 마운트(MyLogsProvider와 동급 위치).
         <ProfileProvider userId={state.userId}>
           <MyLogsProvider userId={state.userId}>
-            <NavigationContainer>
+            <NavigationContainer ref={navigationRef} onReady={handleNavReady}>
               <AppNavigator />
             </NavigationContainer>
             {/* 지도 WebView 프리워머(map-prewarm) — 인증 사용자에서만 마운트. 숨김 1×1, 권한·RPC 미보유.

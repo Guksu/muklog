@@ -30,6 +30,10 @@ jest.mock('@/components', () => ({
 jest.mock('@/features/auth', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
+// 푸시 수신 훅(push-receive-ux T6) — 구동 여부만 관찰(SDK 접촉은 usePushReceive 유닛에서 검증).
+jest.mock('@/features/notif/usePushReceive', () => ({ usePushReceive: jest.fn() }));
+import { usePushReceive } from '@/features/notif/usePushReceive';
+const usePushReceiveMock = usePushReceive as jest.Mock;
 
 // 검증 대상 배선 — AppVersionGate가 children(AuthGate)을 감싸는지.
 jest.mock('@/features/appVersion', () => ({
@@ -60,5 +64,11 @@ describe('App 루트 배선 (T7)', () => {
     // AuthGate가 AppVersionGate 내부(자식)에 존재해야 한다 — 래핑 구조 확정.
     const gate = screen.getByTestId('app-version-gate');
     expect(within(gate).getByTestId('auth-gate')).toBeTruthy();
+  });
+
+  it('AC21: 앱 부팅 시 usePushReceive를 1회 구동한다(전역 수신 UX 배선)', async () => {
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('app-version-gate')).toBeTruthy());
+    expect(usePushReceiveMock).toHaveBeenCalled();
   });
 });

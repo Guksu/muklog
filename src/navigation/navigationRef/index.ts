@@ -1,0 +1,1 @@
+export { navigationRef } from './navigationRef';

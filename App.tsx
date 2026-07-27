@@ -14,6 +14,7 @@ import * as SplashScreen from 'expo-splash-screen';
 
 import { AppVersionGate } from '@/features/appVersion';
 import { AuthProvider } from '@/features/auth';
+import { usePushReceive } from '@/features/notif/usePushReceive';
 import { AuthGate } from '@/navigation';
 import { ToastProvider } from '@/components';
 import { ThemeProvider } from '@/theme';
@@ -29,6 +30,10 @@ const FONT_LOAD_TIMEOUT_MS = 8000;
 
 const App = () => {
   const [ready, setReady] = useState(false);
+
+  // 푸시 수신 UX 전역 구동(push-receive-ux T6). 핸들러·탭 리스너는 인증 무관 전역 —
+  //   콜드스타트 탭이 로그인 전 도착해도 대기 큐에 저장되고, authenticated+nav ready 시점(AuthGate onReady)에 소비된다.
+  usePushReceive();
 
   useEffect(function loadFonts() {
     let cancelled = false;
