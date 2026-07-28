@@ -47,6 +47,13 @@ jest.mock('@/features/appVersion', () => ({
     );
   },
 }));
+// OTA 게이트(expo-updates-ota T8) — AppVersionGate 안쪽·AuthGate 바깥에 놓여야 force 우선순위가 성립한다.
+jest.mock('@/features/ota', () => ({
+  OtaUpdateGate: ({ children }: { children: React.ReactNode }) => {
+    const { View: RnView } = require('react-native');
+    return <RnView testID="ota-update-gate">{children}</RnView>;
+  },
+}));
 jest.mock('@/navigation', () => {
   const { View: RnView } = require('react-native');
   return { AuthGate: () => <RnView testID="auth-gate" /> };
@@ -64,6 +71,16 @@ describe('App 루트 배선 (T7)', () => {
     // AuthGate가 AppVersionGate 내부(자식)에 존재해야 한다 — 래핑 구조 확정.
     const gate = screen.getByTestId('app-version-gate');
     expect(within(gate).getByTestId('auth-gate')).toBeTruthy();
+  });
+
+  it('T8: AppVersionGate → OtaUpdateGate → AuthGate 순으로 중첩된다(force 우선순위 보장)', async () => {
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('app-version-gate')).toBeTruthy());
+
+    // OTA 게이트는 스토어 게이트 "안쪽" — force면 children 대체로 아예 마운트되지 않아야 한다.
+    const versionGate = screen.getByTestId('app-version-gate');
+    const otaGate = within(versionGate).getByTestId('ota-update-gate');
+    expect(within(otaGate).getByTestId('auth-gate')).toBeTruthy();
   });
 
   it('AC21: 앱 부팅 시 usePushReceive를 1회 구동한다(전역 수신 UX 배선)', async () => {

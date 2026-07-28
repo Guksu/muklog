@@ -20,6 +20,7 @@
 | 미디어 | **사진(최대 5장) + 2초 영상 1개(옵션)** | 셋로그(Setlog)식 짧은 영상 기록. 카메라 권한 필요, 영상은 용량 가드레일(길이·해상도·압축) 필수 |
 | 실시간 동기화 | **Supabase Realtime** | 커플 두 명이 같은 방의 먹로그를 실시간으로 공유 |
 | 디자인 시스템 | **원티드 디자인 시스템 토큰 참조** | git import 없이 토큰 값만 `theme/`로 매핑. 값은 builbook 프로젝트(`wanted-design-system`)의 실측 토큰을 RN용으로 변환해 사용 |
+| 앱 업데이트 | **2축 — 스토어 바이너리(`app-version-gate`) + EAS Update OTA(`expo-updates-ota`, 2026-07-27)** | 네이티브가 바뀌면 스토어 심사가 불가피하지만, JS/카피/스타일 수정까지 심사를 기다릴 이유가 없다. **`runtimeVersion` 정책 = `{"policy":"appVersion"}`** — 해석값이 `app.json`의 `version`(현재 `1.2.0`)이라 **스토어 게이트가 쓰는 문자열과 동일**해져 운영 규칙이 한 문장으로 줄어든다(`nativeVersion`은 `appVersionSource:"remote"` 때문에 빌드번호가 항상 하드코딩 `1`로 굳어 기각, `fingerprint`는 커스텀 네이티브 패치 2종·`ios:sim` 우회 경로에서 검증 수단이 없어 후속). 대가로 **"네이티브를 건드리면 반드시 `version`을 올린다"는 사람 규율**에 의존한다(§7 OTA 운영 절차) |
 
 ---
 
@@ -245,6 +246,8 @@ Profile (헤더 진입)
 | `push-notifications` S4 (수신 UX) | 알림 탭 딥링크(해당 로그/먹로그 진입)·뱃지 카운트·무효 토큰 정리. **S2 의존.** | #신규 | **예정 — 출시 후 후속 패치(2026-06-17)** |
 | `app-version-gate` | **앱 버전 게이트**: (a) Profile 현재 버전 표시(`expo-constants`, JS-only) (b) 콜드스타트 1회 `app_config`(싱글턴, anon 읽기 RLS) 조회 (c) 판정 — `current < min_supported`=강제 업데이트 차단화면(닫기 불가·스토어 Linking) / `< latest`=권유 모달(닫기 가능·버전당 1회, AsyncStorage dismissal) / 조회실패·형불량=**fail-open**(미차단). 순수 유틸 `compareVersion`·`resolveVersionGate`, 훅 `useAppVersionGate`, 래퍼 `AppVersionGate`(AuthGate **상위**=로그인 전에도 차단). 신설 UI `ForceUpdateScreen`·`UpdateSuggestModal`(RenameDialog 셸 재사용, 킷 비종속). 폴링·Realtime 0·AWS 0. `expo-application`(네이티브) 미도입. 마이그레이션 `20260702120000_app_config.sql`. QA 2분할 통과. `docs/sprint/sprint-20260702-app-version-gate/`. | #신규(운영·안정성) | ✅ 완료(라이브 스모크 이월) |
 
+| `expo-updates-ota` | **EAS Update OTA(무선 업데이트)**: 콜드스타트 **1회** `checkForUpdateAsync` → 백그라운드 `fetchUpdateAsync` → 완료 시 안내(`OtaReadyDialog`) → **사용자가 탭할 때만** `reloadAsync`. 무시해도 다음 콜드스타트에 자동 적용. `expo-updates@0.27.5` + `app.json` `updates`(url·enabled·`checkAutomatically:"ON_ERROR_RECOVERY"`·`fallbackToCacheTimeout:0`)·`runtimeVersion:{policy:"appVersion"}` + `eas.json` 채널 3종. 안전 로더 `updatesModule`(네이티브 probe `ExpoUpdates` → 미탑재면 **SDK require 자체 안 함**, no-op), 순수 판정 `shouldCheckOta`(`!__DEV__ && hasModule && isEnabled` 3중 가드), 상태머신 `useOtaUpdate`(idle/checking/downloading/ready/reloading), 게이트 `OtaUpdateGate`(App 트리 `AppVersionGate → OtaUpdateGate → AuthGate`). **두 축 우선순위**: force=미마운트(확인·대역폭 0) / suggest=다운로드는 하되 안내만 억제 / checking·none=정상. DB 변경 0·Supabase 호출 0·폴링 0·AWS 0. 포그라운드 재확인·blocking 스플래시·자동 reload·`useUpdates()` 훅·code signing·CI 자동 발행 OUT(후속). `docs/sprint/sprint-20260727-expo-updates-ota/`. | #신규(운영·배포) | ✅ 완료(코드) — **라이브 이월 L1~L8**: 최초 활성화는 **`expo-updates`를 심은 다음 릴리스(권고 `1.3.0`)** 부터 유효, 그 전 `eas update` 발행 금지 |
+
 각 스프린트는 `planner → developer → qa` 순으로 진행하며, 오케스트레이터(`sprint-orchestrator` 스킬)가 조율한다.
 
 ### 출시 범위 / 후속 (2026-06-17 결정)
@@ -262,6 +265,7 @@ Profile (헤더 진입)
 - Kakao Local 호출은 Edge Function 프록시 + **클라이언트 디바운스/캐싱**으로 쿼터 절약.
 - Storage 업로드 전 **이미지 리사이즈/압축**(예: 장변 1280px, JPEG q0.7)으로 용량·전송량 절감.
 - 지도 일반 음식점 핀은 **현재 보이는 영역(viewport) 기준 + 디바운스**로만 조회(전체 조회 금지).
+- **EAS Update(OTA)**: 무료 티어 = **MAU 1,000 / 엣지 대역폭 100 GiB / 스토리지 20 GiB**(2026-07-27 확인, 초과 시 $0.10·$0.05 per GiB). 앱은 **폴링 0** — 콜드스타트 1회만 확인하고, 강제 업데이트 차단 중에는 확인조차 하지 않는다. 업데이트 payload는 변경된 JS 번들 + 변경된 asset만 전송되므로, **대량 asset 교체는 OTA가 아니라 스토어 릴리스에 묶는다**(현재 `assets/` 약 13 MB + `assetBundlePatterns:"**/*"`). AWS 0 유지.
 - **2초 영상**(셋로그식): 길이 **2초 상한**(촬영 시 하드컷) + 해상도 상한(예: 720p) + 업로드 전 압축으로 용량·전송량 최소화. 먹로그당 **1개**로 제한. 영상은 사진보다 훨씬 무거우므로 Storage 무료 티어 보호를 위해 길이·개수·해상도 3중 가드레일을 둔다.
 
 ---
@@ -279,4 +283,65 @@ Profile (헤더 진입)
   - **Realtime**: 다수 로그 동시 구독 비용/방식 — 콘텐츠 스프린트 시 검토(비용 가드레일).
   - **나가기 진입점**: **확정 — Profile 나가기 버튼 제거**, 로그별 나가기는 차기 LogScreen 내부(`leave_room(p_room_id)` 재설계 동반)로 이전. `leave_room()` RPC는 dormant 유지.
   - 기존 `room-modes` 산출물(mode 컬럼/모드별 정원/솔로 조인 거부)의 정원 2 통일·솔로 조인 허용 마이그레이션 — **`multi-log-home`에서 처리 완료**(`20260610150000_multi_log_home.sql`). `rooms.mode`/`ROOM_CAPACITY.solo`는 stale·미사용으로 잔존(무해).
+- **OTA 운영 절차(`expo-updates-ota` 2026-07-27)** — 앱 업데이트는 **두 축**이다. 어느 축인지부터 정하고 시작한다.
+
+  **(A) 판정 기준표 — 이 변경은 어느 축인가**
+
+  | 변경 내용 | 축 | 왜 |
+  |---|---|---|
+  | `src/**` JS/TS 로직·화면·스타일 수정 | **OTA** | JS 번들만 바뀜 |
+  | 카피(문구)·색·간격·아이콘 컴포넌트 수정 | **OTA** | 상동 |
+  | `assets/**` 이미지·폰트 교체/추가 | **OTA** | asset은 번들에 포함되어 OTA로 전달됨. ⚠️ 대역폭 영향(§6) |
+  | Supabase 쿼리·RPC 호출부·Edge Function **호출 코드** 수정 | **OTA** | 클라 JS |
+  | Edge Function·마이그레이션 자체 배포 | **어느 축도 아님** | `supabase functions deploy` / `db push`(별도 경로) |
+  | `package.json`에 **네이티브** 모듈 추가/제거/버전 변경(`expo-*` 대부분, `react-native-*`) | **스토어** | 바이너리에 코드가 들어가야 함 |
+  | `app.json` `plugins`·권한 문구·`ios`/`android` 설정·스킴·아이콘/스플래시 | **스토어** | 네이티브 config 변경 |
+  | `plugins/*.js`(withFmtConstevalFix·withAndroidLaunchMode) 변경 | **스토어** | prebuild 산출물 변경 |
+  | Expo SDK / React Native 버전 업그레이드 | **스토어** | 네이티브 전면 변경 |
+  | `app.json` `version` 변경 | **스토어** | 정의상 새 런타임 |
+  | 순수 JS 라이브러리 추가(네이티브 코드 없음) | **OTA** | JS 번들에만 포함. 단 **네이티브 코드 유무를 반드시 확인**한 뒤 |
+
+  > **판단이 애매하면 스토어 축으로 간다.** OTA 오배포는 비호환 크래시로 이어지고, 스토어 축 오판은 배포가 늦어질 뿐이다.
+
+  **(A-2) 두 축이 동시에 발화할 때의 우선순위**
+
+  | 스토어 게이트 상태 | OTA 확인·다운로드 | OTA 안내 | 구현 |
+  |---|---|---|---|
+  | `force`(강제 차단) | **안 함** | **안 띄움** | `OtaUpdateGate`가 `AppVersionGate`의 children 안쪽 → force면 children이 통째로 대체돼 **애초에 마운트되지 않는다**(확인 0·대역폭 0) |
+  | `suggest`(권유 모달 노출 중) | **함**(백그라운드) | **억제** | 모달 2개 겹침 방지. 화면은 상위 축(스토어)에 양보하고 OTA는 조용히 준비만 해둔다 |
+  | `checking` | 함 | ready면 띄움 | fail-open |
+  | `none` | 함 | ready면 띄움 | 정상 경로 |
+
+  > **`suggest`를 사용자가 "나중에"로 닫아 `none`이 되면 OTA 안내가 이어서 노출된다 — 의도된 동작이다**(2026-07-27 확정). 두 안내는 의미가 다르고(스토어=새 바이너리 다운로드 / OTA=이미 받아둔 번들을 지금 적용) 화면에서 겹치지 않는다. 여기서 한 번 더 억제하면 사용자는 **다음 콜드스타트까지 개선을 받지 못한다.** 회귀 가드는 `OtaUpdateGate.spec.tsx`의 `suggest → none` 전이 케이스.
+
+  **⚠️ (B) 유일한 금지 조합 — `runtimeVersion` 정책이 `appVersion`이므로 반드시 지킨다**
+
+  > **네이티브 표면(위 표의 "스토어" 행 전부)이 바뀌면 `app.json`의 `version`을 반드시 올린다.** 올리지 않으면 네이티브가 다른 두 바이너리가 같은 런타임(`1.2.0`)을 공유해, **구 바이너리에 신 JS가 도달하고 없는 네이티브 함수를 호출해 크래시**한다. 이 규율은 추가 부담이 아니라 스토어 제출 시 이미 하던 일의 재확인이다(스토어 게이트도 같은 `version`을 읽는다). 규율에 의존하는 게 불안해지면 `fingerprint` 정책으로 이전한다(후속 — 커스텀 플러그인 2종·`ios:sim` 경로 검증 필요).
+
+  **(C) 최초 활성화(딱 한 번, 순서 엄수)**
+  1. **다음 릴리스에서 `app.json` `version`을 `1.3.0`으로 올리며 `expo-updates`를 함께 심는다**(리더 결정 2026-07-27). 현재 스토어의 1.2.0 빌드에는 `expo-updates`가 없어, 1.2.0을 유지한 채 재빌드하면 "같은 1.2.0인데 OTA 가능/불가능한 두 바이너리"가 공존해 운영 추적이 헷갈린다. **⚠️ `version` bump는 릴리스 행위이므로 `expo-updates-ota` 스프린트 산출물에는 포함하지 않았다 — app.json은 `1.2.0` 그대로다.**
+  2. `npx expo prebuild --clean`(또는 EAS 빌드) — `ios/`·`android/`는 gitignore된 CNG 산출물이라 `expo-updates` 플러그인 반영에 재생성이 필요하다.
+  3. `eas build --profile production` — **로그에서 `Resolved runtime version` = 올린 `version` 값인지 확인(L2)**.
+  4. 스토어 심사·배포 → **`expo-updates`가 포함된 빌드가 기기에 깔린 뒤에야** OTA가 가능해진다.
+  5. **그 전까지 `eas update` 발행 금지**(도달 대상 0이라 무의미하고 런타임 매칭 오해를 부른다).
+
+  **(D) 평소 OTA 배포 순서**
+  1. (A) 표로 **OTA 축이 맞는지** 확인. 애매하면 스토어 축.
+  2. 새 JS가 새 스키마·새 RPC·새 Edge Function을 쓰면 **그것들을 먼저 배포**(`supabase db push` / `functions deploy`). 반대 순서는 구 스키마에 신 JS가 붙어 즉시 오류.
+  3. `eas update --branch <브랜치> --channel production --message "<변경 요약>"`.
+  4. 실기기 콜드스타트 → 안내 → "지금 적용" 확인.
+  > **주의**: OTA는 커플 두 사람에게 동시에 도달하지 않는다(각자 콜드스타트 시점). **DB 계약과 후방호환인 변경만** OTA로 보낸다.
+
+  **(E) 롤백**
+  - 원칙: **다시 OTA로 덮는 것이 가장 빠르다** — 직전 정상 커밋에서 `eas update`를 한 번 더 발행.
+  - EAS CLI 수단(이전 그룹 재발행 / 빌드 내장 번들로 되돌리기)도 있으나 **정확한 서브커맨드·옵션은 사용 시점에 `eas update --help`로 확인**한다(버전마다 다름 — 추측 금지).
+  - OTA가 앱을 못 켜게 만든 경우: `checkAutomatically:"ON_ERROR_RECOVERY"` 덕분에 크래시 후 재실행 시 네이티브가 자체 확인 → 수정본을 즉시 발행하면 복구 경로가 있다. **최후 수단은 스토어 재배포.**
+
+  **(F) 두 축의 관계 — 운영자용 한 문장**
+  > `version`을 올리면 → 새 런타임 = **스토어 심사 필요**. `version`을 그대로 두고 JS만 고치면 → 같은 런타임 = **OTA로 즉시 배포**. **네이티브를 건드렸는데 `version`을 안 올리는 것이 유일한 금지 조합이다.**
+
+  **(G) 채널·후속**: `eas.json` 세 프로필에 `development`/`preview`/`production` 채널을 **명시**했다(미지정 시 EAS 기본 동작에 의존하지 않기 위해). **`development` 채널에는 아무것도 발행하지 않는다**(Dev Client는 `__DEV__`·`isEnabled` 가드로도 막히지만 운영 규칙이 3중 방어). **`preview` 채널 발행은 운영 정책상 보류**(설정만 유지 — 비용 0, 리더 결정 2026-07-27). **후속 1순위 = 포그라운드 복귀 시 재확인**(현재는 콜드스타트 1회뿐이라 OTA 도달까지 최대 "다음 콜드스타트"가 걸린다). 그 외 후속: `fingerprint` 정책 이전 · code signing · CI 자동 발행 · OTA 실패 원격 리포팅.
+
+  **(H) 라이브 검증 이월 — 이 기능은 자동 테스트로 실증된 부분이 없다**: OTA의 본질(원격 매칭·네이티브 런타임)은 단위 테스트 밖이라 **L1~L9 전부 이월**이다(목록·방법은 `docs/sprint/sprint-20260727-expo-updates-ota/dev-notes.md` §6). 특히 **L9 = 현 Dev Client·기존 설치 앱에서 콜드스타트 무크래시** — 자동 테스트는 `expo-modules-core`를 모킹하므로 **실제 네이티브 probe를 통과하는 테스트가 하나도 없다.** 정적 근거(`requireOptionalNativeModule`은 미탑재 시 throw 없이 null 반환 · top-level import 0건 · `usePushReceive` 동일 패턴의 라이브 실적)로 위험은 낮지만 **"테스트로 커버됐다"는 아니다.** 다음 Dev Client 실행이 곧 L9 검증이며, 여기서 깨지면 OTA 이전에 **앱 전체가 부팅 불가**가 되므로 라이브 배치의 첫 항목으로 둔다.
+
 - **앱 버전 게이트 운영 절차(`app-version-gate` 2026-07-02)**: `app_config`(싱글턴) 값은 **Supabase SQL/대시보드로만 갱신**한다 — 앱 내 쓰기 경로 없음(select만 anon/authenticated, insert/update/delete 정책 부재 → service role만). **`min_supported_version` 상향은 그 미만 전 사용자를 즉시 차단**하므로 최고 위험 작업. 안전판: **dormant 시드**(min `0.0.0`=전원 미차단·latest `1.0.0`=권유 미발화)로 출시하고, 판정 유틸이 **형불량·결측·조회실패를 fail-open**(미차단)으로 흡수. **배포 순서**: ① 새 빌드 스토어 심사 통과 → ② `latest_version` 상향(권유 모달만 노출, 비차단) → ③ 충분한 유예 후에만 `min_supported_version` 상향(강제 차단). 스토어 URL(`store_url_ios/android`)은 출시 후 채우며, 빈 값이면 차단화면 버튼이 숨겨진다.

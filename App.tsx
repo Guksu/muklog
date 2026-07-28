@@ -15,6 +15,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { AppVersionGate } from '@/features/appVersion';
 import { AuthProvider } from '@/features/auth';
 import { usePushReceive } from '@/features/notif/usePushReceive';
+import { OtaUpdateGate } from '@/features/ota';
 import { AuthGate } from '@/navigation';
 import { ToastProvider } from '@/components';
 import { ThemeProvider } from '@/theme';
@@ -85,7 +86,10 @@ const App = () => {
               <StatusBar style="dark" />
               {/* 버전 게이트 — AuthGate 상위(로그인 전에도 강제 차단 노출). checking/none→자식, force→차단, suggest→+모달. */}
               <AppVersionGate>
-                <AuthGate />
+                {/* OTA 게이트 — 스토어 게이트 안쪽(force면 미마운트 = 확인·대역폭 0). children은 항상 렌더. */}
+                <OtaUpdateGate>
+                  <AuthGate />
+                </OtaUpdateGate>
               </AppVersionGate>
             </AuthProvider>
           </ToastProvider>

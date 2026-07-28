@@ -6,6 +6,7 @@ import React, { useEffect, type ReactNode } from 'react';
 import { BackHandler } from 'react-native';
 import * as Linking from 'expo-linking';
 
+import { AppVersionGateStatusProvider } from '../appVersionGateStatus';
 import { ForceUpdateScreen } from '../ForceUpdateScreen';
 import { UpdateSuggestModal } from '../UpdateSuggestModal';
 import { useAppVersionGate } from '../useAppVersionGate';
@@ -46,9 +47,10 @@ export const AppVersionGate = ({ children }: AppVersionGateProps) => {
     );
   }
 
+  // 자식(OTA 축 포함)에 현재 게이트 상태를 알린다(expo-updates-ota §3.7 — 렌더 분기·props·export 불변, 한 겹 추가).
   return (
     <>
-      {children}
+      <AppVersionGateStatusProvider status={state.status}>{children}</AppVersionGateStatusProvider>
       {state.status === 'suggest' ? (
         <UpdateSuggestModal
           visible

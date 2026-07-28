@@ -21,5 +21,13 @@ export {
 export { useAppVersionGate, type VersionGateState } from './useAppVersionGate';
 export { AppVersionGate, type AppVersionGateProps } from './AppVersionGate';
 
+// expo-updates-ota — 스토어 게이트 상태 컨텍스트(additive). OTA 축(OtaUpdateGate)이 suggest 억제 판정에 소비.
+export {
+  AppVersionGateStatusProvider,
+  useAppVersionGateStatus,
+  type AppVersionGateStatus,
+  type AppVersionGateStatusProviderProps,
+} from './appVersionGateStatus';
+
 // app-update-actions — 설정 화면 업데이트 상태 훅(dismissal 미참조, 항상 노출). ProfileScreen이 소비.
 export { useAppUpdateStatus, type AppUpdateStatus } from './useAppUpdateStatus';

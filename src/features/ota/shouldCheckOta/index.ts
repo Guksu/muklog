@@ -1,0 +1,1 @@
+export { shouldCheckOta } from './shouldCheckOta';

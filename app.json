@@ -7,6 +7,15 @@
     "scheme": "muklog",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
+    "updates": {
+      "url": "https://u.expo.dev/ddb39563-4389-4043-9d83-06dd84769191",
+      "enabled": true,
+      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "icon": "./assets/muklog-app-icon.png",
     "assetBundlePatterns": ["**/*"],
     "ios": {
