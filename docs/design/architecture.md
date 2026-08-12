@@ -82,7 +82,7 @@ muklogs
   lat          double precision     -- nullable: 수동 입력 시 NULL, Kakao 선택 시 채움(muklog-editor). 지도는 lat is not null만 핀
   lng          double precision     -- nullable: 상동
   memo         text
-  rating       smallint            -- 1~5 (옵션)
+  rating       numeric(2,1)        -- 1~5, 0.5 단위 half-star (옵션). 트리거 RATING_OUT_OF_RANGE로 2차 검증
   visited_at   date
   video_path   text                -- 2초 영상 1개(옵션). muklog-media/{room_id}/{muklog_id}/video.mp4 (NULL 가능)
   video_duration_ms integer        -- 영상 길이(ms). ≤ 2000 (앱 1차 + 트리거 2차 검증)
