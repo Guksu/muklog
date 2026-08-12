@@ -16,7 +16,7 @@
 | # | 슬러그 | 기능 | 브랜치 | 상태 |
 |---|--------|------|--------|------|
 | 1 | rating-drag | 별점 드래그로 수정(현재 탭만 가능) | feat/rating-drag | 진행 중 |
-| 2 | sheet-drag-dismiss | 바텀시트 드래그로 내리기 | feat/sheet-drag-dismiss | 대기 |
+| 2 | sheet-drag-dismiss | 바텀시트 드래그로 내리기 | feat/sheet-drag-dismiss | ✅ 통과 (2026-08-12) |
 | 3 | memo-max-height | 메모 최대 높이 고정(현재 무한 확장) | feat/memo-max-height | 대기 |
 | 4 | map-initial-location | 지도 초기위치 — 앱 구동 시 위치 선취득(현재 서울역 디폴트 빈발) | feat/map-initial-location | 대기 |
 | 5 | map-clustering | 인접 핀 클러스터링 | feat/map-clustering | 대기 |
@@ -44,6 +44,7 @@
 
 | 반복 | 결과 | 비고 |
 |------|------|------|
+| 2 (sheet-drag-dismiss) | ✅ 통과 — 정찰: 드래그 dismiss 기구현(핸들 29px 한정)이 원인 → 패널 전체 확장+판정 계약 정정. qa-visual 회귀 0(before/after 렌더 대조) / qa-logic AC1~17 통과·뮤테이션 19종·수정 1건(F1: 중단된 닫힘의 spurious onClose → finished 가드) / 195 스위트·1,913 테스트 green / tsc 0 | plan R1~R3 개정(RN API 제약 3건·결정적 격자·격리 사본 규범화). 디바이스 스모크 S1~S16 이월(**S6 최우선** — LogPickerSheet 리스트 스크롤 양보, 비캡처 설계의 유일한 실증 경로). 세션 한도 중단 1회 후 재개. 회고 안건: 격리 사본 뮤테이션(jest 미수집 경로+즉시 삭제)의 스킬 승격 |
 | 1 (rating-drag) | ✅ 통과 — qa-visual 회귀 0 / qa-logic 수정 1라운드(L1 테스트 격리·L2 stale 기준점 버그 → 신원 게이트) 후 통과 / 195 스위트·1,873 테스트 green / tsc 0 | 퍼블리싱 생략(비주얼 불변). 디바이스 스모크 S1~S9 이월(S1 최우선 — 신원 게이트 실기기 확인). 이월 관찰: 킷 에디터 별점 gap 4↔RN 2 기존 불일치(별건 권고). 교훈: qa mutation↔dev 수정 워크트리 경합 → 직렬화 규칙(메모리 기록) |
 
 ## 5. 종료 보고
