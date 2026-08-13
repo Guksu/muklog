@@ -65,6 +65,76 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     //   mkSelectedId는 renderMarkers(SET_MARKERS 재주입)에서 재적용돼 선택이 유지된다(§3.6).
     var mkPins = {};
     var mkSelectedId = null;
+    // map-clustering: 인접 핀을 개수 버블로 묶는 Kakao MarkerClusterer. null이면 강등 상태
+    //   (라이브러리 미로드/생성 실패) → 기존 개별 핀 렌더 경로가 그대로 동작한다(§3.6 E4).
+    var mkClusterer = null;
+
+    // ── 클러스터 설정(plan §3.4 실값 계약) — 스모크 튜닝은 이 블록 한 곳에서만 만진다(§3.7). ──
+    var MK_CLUSTER_OPTIONS = {
+      averageCenter: true,   // 멤버 좌표 중심(centroid)에 버블 배치 — 첫 마커 위치보다 정확.
+      minClusterSize: 2,     // 2개부터 묶음(1개는 개별 핀 유지).
+      gridSize: 60,          // px, Kakao 기본.
+      minLevel: 2,           // 레벨 1(최대 확대)에서는 핀 34px가 실제로 겹치지 않아 클러스터하지 않는다.
+      calculator: [10, 100], // 개수 경계 → 스타일 3단계(S0 2~9 / S1 10~99 / S2 100+).
+    };
+    // MarkerClusterer의 styles는 클러스터 DOM에 인라인 CSS로 적용되는 JS 객체다(<style> 클래스가 아님).
+    //   WebView 격리 HTML이라 킷 hex를 직박는 기존 선례(.mk-pin)를 그대로 따른다.
+    //   ⚠️ zIndex는 넣지 않는다 — 오버레이마다 컨테이너가 달라 element z-index는 stacking에 무효(L69-71).
+    function mkClusterStyle(size, fontSize) {
+      return {
+        width: size, height: size,
+        lineHeight: size, // 텍스트 노드 1줄이라 flex 대신 line-height 센터링(Kakao 공식 샘플 방식).
+        fontSize: fontSize,
+        background: '#3366FF',                  // 킷 --mk-accent(브랜드 파랑).
+        color: '#FFFFFF',
+        border: '2px solid #FFFFFF',            // 지도 배경(#EFEAE3 계열) 대비 분리.
+        borderRadius: '999px',                  // 원형.
+        textAlign: 'center',
+        fontWeight: '700',
+        boxShadow: '0 3px 5px rgba(0,0,0,0.18)', // 킷 Pin 비활성 drop-shadow 동값.
+      };
+    }
+    var MK_CLUSTER_STYLES = [
+      mkClusterStyle('40px', '13px'), // S0: 2~9
+      mkClusterStyle('48px', '14px'), // S1: 10~99
+      mkClusterStyle('56px', '15px'), // S2: 100+
+    ];
+
+    // 클러스터러 1회 생성(§3.6 C3). 재-INIT(handleRetry)에서 재생성하면 이전 클러스터러가 붙잡은
+    //   버블이 유령으로 남으므로 이미 있으면 재사용한다(E8).
+    //   ⚠️ 단, 재-INIT은 mkMap을 새 Map 인스턴스로 교체한다(아래 __muklogInit). 클러스터러를 그대로
+    //   재사용하면 옛 Map에 묶인 채라 새 지도에 핀이 하나도 안 그려진다(예외가 없어 강등도 안 걸리는
+    //   조용한 실패). 재사용 전에 clear() + 새 Map 재바인딩을 먼저 하고, setMap이 없거나 던지면
+    //   폐기해 아래에서 재생성한다(clear()를 선행했으므로 유령 버블 없음).
+    //   라이브러리 미로드·MarkerClusterer 미정의·생성 예외는 전부 삼키고 mkClusterer=null로 둔다 →
+    //   renderMarkers가 기존 개별 핀 경로로 강등된다(E4). 지도 자체는 멀쩡하므로 ERROR는 발신하지 않는다.
+    function ensureClusterer() {
+      if (mkClusterer) {
+        try {
+          mkClusterer.clear();
+          if (typeof mkClusterer.setMap === 'function') mkClusterer.setMap(mkMap);
+          else mkClusterer = null; // setMap 미제공 SDK → 폐기 후 재생성(없는 API에 기대지 않는다).
+        } catch (e) {
+          mkClusterer = null;
+        }
+      }
+      if (mkClusterer) return;
+      try {
+        if (!kakao.maps.MarkerClusterer) return;
+        mkClusterer = new kakao.maps.MarkerClusterer({
+          map: mkMap,
+          averageCenter: MK_CLUSTER_OPTIONS.averageCenter,
+          minClusterSize: MK_CLUSTER_OPTIONS.minClusterSize,
+          gridSize: MK_CLUSTER_OPTIONS.gridSize,
+          minLevel: MK_CLUSTER_OPTIONS.minLevel,
+          calculator: MK_CLUSTER_OPTIONS.calculator,
+          styles: MK_CLUSTER_STYLES,
+          // disableClickZoom 미설정(기본 false) → 클러스터 탭 = Kakao 기본 줌인. 신규 inbound 메시지 0(§3.3).
+        });
+      } catch (e) {
+        mkClusterer = null; // 강등.
+      }
+    }
 
     // 핀 stacking 값(킷 MapScreen L350 유도). map-wish-pins: 3-way 우선순위와 정합 —
     //   active 5 / saved 3 / wish 2 / nearby 1. element z-index만으론 kakao 오버레이 간 stacking이
@@ -90,6 +160,10 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     }
 
     function clearMarkers() {
+      // map-clustering: 클러스터러가 오버레이의 표시 소유권을 갖고 있으므로 먼저 해제한다.
+      //   빠지면 고스트 핀이 지도에 영구히 남는다(§3.6 C2). clear()가 실패해도 아래 setMap(null)
+      //   정리는 반드시 수행되도록 예외를 격리한다.
+      if (mkClusterer) { try { mkClusterer.clear(); } catch (e) {} }
       for (var i = 0; i < mkOverlays.length; i++) { mkOverlays[i].setMap(null); }
       mkOverlays = [];
       mkPins = {}; // id→핀 추적도 함께 비운다(mkSelectedId는 유지 — SET_MARKERS 재주입 시 재적용).
@@ -121,10 +195,22 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
             yAnchor: 1,
             zIndex: pinZIndex(m.kind, active), // active 5 / saved 3 / wish 2 / nearby 1.
           });
-          overlay.setMap(mkMap);
+          // map-clustering: 클러스터러가 있으면 표시는 클러스터러가 관리한다(여기서 setMap하면 이중 표시).
+          //   없으면(강등) 기존대로 각 오버레이를 직접 지도에 붙인다(§3.6 C2 폴백).
+          if (!mkClusterer) overlay.setMap(mkMap);
           mkOverlays.push(overlay);
           mkPins[m.id] = { el: el, overlay: overlay, kind: m.kind };
         })(markers[i]);
+      }
+      if (mkClusterer) {
+        try {
+          mkClusterer.addMarkers(mkOverlays); // me 오버레이는 mkOverlays에 없다 → 클러스터 대상 아님(§3.6 C4).
+        } catch (e) {
+          // 강등(E4): 클러스터러가 CustomOverlay를 받지 못하면 이후로도 개별 핀 경로로 렌더한다.
+          try { mkClusterer.clear(); } catch (e2) {}
+          mkClusterer = null;
+          for (var j = 0; j < mkOverlays.length; j++) { mkOverlays[j].setMap(mkMap); }
+        }
       }
     }
 
@@ -146,6 +232,8 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
           });
           mkMeOverlay.setMap(mkMap);
         }
+        // map-clustering: mkMap 생성 후 · 첫 renderMarkers 전에 클러스터러를 준비한다(§3.6 C3).
+        ensureClusterer();
         renderMarkers(payload.markers);
         // map-pin-select: 지도 빈 곳 탭 → MAP_TAP 발신(RN이 선택 해제). 마커 탭은 stopPropagation으로 여기 안 옴.
         kakao.maps.event.addListener(mkMap, 'click', function mkMapBackgroundTap() {
@@ -222,7 +310,10 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     }
 
     var sdk = document.createElement('script');
-    sdk.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KEY_PLACEHOLDER}&autoload=false';
+    // map-clustering: libraries=clusterer 추가 — kakao.maps.load 콜백 시점에 MarkerClusterer가 준비된다.
+    //   클러스터러 생성은 READY 이후 __muklogInit에서만 하므로 타이밍 안전. services는 여전히 불필요
+    //   (Local 호출은 Edge Function 경유 — 비용 가드레일).
+    sdk.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KEY_PLACEHOLDER}&autoload=false&libraries=clusterer';
     sdk.onload = loadKakao;
     sdk.onerror = function () { post({ type: 'ERROR', reason: 'SDK_LOAD_FAILED' }); };
     document.head.appendChild(sdk);
