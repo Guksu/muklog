@@ -329,6 +329,8 @@ developer가 리포트 §7 L1의 수정안(ref 3개 + effect 2개) 대신 **ref 
 
 developer가 권고안 중 가장 근본적인 쪽을 택했다. `refreshCoords`의 반환을 `Coords | null` → **`LocationFix | null`(`{coords, source}`)** 로 넓히고(`types.ts:119`), `handleLocate`가 `centeredSourceRef.current = fix.source`로 **실제 출처**를 기록한다(`MapTabScreen.tsx:175`). 소비자가 `MapTabScreen` 하나뿐이라 파급도 없다.
 
+**plan 이탈 1건 — 승인.** plan §3.4는 `refreshCoords: () => Promise<Coords | null>`를 **"불변 시그니처"** 로 명시했으므로 이 변경은 계획 이탈이다(developer가 자진 신고). **승인한다**: ① 소비자가 `MapTabScreen.handleLocate` 하나뿐이라 파급이 없고(grep 확인), ② 행동 규칙("granted 아니면 null / 실패 시 직전 좌표 폴백 / in-flight 1회")은 전부 보존됐으며, ③ plan §3.4가 시그니처를 고정한 취지는 **기존 FAB 동작의 회귀 방지**인데 map-locate-button 인수조건이 전부 green으로 그 취지는 달성됐다. 오히려 §3.4가 도입한 `coordsSource` 개념을 `refreshCoords`만 누락하고 있던 비대칭을 바로잡는다. **계획 문서보다 계획의 목적을 지킨 이탈**이라 판단한다.
+
 **양쪽 모두 테스트로 잠겼다**(뮤테이션 실증):
 
 | 뮤테이션 | 결과 |

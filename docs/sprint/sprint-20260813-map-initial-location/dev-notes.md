@@ -186,6 +186,25 @@ export type LocationFix = { coords: Coords; source: LocationCoordsSource };
 
 **qa 재검증 요청 항목 대응**: L1 경로의 두 RECENTER가 **서로 다른 좌표**임은 `L1: 폴백 INIT → warm 보정 뒤 fresh가 도착하면…` 케이스가 `recenter[0]`=37.55(warm) / `recenter[1]`=37.56(fresh)로 각각 단언한다(횟수만 세지 않는다).
 
-### 9.5 최종 상태
+### 9.5 최종 상태 — qa-logic 재검증 **통과** (2026-08-13)
 
 `npm test` **1980 tests 전부 green**(+7: MapTabScreen 5 · useLocationPermission 1 · 정적 검사 1→2 분리) · `npm run typecheck` **0 error** · `supabase/`·`initialRegion.ts` 여전히 diff 0.
+
+L1·L2·L3 해소 확인. qa 뮤테이션 5종이 전부 RED로 잠김을 실증했다 — 비교식 `<=`→`<` 8 RED / Warm을 Fresh와 동급 처리 4 RED / `handleLocate` 오마킹 1 RED / 훅 실패 폴백 출처 위조 1 RED.
+
+**소스 체크섬(최종 확정본, 앞 12자리)** — 이후 검증·리뷰는 이 상태를 기준으로 한다:
+
+| 파일 | sha256 |
+|------|--------|
+| `types/types.ts` | `ba8f75674baf` |
+| `lastKnownLocation/lastKnownLocation.ts` | `05243f4bc6c6` |
+| `LocationPrewarm/LocationPrewarm.tsx` | `d8fd8ee5414a` |
+| `useLocationPermission/useLocationPermission.ts` | `2af7a70df0d7` |
+| `navigation/AuthGate/AuthGate.tsx` | `85010607662e` |
+| `navigation/screens/MapTabScreen/MapTabScreen.tsx` | `8b00f5d945b4` |
+
+### 9.6 잔여 기록 (조치 불요 — qa 리포트 §10.5)
+
+**`sendInit`의 정밀도 하강 분기(`MapTabScreen.tsx:156`의 `: null`)는 테스트로 잠기지 않았고, 의도적으로 잠그지 않는다.** 현재 코드에선 도달 불가능한 방어 분기다 — 좌표 rank가 내려가려면 R4(denied)가 좌표를 비워야 하는데 `request()`는 `requestedRef`로 1회성이고 `refreshCoords()`는 granted가 아니면 호출조차 되지 않아, "좌표가 null로 떨어진 뒤 `sendInit`이 다시 불리는" 조합(E16 handleRetry)이 세션 내에 성립하지 않는다. 도달 불가 경로에 테스트를 붙이면 계약이 아니라 구현을 박제하므로 추가하지 않는다.
+
+**다만 이 분기를 "안 쓰이니 단순화"하지 말 것.** 장래에 좌표 무효화 경로(예: qa L4 후속 — `refreshCoords` 실패 시 권한 취소를 구분해 좌표를 비우는 변경)가 생기면, 이 하강이 있어야 지도 센터가 폴백으로 되돌아간 사실이 기록돼 이후 warm/fresh 보정이 되살아난다. 승격 전용으로 바꾸면 ref가 이전 fresh에 갇혀 복구가 조용히 죽는다.
