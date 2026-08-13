@@ -17,11 +17,13 @@
 |---|--------|------|--------|------|
 | 1 | rating-drag | 별점 드래그로 수정(현재 탭만 가능) | feat/rating-drag | 진행 중 |
 | 2 | sheet-drag-dismiss | 바텀시트 드래그로 내리기 | feat/sheet-drag-dismiss | ✅ 통과 (2026-08-12) |
-| 3 | memo-max-height | 메모 최대 높이 고정(현재 무한 확장) | feat/memo-max-height | 대기 |
+| 3 | memo-max-height | 메모 최대 높이 고정(현재 무한 확장) | feat/memo-max-height | ✅ 통과 (2026-08-12) |
 | 4 | map-initial-location | 지도 초기위치 — 앱 구동 시 위치 선취득(현재 서울역 디폴트 빈발) | feat/map-initial-location | 대기 |
 | 5 | map-clustering | 인접 핀 클러스터링 | feat/map-clustering | 대기 |
 | 6 | map-headerless | 지도 탭 헤더 제거 | feat/map-headerless | 대기 |
 | 7 | (미정) | 주변 로드 지연 최적화 — **착수 전 사용자 문답으로 방향 확정 후 스프린트화**(사용자 지시) | (미정) | 문답 대기 |
+
+**루프 중 발견 백로그(범위 밖 이월, 별건 후보):** ① 킷 에디터 별점 gap 4↔RN 2(스프린트 1 관찰) ② 에디터 입력 컨트롤 border 1.5·radius 16 정합 — 메모·인접 컨트롤 비대칭, 수정 시 memoBoxHeight 인자를 복제→참조로 전환 필요(스프린트 3 qa-visual #1·#3) ③ 폴백 장소명 입력 타이포 토큰 부재(스프린트 3 qa-visual #2)
 
 ## 2. 루프 설계 — 사용자 확인: 2026-08-12 확인됨 (AskUserQuestion)
 
@@ -44,7 +46,8 @@
 
 | 반복 | 결과 | 비고 |
 |------|------|------|
-| 2 (sheet-drag-dismiss) | ✅ 통과 — 정찰: 드래그 dismiss 기구현(핸들 29px 한정)이 원인 → 패널 전체 확장+판정 계약 정정. qa-visual 회귀 0(before/after 렌더 대조) / qa-logic AC1~17 통과·뮤테이션 19종·수정 1건(F1: 중단된 닫힘의 spurious onClose → finished 가드) / 195 스위트·1,913 테스트 green / tsc 0 | plan R1~R3 개정(RN API 제약 3건·결정적 격자·격리 사본 규범화). 디바이스 스모크 S1~S16 이월(**S6 최우선** — LogPickerSheet 리스트 스크롤 양보, 비캡처 설계의 유일한 실증 경로). 세션 한도 중단 1회 후 재개. 회고 안건: 격리 사본 뮤테이션(jest 미수집 경로+즉시 삭제)의 스킬 승격 |
+| 3 (memo-max-height) | ✅ 통과 — 대상 판별: 에디터 메모 입력(FLAG-A 사용자 확인 완료 — "상세 아니고 에디터") / 킷 rows=4 번역: memoBoxHeight 유틸+memoInput 토큰(15/24) 신설, 고정 4줄+내부 스크롤 / qa-visual 조건부 통과(유발 결함 0, 렌더 대조 차이 노드 1개) / qa-logic 통과(뮤테이션 5종 격리 사본, 체크섬 무결) / 196 스위트·1,929 테스트 green / tsc 0 | 부수 개선: 메모 입력이 기본 폰트 렌더였던 것 첫 킷 정합. 스모크 이월(iOS 4줄 클리핑·Android includeFontPadding·내부 스크롤 제스처). 529 과부하 중단 2회 → 백오프 재개. 프로세스: qa-visual이 격리 규범 위반(src/ 안 spec 파일) — 재고지 필요 |
+| 2 (sheet-drag-dismiss) | ✅ 통과 — 정찰: 드래그 dismiss 기구현(핸들 29px 한정)이 원인 → 패널 전체 확장+판정 계약 정정. qa-visual 회귀 0(before/after 렌더 대조) / qa-logic AC1~17 통과·뮤테이션 19종·수정 1건(F1: 중단된 닫힘의 spurious onClose → finished 가드) / 195 스위트·1,913 테스트 green / tsc 0 | plan R1~R3 개정(RN API 제약 3건·결정적 격자·격리 사본 규범화). 디바이스 스모크 S1~S16 이월(**S6 최우선** — LogPickerSheet 리스트 스크롤 양보, 비캡처 설계의 유일한 실증 경로). 세션 한도 중단 1회 후 재개. 회고 안건 2건: ① 격리 사본 뮤테이션 확정형(`<rootDir>/.qa-probe/`+testMatch 미매치+즉시 삭제)의 rn-supabase-dev·integration-qa 스킬 승격 ② "외부 라이브러리 의존 AC는 소스/실측 근거 첨부"의 sprint-planning 스킬 반영(AC5·AC6이 RN 실동작과 어긋났던 사례) |
 | 1 (rating-drag) | ✅ 통과 — qa-visual 회귀 0 / qa-logic 수정 1라운드(L1 테스트 격리·L2 stale 기준점 버그 → 신원 게이트) 후 통과 / 195 스위트·1,873 테스트 green / tsc 0 | 퍼블리싱 생략(비주얼 불변). 디바이스 스모크 S1~S9 이월(S1 최우선 — 신원 게이트 실기기 확인). 이월 관찰: 킷 에디터 별점 gap 4↔RN 2 기존 불일치(별건 권고). 교훈: qa mutation↔dev 수정 워크트리 경합 → 직렬화 규칙(메모리 기록) |
 
 ## 5. 종료 보고
