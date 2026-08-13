@@ -102,6 +102,22 @@ export const LocationPermissionStatus = {
 export type LocationPermissionStatus =
   (typeof LocationPermissionStatus)[keyof typeof LocationPermissionStatus];
 
+/** 현재위치 좌표의 출처(enum-style 단일 출처, map-initial-location §3.4).
+ *  warm = OS 캐시(마지막 위치, 근사) / fresh = 이번 세션의 실제 픽스(정밀).
+ *  소비자(MapTabScreen)는 Fresh일 때만 자동 RECENTER 1회 가드를 소진한다 — warm 좌표로 소진하면
+ *  정밀 픽스가 도착해도 재센터가 막혀 지도 센터와 me 마커가 최대 1km 어긋난 채 고정된다(§3.6). */
+export const LocationCoordsSource = {
+  Warm: 'warm',
+  Fresh: 'fresh',
+} as const;
+export type LocationCoordsSource =
+  (typeof LocationCoordsSource)[keyof typeof LocationCoordsSource];
+
+/** 현재위치 재취득 결과 — 좌표와 **그 좌표의 실제 출처**를 함께 싣는다.
+ *  실패 시 직전 좌표로 폴백하는 경로(R6)가 있어, 좌표만 돌려주면 소비자가 정밀도를 추정(=오마킹)하게 된다.
+ *  출처를 값에 동봉해 "warm을 fresh로 착각한 채 지도 센터를 확정하는" 실패 양식을 원천 차단한다. */
+export type LocationFix = { coords: Coords; source: LocationCoordsSource };
+
 /** WebView → RN 메시지 타입(enum-style 단일 출처, plan §3.5·§3.6). */
 export const MapInboundType = {
   Ready: 'READY',

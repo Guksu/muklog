@@ -70,6 +70,15 @@ jest.mock('@/features/map/MapPrewarm', () => ({
   },
 }));
 
+// LocationPrewarm: 마커로 대체(OS 캐시 위치 워밍은 LocationPrewarm 자체 책임 → 여기선 존재/부재만 검증,
+//   map-initial-location T4 — 미인증 트리에 위치 접근이 새지 않는지가 급소).
+jest.mock('@/features/map/LocationPrewarm', () => ({
+  LocationPrewarm: () => {
+    const RN = require('react-native');
+    return <RN.Text>LOCATION_PREWARM</RN.Text>;
+  },
+}));
+
 import { useAuth } from '@/features/auth';
 import { AuthGate } from './AuthGate';
 
@@ -157,6 +166,27 @@ describe('AuthGate', () => {
       useAuthMock.mockReturnValue(authValue(state));
       const { unmount } = renderWithTheme(<AuthGate />);
       expect(screen.queryByText('MAP_PREWARM')).toBeNull();
+      unmount();
+    });
+  });
+
+  it('authenticated에서만 LocationPrewarm(OS 캐시 위치 워머)을 마운트한다 (map-initial-location T4)', () => {
+    useAuthMock.mockReturnValue(authValue({ status: 'authenticated', userId: 'u1' }));
+    renderWithTheme(<AuthGate />);
+    expect(screen.getByText('LOCATION_PREWARM')).toBeTruthy();
+  });
+
+  it('unauthenticated/loading/error 상태에선 LocationPrewarm을 마운트하지 않는다 (미인증 위치 접근 0, E2)', () => {
+    const states = [
+      { status: 'unauthenticated' },
+      { status: 'loading' },
+      { status: 'error', message: 'x' },
+      { status: 'authenticating', provider: 'google' },
+    ];
+    states.forEach((state) => {
+      useAuthMock.mockReturnValue(authValue(state));
+      const { unmount } = renderWithTheme(<AuthGate />);
+      expect(screen.queryByText('LOCATION_PREWARM')).toBeNull();
       unmount();
     });
   });
