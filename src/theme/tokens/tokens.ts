@@ -236,6 +236,8 @@ export const typography = {
   sectionLabel:makeTypography({ size: 16, ratio: 1.2, family: 'SUIT-Bold' }),    // 800/16 상세 섹션 제목 "메모"/"위치"(킷 mk-log:175,186)
   fieldLabel:  makeTypography({ size: 15, ratio: 1.2, family: 'SUIT-Bold' }),    // 800/15 입력 필드 라벨(킷 mk-log Field:373) · 솔로배너 제목(mk-log:39)
   memoBody:    makeTypography({ size: 15, ratio: 1.7, family: 'SUIT-Medium' }),  // 500/15 상세 메모 본문(킷 mk-log:177)
+  memoInput:   makeTypography({ size: 15, ratio: 1.6, family: 'SUIT-Medium' }),  // 500/15 → lh 24 에디터 메모 입력(킷 lk.textarea mk-log:645 "500 15px/1.6")
+  //   memoBody(표시, lh 26)와 별개 — 입력은 킷 1.6이라 lh 24이고, 이 값이 "4줄 고정 높이" 계약의 분모다(memoBoxHeight).
   ratingNum:   makeTypography({ size: 15, ratio: 1.25, family: 'SUIT-Bold' }),   // 700/15 → lh 19 상세 별점 숫자(킷 mk-log:165, 한글 클리핑 해소 — 숫자지만 일관성)
   inviteCode:  makeTypography({ size: 26, ratio: 1.25, family: 'SUIT-Bold' }),   // 800/26 → lh 33 초대코드(킷 mk-home:225) — letterSpacing은 사용처에서 .18em (영숫자지만 일관성)
   profileName: makeTypography({ size: 22, ratio: 1.2, family: 'SUIT-Bold' }),    // 800/22 프로필 닉네임(킷 mk-log:440)
