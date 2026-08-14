@@ -9,6 +9,15 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/blockGitMutation.mjs\""
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/branchGuard.mjs\""
+          }
+        ]
       }
     ],
     "Stop": [

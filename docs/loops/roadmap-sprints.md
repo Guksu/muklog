@@ -19,8 +19,8 @@ README 로드맵의 예정(⬜) 항목을 1스프린트=1기능으로 분해한 
 | 2 | map-wish-pins | 위시 핀 지도 표시 | ✅ 완료 (2026-07-14) |
 | 3 | map-category-filter | 지도 카테고리 필터 | ✅ 완료 (2026-07-15) |
 | 4 | push-prefs-db | 알림 설정 DB 이전 (push S3) | ✅ 완료 (2026-07-15 — 정찰 결과 push-send가 기구현·흡수, 문서 정합으로 축소) |
-| 5 | push-receive-ux | 푸시 수신 UX — Android 채널·권한 안내 (push S4) | 대기 |
-| 6 | muklog-video | 2초 영상 기록 | 대기 |
+| 5 | push-receive-ux | 푸시 수신 UX — Android 채널·권한 안내 (push S4) | ✅ 완료 (2026-07-27 — sprint-20260727-push-receive-ux, 커밋 7504767. 실기기 스모크 이월) |
+| 6 | muklog-video | 2초 영상 기록 | 대기 (보류 — 2026-08-12 신규 루프 ux-improvements가 우선 진행) |
 
 ## 2. 루프 설계 — 사용자 확인: 2026-07-14 확인됨
 
