@@ -21,7 +21,7 @@
 | 4 | map-initial-location | 지도 초기위치 — 앱 구동 시 위치 선취득(현재 서울역 디폴트 빈발) | feat/map-initial-location | ✅ 통과 (2026-08-13) |
 | 5 | map-clustering | 인접 핀 클러스터링 | feat/map-clustering | ✅ 통과 (2026-08-13, T0 실기기 스파이크 이월) |
 | 6 | map-headerless | 지도 탭 헤더 제거 | feat/map-headerless | 대기 |
-| 7 | (미정) | 주변 로드 지연 최적화 — **착수 전 사용자 문답으로 방향 확정 후 스프린트화**(사용자 지시) | (미정) | 문답 대기 |
+| 7 | map-nearby-load | 주변 로드 최적화 — **문답 완료(2026-08-13)**: 원인=뷰포트당 15건 가드레일 체감(버그 아님). 채택 A(증분 마커 렌더)+D(Edge 페이지 팬아웃 1~3p 최대 45건, 카카오 3배 정책 변경 승인)+B(누적 캐시 AsyncStorage 영속, pinsCache 선례). C(캡 상향·인디케이터) 제외. 조사: explore-nearby-pipeline 보고 | feat/map-nearby-load | ④d 완료 후 착수 |
 
 **루프 중 발견 백로그(범위 밖 이월, 별건 후보):** ① 킷 에디터 별점 gap 4↔RN 2(스프린트 1 관찰) ② 에디터 입력 컨트롤 border 1.5·radius 16 정합 — 메모·인접 컨트롤 비대칭, 수정 시 memoBoxHeight 인자를 복제→참조로 전환 필요(스프린트 3 qa-visual #1·#3) ③ 폴백 장소명 입력 타이포 토큰 부재(스프린트 3 qa-visual #2)
 
@@ -46,6 +46,7 @@
 
 | 반복 | 결과 | 비고 |
 |------|------|------|
+| 6 (map-headerless) | ✅ 통과 — 킷 이탈(킷 mk-home.jsx:335는 지도에도 HomeHeader 렌더 → 사용자 명시 요청 우선, 3중 근거 기록) / headerShown을 shouldShowHomeHeader 단일 출처로 route별 결정(screenOptions 함수 전환 시 옵션 6종 보존 확인) + 상단 오버레이 insets.top 승계(필터 12→+top, 범례 56→+top, 간격 44 보존) / qa-logic 경계면 8종 통과·뮤턴트 4종 killed / qa-visual 결함 0(5개 상태 before/after 렌더 대조, 차이=testID 3줄) / 199 스위트·2,000 테스트 green / tsc 0 | 파생: 지도 탭에서 +·아바타 진입점 상실(대체 경로=먹로그 탭 헤더, 지도 위 재배치는 킷 없는 창작이라 OUT). 스모크 S1~S5 이월(**S1=헤더 실제 부재는 자동 테스트 공백 M4의 유일 판정자**). 프로세스: qa-visual이 src/ 안 임시파일로 전체 test 오염(2회차 위반) → 정리·메모리 기록 |
 | 5 (map-clustering) | ✅ 통과 — Path A: WebView 내 Kakao MarkerClusterer(RN·브리지 diff 0), 3종 핀 단일 클러스터러, 탭=기본 줌인(킷 시안 0건→신규 UI 없음), E4 강등 안전망 / qa-logic 수정 2라운드(L1: 재-INIT 시 옛 Map에 묶인 클러스터러로 핀 전멸하는 조용한 회귀 → 재바인딩, L2~L5 죽은 단언 정리) 후 합격, 뮤턴트 전수 killed / qa-visual 통과(버블 실값 1:1, 관찰: content-box +4px — 스모크 판단) / 198 스위트·1,993 테스트 green / tsc 0 | **T0 실기기 스파이크가 최종 게이트**(CustomOverlay↔클러스터러 호환 문서상 미보장 — 실패 시 개별 핀 렌더로 자동 강등, Path B 계약 준비됨). 스모크 S1~S10 이월 |
 | 4 (map-initial-location) | ✅ 통과 — 원인: 위치 취득이 지도 READY보다 늦게 시작(프리워밍 비대칭) / 해법: LocationPrewarm(OS 캐시 last-known, 권한 프롬프트 0·GPS 미기동) + 첫 렌더 동기 시드 + RECENTER를 정밀도 단조 승격(centeredSourceRef)으로 교체 / qa-logic 수정 1라운드(L1 warm 늦은 도착 시 리센터 공백·L2 refreshCoords 출처 반환·L3 정적 검사 확장) 후 통과, plan R1 개정(원안 결함 명시) / 198 스위트·1,980 테스트 green / tsc 0 | qa-visual 생략(렌더 표면 0, qa 동의). 스모크 S1~S6 이월(S2 재실행 직후 진입=L1 확인·S3 권한 프롬프트 미발생 최우선). 프로세스: 동결 통지에 체크섬/테스트 수 동봉 권고(qa 지적) |
 | 3 (memo-max-height) | ✅ 통과 — 대상 판별: 에디터 메모 입력(FLAG-A 사용자 확인 완료 — "상세 아니고 에디터") / 킷 rows=4 번역: memoBoxHeight 유틸+memoInput 토큰(15/24) 신설, 고정 4줄+내부 스크롤 / qa-visual 조건부 통과(유발 결함 0, 렌더 대조 차이 노드 1개) / qa-logic 통과(뮤테이션 5종 격리 사본, 체크섬 무결) / 196 스위트·1,929 테스트 green / tsc 0 | 부수 개선: 메모 입력이 기본 폰트 렌더였던 것 첫 킷 정합. 스모크 이월(iOS 4줄 클리핑·Android includeFontPadding·내부 스크롤 제스처). 529 과부하 중단 2회 → 백오프 재개. 프로세스: qa-visual이 격리 규범 위반(src/ 안 spec 파일) — 재고지 필요 |
