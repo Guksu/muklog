@@ -3,9 +3,21 @@
 //   (plan §4·§5-1 MapTabScreen) loading/denied/empty/마커탭→선택카드/error+refresh.
 //   네이티브 지도 렌더는 스모크(디바이스) → WebView는 MapWebView 모킹으로 대체, onMessage만 직접 호출.
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
+
+// map-headerless: safe-area top inset 가변 모킹 — 네이티브 헤더(HomeHeader)를 끈 뒤 상단 오버레이가
+//   그 inset을 승계하는지 검증하는 주입 지점(LogScreen.spec:35-42 선례). SafeAreaProvider 등 나머지는 실 구현.
+const mockTopInset: { current: number } = { current: 0 };
+jest.mock('react-native-safe-area-context', () => {
+  const actual = jest.requireActual('react-native-safe-area-context');
+  return {
+    ...actual,
+    useSafeAreaInsets: () => ({ top: mockTopInset.current, bottom: 0, left: 0, right: 0 }),
+  };
+});
 
 // react-native-webview 모킹(requireActual('@/features/map/components')가 실 MapWebView를 로드 → 네이티브 모듈 부재 방지).
 jest.mock(
@@ -203,6 +215,7 @@ beforeEach(() => {
   mockNearbyWish.onAdded = null;
   mockNearbyWish.choosing = null;
   mockNearbyWish.submitting = false;
+  mockTopInset.current = 0;
   setPermission();
   setNearby();
   setWishPins();
@@ -1117,5 +1130,58 @@ describe('MapTabScreen', () => {
     // 카페 필터 → wish(cafe)는 남으므로 카드 유지.
     fireEvent.press(screen.getByTestId('filter-chip-cafe'));
     expect(screen.getByText('연남 파스타')).toBeTruthy();
+  });
+});
+
+// ── map-headerless (plan §5-1 T3-1~T3-6) ────────────────────────────
+//   네이티브 헤더를 끄면 지도가 상태바까지 차오른다. 헤더가 흡수하던 top inset을 상단 오버레이 2종이
+//   승계하는지(그리고 하단 요소로 새지 않는지) inset 0/59 두 렌더의 델타로 lock한다.
+describe('MapTabScreen — map-headerless 상단 오버레이 safe-area', () => {
+  // 오버레이 래퍼의 flatten 스타일(top/bottom은 인라인 토큰이라 배열 → flatten 필요).
+  const flatStyle = ({ testID }: { testID: string }): { top?: number; bottom?: number } =>
+    StyleSheet.flatten(screen.getByTestId(testID).props.style);
+
+  const renderWithInset = ({ top }: { top: number }) => {
+    mockTopInset.current = top;
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    return renderWithTheme(<MapTabScreen />);
+  };
+
+  const INSET = 59; // 다이나믹 아일랜드 근사.
+
+  it('T3-1·T3-2: 카테고리 필터 바 top = spacing[12](inset 0) → inset만큼 정확히 하강', () => {
+    const { unmount } = renderWithInset({ top: 0 });
+    const base = flatStyle({ testID: 'map-overlay-filterbar' }).top;
+    expect(base).toBe(12); // 현행 보존(회귀 0).
+    unmount();
+
+    renderWithInset({ top: INSET });
+    expect(flatStyle({ testID: 'map-overlay-filterbar' }).top).toBe((base ?? 0) + INSET);
+  });
+
+  it('T3-3·T3-4: 범례 top = spacing[56](inset 0) → inset만큼 정확히 하강', () => {
+    const { unmount } = renderWithInset({ top: 0 });
+    const base = flatStyle({ testID: 'map-overlay-legend' }).top;
+    expect(base).toBe(56);
+    unmount();
+
+    renderWithInset({ top: INSET });
+    expect(flatStyle({ testID: 'map-overlay-legend' }).top).toBe((base ?? 0) + INSET);
+  });
+
+  it('T3-5: inset이 있어도 필터 바↔범례 상대 간격 44는 보존된다(한쪽에만 적용되는 실수 방지)', () => {
+    renderWithInset({ top: INSET });
+    const filterTop = flatStyle({ testID: 'map-overlay-filterbar' }).top ?? 0;
+    const legendTop = flatStyle({ testID: 'map-overlay-legend' }).top ?? 0;
+    expect(legendTop - filterTop).toBe(44);
+  });
+
+  it('T3-6: top inset이 하단 요소로 새지 않는다(현재위치 FAB 래퍼 bottom = 16 불변)', () => {
+    renderWithInset({ top: INSET });
+    // 배치는 래퍼가 소유한다(MapLocateButton은 배치 미보유) → 래퍼에 testID를 직접 부여해 읽는다.
+    //   버튼에서 .parent로 거슬러 오르면 composite(Pressable forwardRef)가 끼어 스타일을 못 읽는다.
+    expect(flatStyle({ testID: 'map-overlay-locate' }).bottom).toBe(16);
+    // 상단 오버레이만 inset을 흡수했는지 대조(같은 렌더에서 상단은 하강, 하단은 불변).
+    expect(flatStyle({ testID: 'map-overlay-filterbar' }).top).toBe(12 + INSET);
   });
 });

@@ -10,6 +10,7 @@ import { useMyLogsContext } from '@/features/room';
 import { useTheme } from '@/theme';
 
 import { HomeHeader } from '../HomeHeader';
+import { shouldShowHomeHeader } from '../homeHeaderVisibility';
 import { Routes, type HomeTabParamList } from '../routes';
 import { LogListScreen } from '../screens/LogListScreen';
 import { MapTabScreen } from '../screens/MapTabScreen';
@@ -29,10 +30,16 @@ export const HomeTabs = () => {
     <Tab.Navigator
       // 디폴트 탭 = 먹로그(LogList)
       initialRouteName={Routes.LogList}
-      screenOptions={{
-        // 먹로그·지도 탭 공통 커스텀 헤더(mk-home HomeHeader 재현). title/headerRight 대체.
-        //   탭별 워드마크: 지도 탭 "지도"(킷 mk-home:261), 그 외 "먹로그"(:82). route 라이브러리 콜백 contract.
-        header: ({ route }) => <HomeHeader title={route.name === Routes.MapTab ? '지도' : '먹로그'} />,
+      // map-headerless: 헤더 표시 여부가 route마다 갈리므로 옵션을 함수로 받는다.
+      //   react-navigation 라이브러리 콜백 contract → 객체 구조분해 인자 예외(컨벤션 §매개변수, tabBarIcon 선례).
+      screenOptions={({ route }) => ({
+        // 지도 탭만 헤더 없음 — 정책 단일 출처는 shouldShowHomeHeader(homeHeaderVisibility).
+        //   ⚠ header: () => null로 우회하면 헤더 프레임이 남아 지도가 상태바까지 차오르지 않는다.
+        headerShown: shouldShowHomeHeader({ routeName: route.name }),
+        // 먹로그 탭 커스텀 헤더(mk-home HomeHeader 재현). title/headerRight 대체.
+        //   탭별 워드마크: 지도 탭 "지도"(킷 mk-home:261), 그 외 "먹로그"(:82) — 지도 탭은 headerShown:false라
+        //   호출되지 않지만, 정책이 바뀌어 헤더가 돌아와도 워드마크가 맞도록 분기는 남겨 둔다.
+        header: () => <HomeHeader title={route.name === Routes.MapTab ? '지도' : '먹로그'} />,
         headerShadowVisible: false,
         tabBarActiveTintColor: theme.color.primary,
         // 킷 MkTabBar 비활성 라벨 = text-alternative(fgMuted).
@@ -45,7 +52,7 @@ export const HomeTabs = () => {
           fontFamily: 'SUIT-SemiBold',
           fontSize: 11,
         },
-      }}
+      })}
     >
       <Tab.Screen
         name={Routes.LogList}

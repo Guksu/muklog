@@ -11,6 +11,7 @@
 //   ⚠️ 비주얼은 ui-publisher 컴포넌트로만(임의 변경 금지). 상태→tone/message 판단만 여기서 한다.
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   CategoryFilterBar,
@@ -88,6 +89,10 @@ const rankCoordsSource = ({ source }: { source: LocationCoordsSource | null }): 
 
 export const MapTabScreen = () => {
   const theme = useTheme();
+  // map-headerless: 이 탭은 네이티브 헤더가 없어(HomeTabs headerShown:false) 지도가 상태바까지 차오른다.
+  //   헤더가 흡수하던 top inset을 상단 오버레이(필터 바·범례)가 승계해야 노치/다이나믹 아일랜드/펀치홀에
+  //   씹히지 않는다. ⚠ 컨테이너를 SafeAreaView로 감싸면 지도까지 내려와 풀블리드가 깨진다 — 오버레이만 흡수.
+  const insets = useSafeAreaInsets();
   const { state, refresh } = useMuklogPins();
   const permission = useLocationPermission();
   const nearby = useNearbyPlaces();
@@ -326,16 +331,24 @@ export const MapTabScreen = () => {
   return (
     <View style={styles.root}>
       <MapWebView html={html} onMessage={handleMessage} webviewRef={webviewRef}>
-        {/* 카테고리 필터 바 — 최상단 full-width strip(ui-spec §2: top 12, edge-bleed 가로 스크롤). 위치는 부모가 배치. */}
-        <View style={[styles.filterBar, { top: theme.spacing[12] }]}>
+        {/* 카테고리 필터 바 — 최상단 full-width strip(ui-spec §2: top 12, edge-bleed 가로 스크롤). 위치는 부모가 배치.
+            map-headerless: 기준선만 상태바 아래로(+insets.top), 간격 12는 그대로. inset 0이면 현행과 동일. */}
+        <View
+          testID="map-overlay-filterbar"
+          style={[styles.filterBar, { top: insets.top + theme.spacing[12] }]}
+        >
           <CategoryFilterBar
             selected={category}
             onSelect={({ category: next }) => setCategory(next)}
           />
         </View>
 
-        {/* 범례 — 필터 바 아래로 하강(ui-spec §2: top 56 = 12 + 필터바 ~34 + gap ~10). left 불변. */}
-        <View style={[styles.legend, { top: theme.spacing[56], left: theme.spacing[16] }]}>
+        {/* 범례 — 필터 바 아래로 하강(ui-spec §2: top 56 = 12 + 필터바 ~34 + gap ~10). left 불변.
+            필터 바와 같은 inset을 더해 상대 간격 44를 보존한다(한쪽에만 더하면 겹치거나 벌어진다). */}
+        <View
+          testID="map-overlay-legend"
+          style={[styles.legend, { top: insets.top + theme.spacing[56], left: theme.spacing[16] }]}
+        >
           <MapLegend />
         </View>
 
@@ -354,7 +367,10 @@ export const MapTabScreen = () => {
         {/* 현재위치 FAB — 지도 영역(MapWebView) 우하단 16px 고정(킷 mk-home:290-298: 지도 div 내 right/bottom 16).
             카드(SelectedSpot/NearbySpot)는 MapWebView 바깥 형제라, 도킹 시 MapWebView(flex:1)가 줄고
             FAB는 지도 영역 바닥 16px 고정이라 자동으로 카드 위에 온다 — offset 변동 없이 항상 같은 위치. */}
-        <View style={[styles.locate, { right: theme.spacing[16], bottom: theme.spacing[16] }]}>
+        <View
+          testID="map-overlay-locate"
+          style={[styles.locate, { right: theme.spacing[16], bottom: theme.spacing[16] }]}
+        >
           <MapLocateButton testID="map-locate-button" onPress={handleLocate} />
         </View>
       </MapWebView>
