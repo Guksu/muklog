@@ -11,6 +11,7 @@
 //   ⚠️ 비주얼은 ui-publisher 컴포넌트로만(임의 변경 금지). 상태→tone/message 판단만 여기서 한다.
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   CategoryFilterBar,
@@ -45,6 +46,7 @@ import { nearbyToMapMarkers } from '@/features/map/nearbyToMapMarkers';
 import { parseMapMessage } from '@/features/map/parseMapMessage';
 import { pinsToMapMarkers } from '@/features/map/pinsToMapMarkers';
 import {
+  LocationCoordsSource,
   LocationPermissionStatus,
   MapInboundType,
   MapPinKind,
@@ -73,8 +75,24 @@ const MAP_COPY = {
   retry: '다시 시도',
 } as const;
 
+/**
+ * 좌표 출처를 정밀도 순위로 환산한다(폴백 0 < warm 1 < fresh 2).
+ * 지도 센터를 "더 정밀한 좌표가 도착했을 때만" 보정하기 위한 단조 비교의 단일 출처다.
+ * @param source 좌표 출처(좌표가 없거나 폴백 센터면 null)
+ * @returns 정밀도 순위(0~2)
+ */
+const rankCoordsSource = ({ source }: { source: LocationCoordsSource | null }): number => {
+  if (source === LocationCoordsSource.Fresh) return 2;
+  if (source === LocationCoordsSource.Warm) return 1;
+  return 0;
+};
+
 export const MapTabScreen = () => {
   const theme = useTheme();
+  // map-headerless: 이 탭은 네이티브 헤더가 없어(HomeTabs headerShown:false) 지도가 상태바까지 차오른다.
+  //   헤더가 흡수하던 top inset을 상단 오버레이(필터 바·범례)가 승계해야 노치/다이나믹 아일랜드/펀치홀에
+  //   씹히지 않는다. ⚠ 컨테이너를 SafeAreaView로 감싸면 지도까지 내려와 풀블리드가 깨진다 — 오버레이만 흡수.
+  const insets = useSafeAreaInsets();
   const { state, refresh } = useMuklogPins();
   const permission = useLocationPermission();
   const nearby = useNearbyPlaces();
@@ -92,9 +110,11 @@ export const MapTabScreen = () => {
   const [mapReady, setMapReady] = useState(false);
   const [mapErrored, setMapErrored] = useState(false);
   const webviewRef = useRef<MapWebViewHandle>(null);
-  // #4: 첫 진입 현위치 자동 센터링 1회 가드. READY 시 coords가 아직 없으면 INIT은 폴백(서울/핀 bbox)
-  //   센터를 쓰므로, GPS 첫 픽스로 coords가 도착하면 1회 RECENTER로 현위치에 맞춘다(이후 사용자 이동은 따라가지 않음).
-  const autoCenteredRef = useRef(false);
+  // #4·map-initial-location: 지도 센터가 "지금 어떤 정밀도의 좌표로 그려져 있는지"를 기록한다
+  //   (null=폴백 센터(서울/핀 bbox) · Warm=OS 캐시 근사 · Fresh=정밀 픽스).
+  //   더 정밀한 좌표가 도착할 때만 1회 보정하므로(단조 승격) 별도의 "자동 센터링 1회" 플래그가 필요 없다 —
+  //   폴백→warm, warm→fresh는 각각 1회 발화하고, 같은 정밀도의 좌표 갱신(사용자 이동)은 따라가지 않는다.
+  const centeredSourceRef = useRef<LocationCoordsSource | null>(null);
 
   // 현재 핀 목록(ready일 때만, 아니면 빈 배열 — 지도/INIT는 항상 유효하게 유지).
   const pins: MuklogPin[] = state.status === 'ready' ? state.pins : [];
@@ -135,8 +155,10 @@ export const MapTabScreen = () => {
   });
 
   const sendInit = () => {
-    // INIT center가 이미 현위치면(coords 존재) 자동 RECENTER 불필요 — 1회 가드를 소진한 것으로 본다(#4).
-    if (permission.coords) autoCenteredRef.current = true;
+    // INIT이 어떤 좌표로 그려지는지를 그대로 기록한다 — 좌표가 없으면 폴백 센터(null)다.
+    //   좌표 "보유" 여부로 뭉뚱그리면 두 방향으로 어긋난다: warm으로 INIT한 뒤 정밀 픽스가 막히거나(원버그),
+    //   폴백으로 INIT한 뒤 도착한 warm이 지도에 반영되지 않는다(qa-report-logic L1).
+    centeredSourceRef.current = permission.coords ? permission.coordsSource : null;
     webviewRef.current?.injectJavaScript(
       buildInitScript({ center, markers, me: permission.coords }),
     );
@@ -150,9 +172,13 @@ export const MapTabScreen = () => {
       await permission.request();
     }
     if (permission.status === LocationPermissionStatus.Denied) return;
-    const me = await permission.refreshCoords();
-    if (!me) return;
-    webviewRef.current?.injectJavaScript(buildRecenterScript({ me }));
+    const fix = await permission.refreshCoords();
+    if (!fix) return;
+    // 지도 센터를 방금 리센터한 좌표의 **실제 출처**로 기록한다 — 자동 보정이 같은 좌표를 한 번 더
+    //   주입하지 않게 하면서(L2), 재취득이 실패해 warm 좌표로 폴백한 경우엔 이후 정밀 픽스 보정이
+    //   그대로 살아있게 한다. "FAB로 받았으니 fresh"라고 단정하면 근사 좌표에 정밀 딱지가 붙는다.
+    centeredSourceRef.current = fix.source;
+    webviewRef.current?.injectJavaScript(buildRecenterScript({ me: fix.coords }));
   };
 
   // WebView → RN 메시지 디스패치(파싱은 parseMapMessage). 비JSON/미지는 조용히 무시.
@@ -221,19 +247,22 @@ export const MapTabScreen = () => {
     [selected, markersKey],
   );
 
-  // #4: READY 이후 현위치(coords)가 처음 도착하면 1회 자동 RECENTER(서울 폴백 고정 해제).
-  //   READY 시 coords가 있었으면 INIT이 이미 현위치 센터라 sendInit이 가드를 소진 → 여기선 no-op.
-  //   1회 가드(autoCenteredRef)로 이후 사용자 이동(coords 변경)은 따라가지 않는다(FAB로만 재센터).
+  // #4·map-initial-location: 지금 지도에 그려진 센터보다 "더 정밀한" 좌표가 도착하면 1회 RECENTER.
+  //   폴백 센터(서울/핀 bbox) → warm 도착: 보정한다(qa L1 — 손에 쥔 좌표가 지도에 반영되지 않던 경로).
+  //   warm 센터 → fresh 도착: 보정한다(원버그 — 정밀 픽스가 막히면 me 마커가 최대 1km 어긋난 채 고정).
+  //   같은 정밀도의 갱신(warm→warm·fresh→fresh = 사용자 이동)은 따라가지 않는다 — 재센터는 FAB로만.
   const myCoords = permission.coords;
+  const myCoordsSource = permission.coordsSource;
   useEffect(
-    function autoRecenterOnFirstFix() {
+    function recenterOnMorePreciseCoords() {
       if (!mapReady) return;
-      if (autoCenteredRef.current) return;
       if (!myCoords) return;
-      autoCenteredRef.current = true;
+      const centered = rankCoordsSource({ source: centeredSourceRef.current });
+      if (rankCoordsSource({ source: myCoordsSource }) <= centered) return;
+      centeredSourceRef.current = myCoordsSource;
       webviewRef.current?.injectJavaScript(buildRecenterScript({ me: myCoords }));
     },
-    [mapReady, myCoords],
+    [mapReady, myCoords, myCoordsSource],
   );
 
   // 재시도: 핀 에러는 refresh, 지도 SDK 에러는 INIT 재주입(SDK가 살아있으면 즉시 복구) + 핀 재조회.
@@ -302,16 +331,24 @@ export const MapTabScreen = () => {
   return (
     <View style={styles.root}>
       <MapWebView html={html} onMessage={handleMessage} webviewRef={webviewRef}>
-        {/* 카테고리 필터 바 — 최상단 full-width strip(ui-spec §2: top 12, edge-bleed 가로 스크롤). 위치는 부모가 배치. */}
-        <View style={[styles.filterBar, { top: theme.spacing[12] }]}>
+        {/* 카테고리 필터 바 — 최상단 full-width strip(ui-spec §2: top 12, edge-bleed 가로 스크롤). 위치는 부모가 배치.
+            map-headerless: 기준선만 상태바 아래로(+insets.top), 간격 12는 그대로. inset 0이면 현행과 동일. */}
+        <View
+          testID="map-overlay-filterbar"
+          style={[styles.filterBar, { top: insets.top + theme.spacing[12] }]}
+        >
           <CategoryFilterBar
             selected={category}
             onSelect={({ category: next }) => setCategory(next)}
           />
         </View>
 
-        {/* 범례 — 필터 바 아래로 하강(ui-spec §2: top 56 = 12 + 필터바 ~34 + gap ~10). left 불변. */}
-        <View style={[styles.legend, { top: theme.spacing[56], left: theme.spacing[16] }]}>
+        {/* 범례 — 필터 바 아래로 하강(ui-spec §2: top 56 = 12 + 필터바 ~34 + gap ~10). left 불변.
+            필터 바와 같은 inset을 더해 상대 간격 44를 보존한다(한쪽에만 더하면 겹치거나 벌어진다). */}
+        <View
+          testID="map-overlay-legend"
+          style={[styles.legend, { top: insets.top + theme.spacing[56], left: theme.spacing[16] }]}
+        >
           <MapLegend />
         </View>
 
@@ -330,7 +367,10 @@ export const MapTabScreen = () => {
         {/* 현재위치 FAB — 지도 영역(MapWebView) 우하단 16px 고정(킷 mk-home:290-298: 지도 div 내 right/bottom 16).
             카드(SelectedSpot/NearbySpot)는 MapWebView 바깥 형제라, 도킹 시 MapWebView(flex:1)가 줄고
             FAB는 지도 영역 바닥 16px 고정이라 자동으로 카드 위에 온다 — offset 변동 없이 항상 같은 위치. */}
-        <View style={[styles.locate, { right: theme.spacing[16], bottom: theme.spacing[16] }]}>
+        <View
+          testID="map-overlay-locate"
+          style={[styles.locate, { right: theme.spacing[16], bottom: theme.spacing[16] }]}
+        >
           <MapLocateButton testID="map-locate-button" onPress={handleLocate} />
         </View>
       </MapWebView>

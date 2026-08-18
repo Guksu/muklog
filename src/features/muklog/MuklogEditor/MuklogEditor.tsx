@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DatePickerSheet, Icon, IconName, Screen, Stars, SubBar, Text, useToastController } from '@/components';
 import { useTheme } from '@/theme';
 
+import { MEMO_INPUT_LINES, memoBoxHeight } from './memoBoxHeight';
 import { MUKLOG_CATEGORIES, MUKLOG_CATEGORY_KEYS, type MuklogCategoryKey } from '../categories';
 import { formatVisitedDate } from '../formatVisitedDate';
 import { mapMuklogError } from '../errors';
@@ -379,6 +380,21 @@ export const MuklogEditor = ({
     }
   };
 
+  // 메모 입력 고정 박스(킷 mk-log:452 rows={4} + lk.textarea resize:none) — 높이 계약 단일 출처는 memoBoxHeight.
+  //   minHeight == maxHeight라 글이 길어져도 박스가 늘지 않고, 초과분은 TextInput 내부 스크롤(RN 기본 scrollEnabled=true)로 흡수한다.
+  //   인자는 스타일에 실제 적용되는 값과 같은 출처(타이포 토큰 lineHeight / fieldInput의 spacing[14] / styles.input의 hairline).
+  const memoBoxSize = memoBoxHeight({
+    lineHeight: theme.typography.memoInput.lineHeight,
+    lines: MEMO_INPUT_LINES,
+    paddingVertical: theme.spacing[14],
+    borderWidth: StyleSheet.hairlineWidth,
+  });
+  const memoBox = {
+    ...theme.typography.memoInput,
+    minHeight: memoBoxSize,
+    maxHeight: memoBoxSize,
+  };
+
   const fieldInput = {
     color: theme.color.fg,
     backgroundColor: theme.color.surface,
@@ -577,10 +593,9 @@ export const MuklogEditor = ({
           onChangeText={setMemo}
           maxLength={MEMO_MAX}
           multiline
-          numberOfLines={4}
           placeholder="무엇을 먹었고 어땠는지 그날의 기록을 남겨보세요"
           placeholderTextColor={theme.color.fgMuted}
-          style={[styles.input, styles.memo, fieldInput]}
+          style={[styles.input, styles.memo, fieldInput, memoBox]}
         />
         {/* 메모 필수·최소 5자 안내(사용자 요청). 미달 시 강조 톤. */}
         <Text
@@ -634,7 +649,8 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   label: { marginBottom: 10 },
   input: { borderWidth: StyleSheet.hairlineWidth },
-  memo: { minHeight: 96, textAlignVertical: 'top' },
+  // 높이는 토큰 의존이라 인라인 memoBox가 담당(minHeight==maxHeight). 여기 남는 건 Android 상단 정렬뿐.
+  memo: { textAlignVertical: 'top' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   // 별점 + 보조 텍스트 행(킷 mk-log:447 gap 12).
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },

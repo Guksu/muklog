@@ -462,3 +462,23 @@ describe('tokens — fgDisabled (킷 --text-disable)', () => {
     expect(themes.light.color.fgDisabled).toBe('rgba(55,56,60,0.16)');
   });
 });
+
+describe('tokens — memoInput (에디터 메모 입력 타이포, memo-max-height §4-1)', () => {
+  it('U6: 킷 lk.textarea "500 15px/1.6"(mk-log:645) 번역값이다', () => {
+    expect(typography.memoInput.fontSize).toBe(15);
+    expect(typography.memoInput.lineHeight).toBe(24);
+    expect(typography.memoInput.fontFamily).toBe('SUIT-Medium');
+  });
+
+  it('U7: 상세 표시용 memoBody(500/15, lh 26)는 불변이다 (표시 지점 무영향)', () => {
+    expect(typography.memoBody.fontSize).toBe(15);
+    expect(typography.memoBody.lineHeight).toBe(26);
+    expect(typography.memoBody.fontFamily).toBe('SUIT-Medium');
+  });
+
+  it('신규 키 추가가 기존 본문 토큰 실값을 바꾸지 않는다 (회귀 0)', () => {
+    expect(typography.body).toEqual({ fontSize: 16, lineHeight: 26, fontFamily: 'SUIT-Medium' });
+    expect(typography.bodySm).toEqual({ fontSize: 14, lineHeight: 22, fontFamily: 'SUIT-Medium' });
+    expect(typography.fieldLabel).toEqual({ fontSize: 15, lineHeight: 18, fontFamily: 'SUIT-Bold' });
+  });
+});

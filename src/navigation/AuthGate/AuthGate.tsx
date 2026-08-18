@@ -8,6 +8,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 
 import { useAuth } from '@/features/auth';
+import { LocationPrewarm } from '@/features/map/LocationPrewarm';
 import { MapPrewarm } from '@/features/map/MapPrewarm';
 import { ProfileProvider } from '@/features/profile';
 import { MyLogsProvider } from '@/features/room';
@@ -54,6 +55,10 @@ export const AuthGate = () => {
             {/* 지도 WebView 프리워머(map-prewarm) — 인증 사용자에서만 마운트. 숨김 1×1, 권한·RPC 미보유.
                 유휴 시점에 SDK를 미리 부팅해 지도탭 첫 진입 체감 지연을 줄인다(인스턴스 비공유). */}
             <MapPrewarm />
+            {/* 위치 선취득 워머(map-initial-location) — 인증 사용자에서만 마운트. 렌더 산출물 없음(null).
+                권한이 이미 허용된 경우에만 OS 캐시 위치를 1회 읽어(GPS 미기동·프롬프트 0) 메모리에 담아둔다
+                → 지도탭 첫 진입의 렌더 1이 서울시청 폴백 대신 내 동네로 시작한다. */}
+            <LocationPrewarm />
           </MyLogsProvider>
         </ProfileProvider>
       );

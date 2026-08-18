@@ -3,9 +3,11 @@
 //   저장→createMuklog→onSaved (plan §6.3 / §5 T9, AC2·AC3·AC12). useCreateMuklog 모킹으로 폼 동작만 검증.
 //   ⚠️ 시트(MuklogEntrySheet)→풀스크린 전환: visible 제거, onClose→onBack. 폼/저장/사진/장소 로직은 불변.
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
+import { spacing, typography } from '@/theme';
 
 const mockUseCreateMuklog = jest.fn();
 jest.mock('../useCreateMuklog', () => ({ useCreateMuklog: () => mockUseCreateMuklog() }));
@@ -17,6 +19,7 @@ jest.mock('expo-image-picker', () => ({
 }));
 import * as ImagePicker from 'expo-image-picker';
 
+import { MEMO_INPUT_LINES, memoBoxHeight } from './memoBoxHeight';
 import { MuklogEditor, type MuklogPlaceSearchControl } from './MuklogEditor';
 import { formatVisitedDate } from '../formatVisitedDate';
 import { type MuklogEditInitial, type PlaceSearchItem } from '../types';
@@ -772,5 +775,99 @@ describe('MuklogEditor — 방문일 캘린더 시트 배선 (date-picker T4)', 
     renderEditor();
     const todayLabel = formatVisitedDate({ visitedAt: todayLocalDate(), withDow: true });
     expect(screen.getByText(todayLabel)).toBeTruthy();
+  });
+});
+
+// ── 메모 입력 고정 높이 (memo-max-height, plan §6-1 S1~S8) ─────────────────────────────
+//   킷 <textarea rows={4}> + resize:none 번역 = minHeight==maxHeight 고정 박스 + 내부 스크롤.
+//   실제 렌더 픽셀·스크롤 제스처는 RNTL이 계산하지 않으므로 스타일/props 계약만 단언(나머지는 디바이스 스모크).
+describe('MuklogEditor — 메모 입력 고정 높이 (memo-max-height)', () => {
+  const memoInput = () => screen.getByLabelText('메모');
+  const memoStyle = () => StyleSheet.flatten(memoInput().props.style) as Record<string, unknown>;
+
+  // 화면이 실제로 쓰는 것과 같은 출처(토큰·상수·hairline)로 기대값을 계산 — 하드코딩 125 금지.
+  const expectedHeight = memoBoxHeight({
+    lineHeight: typography.memoInput.lineHeight,
+    lines: MEMO_INPUT_LINES,
+    paddingVertical: spacing[14],
+    borderWidth: StyleSheet.hairlineWidth,
+  });
+
+  it('S1: minHeight === maxHeight === memoBoxHeight(...)로 고정된다 (minHeight 96 폐기)', () => {
+    renderEditor();
+    const style = memoStyle();
+    expect(style.minHeight).toBe(expectedHeight);
+    expect(style.maxHeight).toBe(expectedHeight);
+    expect(style.minHeight).not.toBe(96);
+  });
+
+  it('S2: 킷 타이포 토큰(memoInput 15/24 Medium) + textAlignVertical top이 적용된다', () => {
+    renderEditor();
+    const style = memoStyle();
+    expect(style.fontSize).toBe(15);
+    expect(style.lineHeight).toBe(24);
+    expect(style.fontFamily).toBe('SUIT-Medium');
+    expect(style.textAlignVertical).toBe('top');
+  });
+
+  it('S3: multiline 유지 · numberOfLines 제거 · maxLength 500 유지', () => {
+    renderEditor();
+    const props = memoInput().props;
+    expect(props.multiline).toBe(true);
+    expect(props.numberOfLines).toBeUndefined();
+    expect(props.maxLength).toBe(500);
+  });
+
+  it('S4: 4줄을 넘는 입력 후에도 박스 높이가 변하지 않는다 (내부 스크롤로 흡수)', () => {
+    renderEditor();
+    fireEvent.changeText(memoInput(), '가'.repeat(300));
+    const style = memoStyle();
+    expect(style.minHeight).toBe(expectedHeight);
+    expect(style.maxHeight).toBe(expectedHeight);
+  });
+
+  it('S5: 500자 입력 → 저장 payload memo가 500자 전문이다 (저장 제한 회귀 0)', async () => {
+    const memo500 = '가'.repeat(500);
+    renderEditor();
+    fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+    fireEvent.changeText(memoInput(), memo500);
+
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('저장'));
+    });
+    await waitFor(() => expect(createMuklog).toHaveBeenCalledTimes(1));
+    const payload = createMuklog.mock.calls[0][0].input;
+    expect(payload.memo).toHaveLength(500);
+    expect(payload.memo).toBe(memo500);
+  });
+
+  it('S6: 빈 메모면 힌트가 보이고 저장이 비활성이다 (기존 게이팅 유지)', () => {
+    renderEditor();
+    fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+    expect(screen.getByTestId('memo-hint')).toBeTruthy();
+    expect(screen.getByLabelText('저장').props.accessibilityState?.disabled).toBe(true);
+  });
+
+  it('S7: 편집 진입 시 긴 메모 프리필이 잘리지 않고 전문 그대로 들어간다', () => {
+    const longMemo = '맛있었어요 '.repeat(50).slice(0, 400);
+    renderWithTheme(
+      <MuklogEditor
+        roomId="r1"
+        onBack={onBack}
+        onSaved={onSaved}
+        initial={editInitial({ memo: longMemo })}
+        onSubmit={jest.fn()}
+      />,
+    );
+    expect(memoInput().props.value).toBe(longMemo);
+    const style = memoStyle();
+    expect(style.maxHeight).toBe(expectedHeight);
+  });
+
+  it('S8: 메모 전용 높이 제약이 장소명 입력으로 새지 않는다', () => {
+    renderEditor();
+    const placeStyle = StyleSheet.flatten(screen.getByLabelText('장소 이름').props.style) as Record<string, unknown>;
+    expect(placeStyle.minHeight).toBeUndefined();
+    expect(placeStyle.maxHeight).toBeUndefined();
   });
 });

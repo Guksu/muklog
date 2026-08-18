@@ -3,9 +3,21 @@
 //   (plan §4·§5-1 MapTabScreen) loading/denied/empty/마커탭→선택카드/error+refresh.
 //   네이티브 지도 렌더는 스모크(디바이스) → WebView는 MapWebView 모킹으로 대체, onMessage만 직접 호출.
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
+
+// map-headerless: safe-area top inset 가변 모킹 — 네이티브 헤더(HomeHeader)를 끈 뒤 상단 오버레이가
+//   그 inset을 승계하는지 검증하는 주입 지점(LogScreen.spec:35-42 선례). SafeAreaProvider 등 나머지는 실 구현.
+const mockTopInset: { current: number } = { current: 0 };
+jest.mock('react-native-safe-area-context', () => {
+  const actual = jest.requireActual('react-native-safe-area-context');
+  return {
+    ...actual,
+    useSafeAreaInsets: () => ({ top: mockTopInset.current, bottom: 0, left: 0, right: 0 }),
+  };
+});
 
 // react-native-webview 모킹(requireActual('@/features/map/components')가 실 MapWebView를 로드 → 네이티브 모듈 부재 방지).
 jest.mock(
@@ -89,7 +101,12 @@ import { useMuklogPins } from '@/features/map/useMuklogPins';
 import { useLocationPermission } from '@/features/map/useLocationPermission';
 import { useNearbyPlaces } from '@/features/map/useNearbyPlaces';
 import { useWishPins } from '@/features/map/useWishPins';
-import { LocationPermissionStatus, MapPinKind, type MapMarker } from '@/features/map/types';
+import {
+  LocationCoordsSource,
+  LocationPermissionStatus,
+  MapPinKind,
+  type MapMarker,
+} from '@/features/map/types';
 
 import { MapTabScreen } from './MapTabScreen';
 
@@ -155,14 +172,23 @@ const pin = (over?: Record<string, unknown>) => ({
 
 const requestSpy = jest.fn();
 const refreshCoordsSpy = jest.fn();
+// 훅 반환 주입 헬퍼. coordsSource를 명시하지 않으면 좌표 유무에서 파생한다(좌표 있음=fresh 픽스가
+//   기본 시나리오, 없음=null) — 실제 훅이 좌표·출처를 짝으로 내보내는 계약과 일치시킨다(map-initial-location §3.4).
 const setPermission = (over?: Record<string, unknown>) => {
-  useLocationPermissionMock.mockReturnValue({
+  const merged = {
     status: LocationPermissionStatus.Granted,
-    coords: { lat: 37.5, lng: 127.0 },
+    coords: { lat: 37.5, lng: 127.0 } as unknown,
     request: requestSpy,
     refreshCoords: refreshCoordsSpy,
     ...over,
-  });
+  };
+  const coordsSource =
+    over && 'coordsSource' in over
+      ? over.coordsSource
+      : merged.coords
+        ? LocationCoordsSource.Fresh
+        : null;
+  useLocationPermissionMock.mockReturnValue({ ...merged, coordsSource });
 };
 
 // MapWebView 모킹이 노출한 onMessage를 통해 WebView 메시지를 발화한다.
@@ -189,6 +215,7 @@ beforeEach(() => {
   mockNearbyWish.onAdded = null;
   mockNearbyWish.choosing = null;
   mockNearbyWish.submitting = false;
+  mockTopInset.current = 0;
   setPermission();
   setNearby();
   setWishPins();
@@ -363,7 +390,10 @@ describe('MapTabScreen', () => {
   });
 
   it('T4: granted에서 FAB 탭 → refreshCoords 1회 → 반환 coords로 RECENTER inject 1회', async () => {
-    refreshCoordsSpy.mockResolvedValueOnce({ lat: 37.6, lng: 127.1 });
+    refreshCoordsSpy.mockResolvedValueOnce({
+      coords: { lat: 37.6, lng: 127.1 },
+      source: LocationCoordsSource.Fresh,
+    });
     useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
     renderWithTheme(<MapTabScreen />);
 
@@ -466,6 +496,289 @@ describe('MapTabScreen', () => {
     const recenter = injectedScripts.filter((s) => s.includes('"type":"RECENTER"'));
     expect(recenter).toHaveLength(1);
     expect(recenter[0]).toContain('"lat":37.6'); // 첫 픽스만 따라감.
+  });
+
+  // ── map-initial-location 증분 (plan §3.6·§5 T6·T7) ──────────────
+  //   INIT 스크립트 payload를 파싱해 center/me를 직접 읽는다(문자열 포함 검사보다 계약을 정확히 본다).
+  const parseInitPayload = () => {
+    const script = injectedScripts.find((s) => s.includes('"type":"INIT"'));
+    if (!script) return null;
+    const json = script.slice(script.indexOf('({') + 1, script.lastIndexOf(')'));
+    return JSON.parse(json) as {
+      center: { lat: number; lng: number };
+      me: { lat: number; lng: number } | null;
+    };
+  };
+  const recenterScripts = () => injectedScripts.filter((s) => s.includes('"type":"RECENTER"'));
+
+  it('T7: warm 좌표 보유 시 INIT center·me가 warm 좌표다(서울시청 폴백 아님)', () => {
+    setPermission({
+      status: LocationPermissionStatus.Undetermined,
+      coords: { lat: 37.55, lng: 126.99 },
+      coordsSource: LocationCoordsSource.Warm,
+    });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    const init = parseInitPayload();
+    expect(init?.center).toEqual({ lat: 37.55, lng: 126.99, zoom: 5 });
+    // center와 me가 같은 좌표원을 쓴다(§7 경계면 3).
+    expect(init?.me).toEqual({ lat: 37.55, lng: 126.99 });
+    // DEFAULT_REGION(서울시청)이 아니다.
+    expect(init?.center.lat).not.toBe(37.5665);
+  });
+
+  it('T6: warm 좌표로 INIT된 뒤 fresh 픽스가 도착하면 RECENTER를 정확히 1회 주입한다', () => {
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.55, lng: 126.99 },
+      coordsSource: LocationCoordsSource.Warm,
+    });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    // warm INIT만으로는 자동 RECENTER 없음(이미 그 좌표로 그려졌으므로 중복 주입 0).
+    expect(recenterScripts()).toHaveLength(0);
+
+    // 정밀 픽스 도착 → 같은 동네 안에서 조용한 보정 1회.
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.56, lng: 126.995 },
+      coordsSource: LocationCoordsSource.Fresh,
+    });
+    rerender(<MapTabScreen />);
+
+    const recenter = recenterScripts();
+    expect(recenter).toHaveLength(1);
+    expect(recenter[0]).toContain('"lat":37.56');
+  });
+
+  it('T6: warm 좌표가 갱신되기만 하면 RECENTER를 주입하지 않는다(정밀 픽스 아님)', () => {
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.55, lng: 126.99 },
+      coordsSource: LocationCoordsSource.Warm,
+    });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.551, lng: 126.991 },
+      coordsSource: LocationCoordsSource.Warm,
+    });
+    rerender(<MapTabScreen />);
+
+    expect(recenterScripts()).toHaveLength(0);
+  });
+
+  it('T6: warm INIT → fresh 도착 후 좌표가 또 바뀌어도 추가 RECENTER 0회(1회 가드 유지)', () => {
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.55, lng: 126.99 },
+      coordsSource: LocationCoordsSource.Warm,
+    });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.56, lng: 126.995 },
+      coordsSource: LocationCoordsSource.Fresh,
+    });
+    rerender(<MapTabScreen />);
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.57, lng: 127.0 },
+      coordsSource: LocationCoordsSource.Fresh,
+    });
+    rerender(<MapTabScreen />);
+
+    const recenter = recenterScripts();
+    expect(recenter).toHaveLength(1);
+    expect(recenter[0]).toContain('"lat":37.56'); // 첫 정밀 픽스만 따라감.
+  });
+
+  it('T7 회귀: 좌표 없음 + 핀 없음이면 INIT center는 DEFAULT_REGION(서울시청)이다', () => {
+    setPermission({ status: LocationPermissionStatus.Undetermined, coords: null });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    const init = parseInitPayload();
+    expect(init?.center).toEqual({ lat: 37.5665, lng: 126.978, zoom: 5 });
+    expect(init?.me).toBeNull();
+  });
+
+  it('T7 회귀: 좌표 없음 + 핀 있음이면 INIT center는 핀 bbox 중심이다', () => {
+    setPermission({ status: LocationPermissionStatus.Undetermined, coords: null });
+    useMuklogPinsMock.mockReturnValue({
+      state: {
+        status: 'ready',
+        pins: [
+          pin({ muklogId: 'm1', lat: 37.4, lng: 126.9 }),
+          pin({ muklogId: 'm2', lat: 37.6, lng: 127.1 }),
+        ],
+      },
+      refresh: jest.fn(),
+    });
+    renderWithTheme(<MapTabScreen />);
+
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    const init = parseInitPayload();
+    expect(init?.center.lat).toBeCloseTo(37.5, 5);
+    expect(init?.center.lng).toBeCloseTo(127.0, 5);
+  });
+
+  // L1(qa-report-logic §7): 폴백(서울시청)으로 INIT된 뒤 warm이 도착하는 경로 — 손에 좌표를 쥐고도
+  //   지도가 폴백에 고정되던 미실현 경로. warm 보정 1회 + 이후 정밀 픽스 보정 1회가 모두 살아있어야 한다.
+  it('L1: 폴백 센터로 INIT된 뒤 warm 좌표가 도착하면 RECENTER를 1회 주입한다', () => {
+    setPermission({ status: LocationPermissionStatus.Undetermined, coords: null });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    // INIT은 서울시청 폴백·me null로 그려졌다.
+    expect(parseInitPayload()?.center.lat).toBe(37.5665);
+    expect(recenterScripts()).toHaveLength(0);
+
+    // 뒤늦게 워밍/탭 진입 시드가 도착.
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.55, lng: 126.99 },
+      coordsSource: LocationCoordsSource.Warm,
+    });
+    rerender(<MapTabScreen />);
+
+    const recenter = recenterScripts();
+    expect(recenter).toHaveLength(1);
+    expect(recenter[0]).toContain('"lat":37.55');
+  });
+
+  it('L1: 폴백 INIT → warm 보정 뒤 fresh가 도착하면 정밀 보정이 1회 더 주입된다(총 2회)', () => {
+    setPermission({ status: LocationPermissionStatus.Undetermined, coords: null });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.55, lng: 126.99 },
+      coordsSource: LocationCoordsSource.Warm,
+    });
+    rerender(<MapTabScreen />);
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.56, lng: 126.995 },
+      coordsSource: LocationCoordsSource.Fresh,
+    });
+    rerender(<MapTabScreen />);
+
+    const recenter = recenterScripts();
+    expect(recenter).toHaveLength(2);
+    expect(recenter[0]).toContain('"lat":37.55'); // warm 보정
+    expect(recenter[1]).toContain('"lat":37.56'); // 정밀 보정
+  });
+
+  it('L1: 폴백 INIT → warm 보정 이후 warm이 또 갱신돼도 추가 주입 0회', () => {
+    setPermission({ status: LocationPermissionStatus.Undetermined, coords: null });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.55, lng: 126.99 },
+      coordsSource: LocationCoordsSource.Warm,
+    });
+    rerender(<MapTabScreen />);
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.551, lng: 126.991 },
+      coordsSource: LocationCoordsSource.Warm,
+    });
+    rerender(<MapTabScreen />);
+
+    expect(recenterScripts()).toHaveLength(1);
+  });
+
+  it('L2: warm INIT 상태에서 FAB 탭 → RECENTER 1회(자동 보정과 중복 주입 0)', async () => {
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.55, lng: 126.99 },
+      coordsSource: LocationCoordsSource.Warm,
+    });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    refreshCoordsSpy.mockResolvedValueOnce({
+      coords: { lat: 37.6, lng: 127.1 },
+      source: LocationCoordsSource.Fresh,
+    });
+
+    fireEvent.press(screen.getByTestId('map-locate-button'));
+    await waitFor(() => expect(refreshCoordsSpy).toHaveBeenCalledTimes(1));
+
+    // 실제 훅은 refreshCoords 성공 시 coords·source를 fresh로 전이시킨다 → 자동 보정 effect 재평가.
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.6, lng: 127.1 },
+      coordsSource: LocationCoordsSource.Fresh,
+    });
+    rerender(<MapTabScreen />);
+
+    // 사용자가 직접 리센터했으므로 자동 1회 보정은 불요 — 총 1회여야 한다.
+    expect(recenterScripts()).toHaveLength(1);
+  });
+
+  it('L2 후속: FAB가 실패 폴백(warm 좌표)으로 리센터했으면 이후 정밀 픽스 보정이 살아있다', async () => {
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.55, lng: 126.99 },
+      coordsSource: LocationCoordsSource.Warm,
+    });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    // 재취득 실패 → 훅이 직전 warm 좌표를 그 출처(warm)와 함께 폴백 반환(R6).
+    refreshCoordsSpy.mockResolvedValueOnce({
+      coords: { lat: 37.55, lng: 126.99 },
+      source: LocationCoordsSource.Warm,
+    });
+
+    fireEvent.press(screen.getByTestId('map-locate-button'));
+    await waitFor(() => expect(refreshCoordsSpy).toHaveBeenCalledTimes(1));
+    expect(recenterScripts()).toHaveLength(1);
+
+    // 지도는 여전히 warm 좌표로 센터돼 있으므로, 뒤늦은 정밀 픽스는 보정되어야 한다
+    //   (FAB 탭을 무조건 fresh로 마킹하면 여기서 막힌다 — 정밀도 오마킹 금지).
+    setPermission({
+      status: LocationPermissionStatus.Granted,
+      coords: { lat: 37.6, lng: 127.1 },
+      coordsSource: LocationCoordsSource.Fresh,
+    });
+    rerender(<MapTabScreen />);
+
+    const recenter = recenterScripts();
+    expect(recenter).toHaveLength(2);
+    expect(recenter[1]).toContain('"lat":37.6');
+  });
+
+  it('T7 회귀: denied면 me 마커를 주입하지 않고 권한 배너를 유지한다', () => {
+    setPermission({ status: LocationPermissionStatus.Denied, coords: null });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    expect(parseInitPayload()?.me).toBeNull();
+    expect(recenterScripts()).toHaveLength(0);
+    expect(screen.getByText('위치 권한을 허용하면 현재 위치를 볼 수 있어요')).toBeTruthy();
   });
 
   // ── map-pin-select 증분 (plan §3.5·§5 T5·T6·T7) ─────────────────
@@ -817,5 +1130,58 @@ describe('MapTabScreen', () => {
     // 카페 필터 → wish(cafe)는 남으므로 카드 유지.
     fireEvent.press(screen.getByTestId('filter-chip-cafe'));
     expect(screen.getByText('연남 파스타')).toBeTruthy();
+  });
+});
+
+// ── map-headerless (plan §5-1 T3-1~T3-6) ────────────────────────────
+//   네이티브 헤더를 끄면 지도가 상태바까지 차오른다. 헤더가 흡수하던 top inset을 상단 오버레이 2종이
+//   승계하는지(그리고 하단 요소로 새지 않는지) inset 0/59 두 렌더의 델타로 lock한다.
+describe('MapTabScreen — map-headerless 상단 오버레이 safe-area', () => {
+  // 오버레이 래퍼의 flatten 스타일(top/bottom은 인라인 토큰이라 배열 → flatten 필요).
+  const flatStyle = ({ testID }: { testID: string }): { top?: number; bottom?: number } =>
+    StyleSheet.flatten(screen.getByTestId(testID).props.style);
+
+  const renderWithInset = ({ top }: { top: number }) => {
+    mockTopInset.current = top;
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    return renderWithTheme(<MapTabScreen />);
+  };
+
+  const INSET = 59; // 다이나믹 아일랜드 근사.
+
+  it('T3-1·T3-2: 카테고리 필터 바 top = spacing[12](inset 0) → inset만큼 정확히 하강', () => {
+    const { unmount } = renderWithInset({ top: 0 });
+    const base = flatStyle({ testID: 'map-overlay-filterbar' }).top;
+    expect(base).toBe(12); // 현행 보존(회귀 0).
+    unmount();
+
+    renderWithInset({ top: INSET });
+    expect(flatStyle({ testID: 'map-overlay-filterbar' }).top).toBe((base ?? 0) + INSET);
+  });
+
+  it('T3-3·T3-4: 범례 top = spacing[56](inset 0) → inset만큼 정확히 하강', () => {
+    const { unmount } = renderWithInset({ top: 0 });
+    const base = flatStyle({ testID: 'map-overlay-legend' }).top;
+    expect(base).toBe(56);
+    unmount();
+
+    renderWithInset({ top: INSET });
+    expect(flatStyle({ testID: 'map-overlay-legend' }).top).toBe((base ?? 0) + INSET);
+  });
+
+  it('T3-5: inset이 있어도 필터 바↔범례 상대 간격 44는 보존된다(한쪽에만 적용되는 실수 방지)', () => {
+    renderWithInset({ top: INSET });
+    const filterTop = flatStyle({ testID: 'map-overlay-filterbar' }).top ?? 0;
+    const legendTop = flatStyle({ testID: 'map-overlay-legend' }).top ?? 0;
+    expect(legendTop - filterTop).toBe(44);
+  });
+
+  it('T3-6: top inset이 하단 요소로 새지 않는다(현재위치 FAB 래퍼 bottom = 16 불변)', () => {
+    renderWithInset({ top: INSET });
+    // 배치는 래퍼가 소유한다(MapLocateButton은 배치 미보유) → 래퍼에 testID를 직접 부여해 읽는다.
+    //   버튼에서 .parent로 거슬러 오르면 composite(Pressable forwardRef)가 끼어 스타일을 못 읽는다.
+    expect(flatStyle({ testID: 'map-overlay-locate' }).bottom).toBe(16);
+    // 상단 오버레이만 inset을 흡수했는지 대조(같은 렌더에서 상단은 하강, 하단은 불변).
+    expect(flatStyle({ testID: 'map-overlay-filterbar' }).top).toBe(12 + INSET);
   });
 });
