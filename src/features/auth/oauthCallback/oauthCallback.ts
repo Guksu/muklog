@@ -18,6 +18,8 @@ import * as Linking from 'expo-linking';
 
 import { supabase } from '@/lib/supabase';
 
+import { traceAuth } from '../authDiagnostics';
+
 // 마지막으로 교환을 시도한 code 와 그 결과 promise. 같은 code 재도착 시 재교환 없이 이 결과를 공유한다.
 //   code 는 1회용이라 재교환은 반드시 실패하고, 그 실패가 이미 성공한 로그인을 에러로 덮어쓸 수 있다.
 //   직전 1건만 들고 있으므로 누적 없이 경계가 닫힌다(중복 도착은 언제나 최신 code 건이다).
@@ -27,9 +29,16 @@ let lastExchange: { code: string; result: Promise<string | null> } | null = null
 const runExchange = async ({ code }: { code: string }): Promise<string | null> => {
   try {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) return null;
-    return data?.session?.user?.id ?? null;
-  } catch {
+    // ④ 교환 오류 — "code verifier should be non-empty" 류면 SecureStore 에서 verifier 유실.
+    if (error) {
+      traceAuth({ line: `교환 실패: ${error.message}` });
+      return null;
+    }
+    const userId = data?.session?.user?.id ?? null;
+    if (!userId) traceAuth({ line: '교환 응답에 세션 없음' });
+    return userId;
+  } catch (err) {
+    traceAuth({ line: `교환 예외: ${err instanceof Error ? err.message : String(err)}` });
     return null;
   }
 };
@@ -58,6 +67,8 @@ const codeFromUrl = ({ url }: { url: string }): string | null => {
  */
 export const recoverOAuthSessionFromInitialUrl = async (): Promise<string | null> => {
   const url = await Linking.getInitialURL();
+  // 앱이 재시작됐다면 여기에 콜백 URL 이 있어야 한다. null 이면 리다이렉트가 앱까지 오지 않은 것.
+  traceAuth({ line: `initialUrl=${url ? url.slice(0, 120) : '없음'}` });
   if (!url) return null;
   const code = codeFromUrl({ url });
   if (!code) return null;

@@ -12,6 +12,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '@/lib/supabase';
 
 import { AuthErrorToken } from '../errors';
+import { traceAuth } from '../authDiagnostics';
 import { exchangeOAuthCode } from '../oauthCallback';
 
 // 인앱 브라우저 리다이렉트 복귀를 정리한다(모듈 로드 시 1회).
@@ -28,16 +29,21 @@ export type OAuthSignInResult =
 export const signInWithGoogleOAuth = async (): Promise<OAuthSignInResult> => {
   // 앱 스킴 기반 리다이렉트 URL(예: muklog://auth/callback). Supabase 리다이렉트 허용목록에 등록 필요.
   const redirectTo = Linking.createURL('auth/callback');
+  // ① 실제 리다이렉트 URL — 스킴이 muklog://auth/callback 인지, Supabase 허용목록과 같은 문자열인지 확인.
+  traceAuth({ line: `redirectTo=${redirectTo}` });
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo, skipBrowserRedirect: true },
   });
   if (error || !data?.url) {
+    traceAuth({ line: `signInWithOAuth 실패: ${error?.message ?? 'url 없음'}` });
     return { ok: false, cancelled: false, token: AuthErrorToken.NetworkFailed };
   }
 
   const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  // ② 브라우저 결과 — success 면 리다이렉트 회수 성공, cancel/dismiss 면 앱으로 URL이 안 돌아온 것.
+  traceAuth({ line: `browser=${result.type}` });
   if (result.type === 'cancel' || result.type === 'dismiss') {
     return { ok: false, cancelled: true, token: AuthErrorToken.GoogleCancelled };
   }
@@ -49,7 +55,9 @@ export const signInWithGoogleOAuth = async (): Promise<OAuthSignInResult> => {
   //   교환은 oauthCallback.exchangeOAuthCode에 위임한다 — 딥링크 복구 경로와 같은 code가 겹쳐도
   //   실제 교환은 1회만 일어나고(code는 1회용), 뒤늦은 재교환 실패가 성공을 덮어쓰지 않는다.
   const code = Linking.parse(result.url).queryParams?.code;
+  // ③ code 유무 — 없으면 Supabase 가 앱이 아닌 SITE_URL 로 튕긴 것(허용목록 미등록 1순위).
   if (typeof code !== 'string') {
+    traceAuth({ line: `code 없음. url=${result.url.slice(0, 120)}` });
     return { ok: false, cancelled: false, token: AuthErrorToken.TokenExchangeFailed };
   }
 
@@ -57,5 +65,6 @@ export const signInWithGoogleOAuth = async (): Promise<OAuthSignInResult> => {
   if (!userId) {
     return { ok: false, cancelled: false, token: AuthErrorToken.TokenExchangeFailed };
   }
+  traceAuth({ line: `로그인 성공 userId=${userId.slice(0, 8)}` });
   return { ok: true, userId };
 };

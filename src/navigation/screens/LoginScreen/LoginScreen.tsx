@@ -14,6 +14,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 
 import { AppMark, SocialButton, Text } from '@/components';
+// ⚠️ 임시 진단 — 원인 확정 후 이 import 와 아래 사용처를 함께 제거한다.
+import { AUTH_DIAGNOSTICS_ENABLED, readAuthTrace } from '@/features/auth/authDiagnostics';
 import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { authVisualGradient, useTheme } from '@/theme';
 
@@ -50,6 +52,8 @@ export const LoginScreen = ({
 }: LoginScreenProps) => {
   const theme = useTheme();
   const busy = authenticating !== null;
+  // ⚠️ 임시 진단 — 상태 변화(로그인 시도/실패)마다 재렌더되므로 최신 트레이스가 그대로 반영된다.
+  const authTrace = readAuthTrace();
 
   return (
     <SafeAreaView style={[styles.flex, { backgroundColor: theme.color.bg }]} edges={['top', 'bottom']}>
@@ -89,6 +93,12 @@ export const LoginScreen = ({
         {loginError ? (
           <Text variant="bodySm" color="error" style={styles.error}>
             {loginError}
+          </Text>
+        ) : null}
+        {/* ⚠️ 임시 진단 표시 — OAuth 실패 지점을 기기 화면에서 읽기 위함. 원인 확정 후 제거(authDiagnostics). */}
+        {AUTH_DIAGNOSTICS_ENABLED && authTrace.length > 0 ? (
+          <Text variant="caption" color="fgAssistive" style={styles.diagnostics}>
+            {authTrace.join('\n')}
           </Text>
         ) : null}
         {showApple ? (
@@ -155,6 +165,8 @@ const styles = StyleSheet.create({
   // 킷: 버튼 영역 flex none, padding 0 24 40, gap 11(mk-auth:106).
   actions: { paddingHorizontal: 24, paddingBottom: 40, gap: 11 },
   error: { textAlign: 'center' },
+  // ⚠️ 임시 진단 표시 스타일 — 원인 확정 후 제거.
+  diagnostics: { textAlign: 'left', lineHeight: 15, fontSize: 10 },
   // 킷 약관 500/11.5/1.6, center, margin 10 12 0(mk-auth:109).
   terms: { textAlign: 'center', marginTop: 10, marginHorizontal: 12, lineHeight: 18 },
   termsLink: { textDecorationLine: 'underline' },
