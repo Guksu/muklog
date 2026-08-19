@@ -101,7 +101,9 @@ WebView → RN   READY / MARKER_TAP / MAP_TAP / BOUNDS_CHANGED / ERROR   ← 무
 >
 > **그럼에도 명령형 패치 기각 결론은 그대로다.** 차이는 결함의 범위다. 선언형은 격리를 넣으면 **한 핀의 부착 실패가 나머지 핀에 전파되지 않는** 국소 결함이고, 도달 조건도 "살아 있는 지도에서 `setMap`이 던지는" 극단이다. 명령형 미러는 **정상 동작 중에도** 메시지 1건 유실로 전역 desync가 나고 복구 수단이 없다. 국소·희귀 결함을 이유로 전역·상시 결함을 택할 근거는 없다.
 >
-> **잔여 한계(수용, S1 범위 밖)**: 예외 격리는 "전파 차단 + 나머지 핀 보호"까지 달성하고, **실패한 그 핀 1개의 미부착은 재-INIT 전까지 남는다**(격리는 자기 치유와 다르다). 문자 그대로의 자기 치유까지 가려면 부착 실패 시 해당 항목을 `mkPins`에서 **되돌려** 다음 주입의 재생성 대상으로 만들어야 한다. 도달 가능성이 극히 낮아 S1에서는 격리까지만 하고, 이 한계를 계약에 명시하는 것으로 갈음한다.
+> **잔여 한계 → 해소됨 (2026-08-19 하드닝, R6)**: 예외 격리만으로는 "전파 차단 + 나머지 핀 보호"까지고, **실패한 그 핀 1개의 미부착은 재-INIT 전까지 남는다**(격리는 자기 치유와 다르다). 문자 그대로의 자기 치유까지 가려면 부착 실패 시 해당 항목을 `mkPins`에서 **되돌려** 다음 주입의 재생성 대상으로 만들어야 한다 — 이 계획은 그것을 S1 범위 밖으로 수용할 생각이었으나, **dev가 `forgetPinByOverlay(added[j])`를 신설해 그 롤백까지 구현했다**(QA 권고안보다 강한 수정). 따라서 §4.1의 자기 치유 전제는 `none` 분기에서도 **문자 그대로 성립한다.**
+>
+> 이 계약이 지키는 것은 이제 **"레지스트리에 있으면 화면에도 있다"(I3)가 부착 실패 시에도 유지된다**는 것이다. QA 탐침 P13이 `forgetPinByOverlay`가 오버레이 **신원**으로만 매칭해 엉뚱한 핀을 지우지 않음을 확인했고, 뮤턴트 M11(해당 호출 제거)이 killed로 하중을 실증했다.
 
 ### 4.2 WebView 내부 상태 계약
 
@@ -320,10 +322,15 @@ new kakao.maps.Map(...)  →  me 오버레이  →  resetMarkers()  →  ensureC
 | M4 | `removed` 오버레이를 detach하지 않음 | AC3(유령) |
 | M5 | 강등 시 delta만 재부착(레지스트리 전량 아님) | AC10 |
 | M6 | `mkClusterMode` 판정에서 `typeof` 가드 제거 | AC8 |
-| M7 | `__muklogInit`에서 `resetMarkers()`/`ensureClusterer()` **순서 뒤집기** | §4.6 재작성 단언(`resetMarkers`가 `ensureClusterer`보다 앞) — qa-logic 추가, killed 확인 |
-| M10 | `full` 모드가 `allPinOverlays()`가 아니라 **delta만** `addMarkers` | §4.6 재작성 단언(`addMarkers(allPinOverlays())`) — qa-logic 추가, killed 확인 |
+| M7 | `__muklogInit`에서 `resetMarkers()`/`ensureClusterer()` **순서 뒤집기** | §4.6 재작성 단언(`resetMarkers`가 `ensureClusterer`보다 앞) — qa-logic 추가, killed |
+| M8 | E1(무변경 주입 시 `redraw` 미호출) 가드 제거 | qa-logic 추가, killed |
+| M9 | 신규 핀 생성 시 active 재적용 제거 | AC15 — qa-logic 추가, killed |
+| M10 | `full` 모드가 `allPinOverlays()`가 아니라 **delta만** `addMarkers` | §4.6 재작성 단언(`addMarkers(allPinOverlays())`) — qa-logic 추가, killed |
+| M11 | `forgetPinByOverlay(added[j])` **호출 제거** | L1 하드닝 전용 — 부착 실패 핀의 레지스트리 롤백(§4.1 자기 치유 복원). killed |
+| M12 | L2의 `removed` **선탈착 루프 제거** | L2 하드닝 전용 — 강등 전 명시 탈착(§4.4 영구 유령 방지). killed |
 
-> M7·M10은 qa-logic이 **폐기 심볼 단언의 재작성본이 실제로 하중을 받는지**를 실증하려고 추가한 뮤턴트다. 둘 다 재작성 단언에 의해 죽었다 → "완화 0"이 형식이 아니라 실효임이 확인됐다.
+> M7~M10은 qa-logic이 **폐기 심볼 단언의 재작성본이 실제로 하중을 받는지**를 실증하려고 추가한 뮤턴트다. 전부 재작성 단언에 의해 죽었다 → "완화 0"이 형식이 아니라 실효임이 확인됐다.
+> **M11·M12는 하드닝 전용 뮤턴트**로, L1·L2 수정과 함께 추가된 spec 3건(L1·L1-b·L2)이 죽은 단언이 아님을 실증한다. **2026-08-19 재검증에서 M1~M12 12종 전부 killed**(근거: `qa-report-logic.md` §14.3).
 
 ### T9. 완료 게이트
 - [ ] `npm test` 전량 green (기존 스위트 회귀 0).
@@ -426,17 +433,20 @@ new kakao.maps.Map(...)  →  me 오버레이  →  resetMarkers()  →  ensureC
 
 ## §12. 완료 정의 (Definition of Done — S1)
 
-- [ ] T0~T9 전 작업 완료, 모든 AC 충족
-- [ ] `npm test` 전량 green · `npx tsc --noEmit` 0 · `node --check` 통과
-- [ ] `mapHtml.spec.ts` 기존 42건 의도 보존 · 완화 0 (폐기 심볼 단언만 §4.6 방침대로 재작성)
-- [ ] 뮤턴트 M1~M6 전부 killed (격리 사본 삭제 완료)
-- [ ] 디바이스 스모크 S1~S8 수행·기록 (S2/S5/S6가 핵심)
-- [ ] RN 코드(`MapTabScreen`·`useNearbyPlaces`·`mapMessages`·`searchNearby`) diff **0**
-- [ ] `dev-notes.md` · `qa-report-logic.md` 작성 (qa-visual 미투입 판정 기록)
-- [ ] **qa-logic L1·L2 하드닝 반영** — `none` 분기 예외 격리 / 강등 전 `removed` 명시 탈착 (§4.4, 2026-08-19 **진행 중**)
+- [~] T1~T9 완료 · AC1~AC16 전부 실행 커버. **T0(클러스터러 API 실측)만 미완 — U1, 실기기 필요**
+- [x] `npm test` 전량 green(199/2,038) · `npx tsc --noEmit` 0 — QA 직접 실행. `node --check`는 **샌드박스가 스크립트를 실행하므로 문법 검증보다 강한 수단으로 대체**됨
+- [x] `mapHtml.spec.ts` 기존 42건 의도 보존 · 완화 0 — 삭제 4건은 전부 폐기 심볼 결속분이며 §4.6 방침대로 재작성, 나머지 38건 무수정(D1 검증 완료)
+- [x] 뮤턴트 **M1~M12 12종** 전부 killed (격리 사본 `src/` 밖 · testMatch 미매치 · 삭제 확인)
+- [ ] 디바이스 스모크 S1~S8 수행·기록 (S2/S5/S6가 핵심) — **U2, 미수행**
+- [x] RN 코드(`MapTabScreen`·`useNearbyPlaces`·`mapMessages`·`searchNearby`) diff **0**
+- [x] `dev-notes.md` · `qa-report-logic.md` 작성 (qa-visual 미투입 판정 기록)
+- [x] **qa-logic L1·L2 하드닝 반영** — `none` 분기 예외 격리 + `forgetPinByOverlay` 롤백 / 강등 전 `removed` 명시 탈착 (§4.1·§4.4). **N1**(샌드박스 파일명 → `createMapSandbox`)도 함께 반영
 
-**현재 상태(2026-08-19)**: S1은 qa-logic **조건부 PASS**(직전 안정 지표 199 스위트 · 2,035 테스트 green · tsc 0, 블로커 0). 조건은 위 L1·L2 하드닝 2건이며 둘 다 Low(도달 가능성 낮음)라 블로커가 아니다.
-⚠ **하드닝은 착수했으나 완료 전 중단됐다** — 상위 루프(`docs/loops/ux-improvements.md`)가 토큰 예산 초과로 종료되면서 **작업 트리가 중간 편집 상태(1 스위트 fail)로 남았다.** 재개 시 트리 상태·복구 절차는 인계 문서 `docs/handoff/2026-08-19-map-nearby-load.md`를 먼저 읽는다. 위 DoD 체크박스는 그 하드닝이 끝나고 `npm test`가 다시 전량 green이 된 시점에 닫는다. N1(`mapHtmlSandbox` 파일명 ≠ 대표 export `createMapSandbox`)은 기능 영향 0이라 다음 지도 스프린트로 이월 가능. S2(D 페이지 팬아웃)·S3(B 캐시 영속)은 §11 개요를 바탕으로 **각각 별도 plan.md**로 착수한다.
+**현재 상태(2026-08-19, qa-logic 재검증 후)**: **L1·L2·N1·D1이 전부 닫혔고 회귀 0.** 지표는 **199 스위트 / 2,038 테스트 green · `tsc` 0 · 뮤턴트 12종 전부 killed · 탐침 10종 통과**(근거: `qa-report-logic.md` §14). 하드닝 전 약점을 실증했던 탐침 2종이 실제로 닫힌 것도 확인됐다(P6: 예외 전파 → 0, P4: `removed`의 `setMapCalls` 0 → `setMap(null)` 수신).
+
+⚠ **트리 상태에 관한 기록 불일치 주의**: 상위 루프(`docs/loops/ux-improvements.md`)는 토큰 예산 초과로 종료되며 "1 스위트 FAIL(중간 편집 상태)"을 남겼는데, 그것은 **샌드박스 디렉터리 개명이 끝나기 전의 스냅샷**이다. 리더가 잔여 참조 2곳(`createMapSandbox/index.ts` 재export, `mapHtml.spec.ts`의 import 경로)을 정정해 green으로 복구했고, **현재 트리는 정상**이다. 재개 시 인계 문서 `docs/handoff/2026-08-19-map-nearby-load.md` §3을 먼저 읽는다.
+
+**코드 작업으로 남은 것은 없다.** 미완 3건은 전부 **실기기가 유일한 권위**라 문서·코드로 닫을 수 없다 — **U1**(T0 클러스터러 API 실측) · **U2**(디바이스 스모크 S1~S8) · **U3**(실 SDK의 `clear`/`removeMarkers` 실동작). 다음 단계는 S1 커밋·PR 후 스모크이며, S2(D)·S3(B)는 §11 개요를 바탕으로 각각 별도 plan.md로 착수한다. N1(`mapHtmlSandbox` 파일명 ≠ 대표 export `createMapSandbox`)은 기능 영향 0이라 다음 지도 스프린트로 이월 가능. S2(D 페이지 팬아웃)·S3(B 캐시 영속)은 §11 개요를 바탕으로 **각각 별도 plan.md**로 착수한다.
 
 ---
 
@@ -449,5 +459,7 @@ new kakao.maps.Map(...)  →  me 오버레이  →  resetMarkers()  →  ensureC
 | **R3** | 2026-08-19 | **뮤턴트 M7·M10 편입.** QA가 재작성 단언의 하중을 실증하려고 추가한 2종(INIT 순서 뒤집기 / full 모드가 delta만 `addMarkers`)과 killed 결과를 계획에 기록 → "완화 0"이 형식이 아니라 실효임을 문서에서 추적 가능 | qa-logic §6 | 리더 2026-08-19 | §6 T8 |
 | **R4** | 2026-08-19 | **§4.1 "다음 주입 1회로 항상 자기 치유" 전제 정정.** 자기 치유는 레지스트리와 표시 상태가 일치할 때만 성립하는데 조정은 레지스트리를 먼저 갱신하므로, 부착 실패 시 그 핀이 "유지"로 판정돼 복구되지 않는다. `none` 분기에만 예외 격리가 없어 이 경로가 실재함을 QA가 탐침 P6으로 실측. **명령형 패치 기각 결론은 유지**(국소·희귀 결함 ≠ 명령형 미러의 전역·상시 desync). 잔여 한계(격리는 전파 차단이지 자기 치유가 아님)를 계약에 명시 | qa-logic §9 **L1** | 리더 2026-08-19 | §4.1(전제 정정 블록) |
 | **R5** | 2026-08-19 | **3모드 공통 예외 격리 계약 추가.** `none` 분기 핀별 try/catch(L1) + 강등 **전** `removed` 명시 탈착(L2 — `removed`는 이미 `mkPins`에서 빠져 지역 배열이 유일 참조라, `removeMarkers`와 `clear`가 연달아 실패하면 영구 유령) | qa-logic §9 **L1·L2** | 리더 2026-08-19 | §4.4 · §12 |
+
+| **R6** | 2026-08-19 | **하드닝 반영 결과로 계획 갱신.** ① §4.1의 "잔여 한계(수용)"를 **해소**로 정정 — dev가 `forgetPinByOverlay`를 신설해 부착 실패 핀의 레지스트리 롤백까지 구현했고(QA 권고안보다 강함), 그 결과 자기 치유 전제가 `none` 분기에서도 문자 그대로 성립한다. ② §6 T8 뮤턴트 표를 M1~M12 전량으로 확장(M8·M9 누락분 + 하드닝 전용 M11·M12). ③ §12 DoD를 재검증 실측치로 갱신하고, 루프 종료 기록의 "1 스위트 FAIL"이 개명 도중 스냅샷이며 현재 트리는 green임을 명시 | qa-logic 재검증 §14 | 리더 2026-08-19 | §4.1 · §6 T8 · §12 |
 
 **미반영(계획 문서 밖 · 리더 결정 대기)**: qa-logic이 권고한 sprint-planning **스킬** 규칙 추가 — *"심볼 삭제를 지시하는 계획은 그 심볼에 묶인 기존 단언의 처리 방침을 함께 명시한다."* `.claude/skills/`는 하네스 설정 영역이라 팀 내 합의만으로 sprint-planner가 수정하지 않는다. 승인 시 이 plan의 §4.6 블록을 규칙 문안의 실사용 예시로 그대로 옮긴다(CLAUDE.md 변경 이력에도 1행 필요).
