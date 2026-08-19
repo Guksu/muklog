@@ -41,7 +41,16 @@ export const signInWithGoogleOAuth = async (): Promise<OAuthSignInResult> => {
     return { ok: false, cancelled: false, token: AuthErrorToken.NetworkFailed };
   }
 
-  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  // Android 커스텀탭 옵션(2026-08-19 실기기 확증):
+  //   expo-web-browser 폴리필은 커스텀탭을 FLAG_ACTIVITY_NEW_TASK(별도 태스크)로 띄우는데, 별도 태스크에서는
+  //   Supabase 302 → muklog:// 리다이렉트 인텐트가 MainActivity에 전달되지 않아 로그인이 dismiss로 끝난다
+  //   (일반 Chrome 탭·직접 링크 탭에서는 동일 스킴이 정상 전달됨 — 커스텀탭 태스크 분리만이 변인).
+  //   createTask:false = 같은 태스크에 열어 리다이렉트가 onNewIntent로 도달, showInRecents:true = 백그라운드
+  //   전환 시 태스크 정리로 플로우가 끊기는 것 방지. iOS는 네이티브 ASWebAuthenticationSession 경로라 무시.
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo, {
+    createTask: false,
+    showInRecents: true,
+  });
   // ② 브라우저 결과 — success 면 리다이렉트 회수 성공, cancel/dismiss 면 앱으로 URL이 안 돌아온 것.
   traceAuth({ line: `browser=${result.type}` });
   if (result.type === 'cancel' || result.type === 'dismiss') {

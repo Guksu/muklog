@@ -57,6 +57,17 @@ describe('signInWithGoogleOAuth', () => {
     expect(result).toEqual({ ok: true, userId: 'gid' });
   });
 
+  it('커스텀탭을 같은 태스크로 연다(createTask:false·showInRecents:true — Android 리다이렉트 전달)', async () => {
+    await signInWithGoogleOAuth();
+    // 별도 태스크(FLAG_ACTIVITY_NEW_TASK)의 커스텀탭에서는 muklog:// 리다이렉트 인텐트가
+    // MainActivity로 전달되지 않아 로그인이 dismiss로 끝난다(2026-08-19 실기기 확증).
+    expect(mockOpenAuthSession).toHaveBeenCalledWith(
+      'https://accounts.google.com/o/oauth2/auth',
+      'muklog://auth/callback',
+      { createTask: false, showInRecents: true },
+    );
+  });
+
   it('signInWithOAuth 실패 시 NetworkFailed를 반환하고 브라우저를 열지 않는다', async () => {
     mockSignInWithOAuth.mockResolvedValue({ data: null, error: { message: 'boom' } });
     const result = await signInWithGoogleOAuth();
