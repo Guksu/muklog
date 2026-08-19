@@ -7,19 +7,13 @@
 //     · AppMark boxShadow(코럴 그림자 rgba(255,77,109,.24)) → RN brandShadow 근사(킷 mk-auth:80). 컬러 섀도우는 iOS만 충실/Android elevation 근사.
 //     · <br/> 줄바꿈 → '\n'. <u> 밑줄 약관 → Text underline + onPress(expo-web-browser 인앱 브라우저로 약관/개인정보 열기, OAuth와 동일 패턴).
 //   showApple 기본값 = Platform.OS==='ios'(Android는 Apple 버튼 비노출 — plan E5).
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 
 import { AppMark, SocialButton, Text } from '@/components';
-// ⚠️ 임시 진단 — 원인 확정 후 이 import 와 아래 사용처를 함께 제거한다.
-import {
-  AUTH_DIAGNOSTICS_ENABLED,
-  readAuthTrace,
-  subscribeAuthTrace,
-} from '@/features/auth/authDiagnostics';
 import { PRIVACY_URL, TERMS_URL } from '@/lib/legal';
 import { authVisualGradient, useTheme } from '@/theme';
 
@@ -56,11 +50,6 @@ export const LoginScreen = ({
 }: LoginScreenProps) => {
   const theme = useTheme();
   const busy = authenticating !== null;
-  // ⚠️ 임시 진단 — 상태 전이 없이 늦게 추가되는 줄(포그라운드 복귀 등)도 보이도록 구독으로 깨운다.
-  const [authTrace, setAuthTrace] = useState(readAuthTrace);
-  useEffect(function watchAuthTrace() {
-    return subscribeAuthTrace({ onChange: () => setAuthTrace(readAuthTrace()) });
-  }, []);
 
   return (
     <SafeAreaView style={[styles.flex, { backgroundColor: theme.color.bg }]} edges={['top', 'bottom']}>
@@ -100,12 +89,6 @@ export const LoginScreen = ({
         {loginError ? (
           <Text variant="bodySm" color="error" style={styles.error}>
             {loginError}
-          </Text>
-        ) : null}
-        {/* ⚠️ 임시 진단 표시 — OAuth 실패 지점을 기기 화면에서 읽기 위함. 원인 확정 후 제거(authDiagnostics). */}
-        {AUTH_DIAGNOSTICS_ENABLED && authTrace.length > 0 ? (
-          <Text variant="caption" color="fgAssistive" style={styles.diagnostics}>
-            {authTrace.join('\n')}
           </Text>
         ) : null}
         {showApple ? (
@@ -172,8 +155,6 @@ const styles = StyleSheet.create({
   // 킷: 버튼 영역 flex none, padding 0 24 40, gap 11(mk-auth:106).
   actions: { paddingHorizontal: 24, paddingBottom: 40, gap: 11 },
   error: { textAlign: 'center' },
-  // ⚠️ 임시 진단 표시 스타일 — 원인 확정 후 제거.
-  diagnostics: { textAlign: 'left', lineHeight: 15, fontSize: 10 },
   // 킷 약관 500/11.5/1.6, center, margin 10 12 0(mk-auth:109).
   terms: { textAlign: 'center', marginTop: 10, marginHorizontal: 12, lineHeight: 18 },
   termsLink: { textDecorationLine: 'underline' },
