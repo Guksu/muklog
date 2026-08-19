@@ -59,15 +59,24 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     }
 
     var mkMap = null;
-    var mkOverlays = [];
     var mkMeOverlay = null; // INIT에서 생성한 현재위치(파란 점) 오버레이 참조 보관(재센터 시 위치 갱신용).
     // map-pin-select: id→{el,overlay,kind} 추적(SET_SELECTED가 매칭 핀만 토글) + 현재 선택 id.
     //   mkSelectedId는 renderMarkers(SET_MARKERS 재주입)에서 재적용돼 선택이 유지된다(§3.6).
+    // map-nearby-load: 항목에 sig를 추가해 {el,overlay,kind,sig}가 됐다(§4.2). sig는 "이 핀을 재사용해도
+    //   되는가"의 단일 판별자다. 표시 중 오버레이 배열은 폐기하고 mkPins에서 파생한다 —
+    //   두 구조가 어긋나면 유령 핀이 되는데, 파생시키면 어긋날 여지 자체가 없다. 순서는 어떤 계약에도
+    //   쓰이지 않는다(핀 stacking은 overlay.setZIndex가 단독 결정).
     var mkPins = {};
     var mkSelectedId = null;
     // map-clustering: 인접 핀을 개수 버블로 묶는 Kakao MarkerClusterer. null이면 강등 상태
     //   (라이브러리 미로드/생성 실패) → 기존 개별 핀 렌더 경로가 그대로 동작한다(§3.6 E4).
     var mkClusterer = null;
+    // map-nearby-load: 오버레이 "표시 소유권" 모드(§4.4).
+    //   'none'    = 클러스터러 없음 → 오버레이를 지도에 직접 붙였다 뗀다(setMap).
+    //   'partial' = removeMarkers 실존 → 멤버십을 delta로만 동기화(권장 경로).
+    //   'full'    = 클러스터러는 있으나 removeMarkers 부재 → clear() 후 전량 재등록(오버레이·DOM은 재사용).
+    //   ensureClusterer 말미에 1회 확정하고 렌더마다 재판정하지 않는다.
+    var mkClusterMode = 'none';
 
     // ── 클러스터 설정(plan §3.4 실값 계약) — 스모크 튜닝은 이 블록 한 곳에서만 만진다(§3.7). ──
     var MK_CLUSTER_OPTIONS = {
@@ -108,6 +117,17 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     //   폐기해 아래에서 재생성한다(clear()를 선행했으므로 유령 버블 없음).
     //   라이브러리 미로드·MarkerClusterer 미정의·생성 예외는 전부 삼키고 mkClusterer=null로 둔다 →
     //   renderMarkers가 기존 개별 핀 경로로 강등된다(E4). 지도 자체는 멀쩡하므로 ERROR는 발신하지 않는다.
+    // map-nearby-load: 표시 소유권 모드를 확정한다(§4.4). Kakao MarkerClusterer 문서에는 removeMarkers·
+    //   redraw가 있으나 SDK 버전에 따라 없을 수 있어 typeof로 실존 확인한 뒤에만 그 경로를 고른다 —
+    //   "없는 API를 지어내지 않는다"(map-clustering dev-notes) 규율을 그대로 계승한다.
+    function syncClusterMode() {
+      if (!mkClusterer) {
+        mkClusterMode = 'none';
+        return;
+      }
+      mkClusterMode = typeof mkClusterer.removeMarkers === 'function' ? 'partial' : 'full';
+    }
+
     function ensureClusterer() {
       if (mkClusterer) {
         try {
@@ -117,6 +137,7 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
         } catch (e) {
           mkClusterer = null;
         }
+        syncClusterMode(); // 재사용 확정분 — 아래 early-return을 타므로 여기서 확정한다.
       }
       if (mkClusterer) return;
       try {
@@ -133,6 +154,10 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
         });
       } catch (e) {
         mkClusterer = null; // 강등.
+      } finally {
+        // 신규 생성분(실패 시 'none') — 매 렌더가 아니라 여기서 1회 확정한다.
+        //   finally인 이유: 라이브러리 미로드(MarkerClusterer 미정의) 조기 return도 반드시 확정을 거쳐야 한다.
+        syncClusterMode();
       }
     }
 
@@ -159,59 +184,171 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
       });
     }
 
-    function clearMarkers() {
-      // map-clustering: 클러스터러가 오버레이의 표시 소유권을 갖고 있으므로 먼저 해제한다.
-      //   빠지면 고스트 핀이 지도에 영구히 남는다(§3.6 C2). clear()가 실패해도 아래 setMap(null)
-      //   정리는 반드시 수행되도록 예외를 격리한다.
-      if (mkClusterer) { try { mkClusterer.clear(); } catch (e) {} }
-      for (var i = 0; i < mkOverlays.length; i++) { mkOverlays[i].setMap(null); }
-      mkOverlays = [];
-      mkPins = {}; // id→핀 추적도 함께 비운다(mkSelectedId는 유지 — SET_MARKERS 재주입 시 재적용).
+    // ── map-nearby-load: 증분 마커 조정(§4.2~§4.5) ──────────────────────────────────
+    // 핀 시그니처 — "이 핀을 재사용해도 되는가"의 단일 판별자. 키는 m.id(동일성)이므로 sig에는 넣지 않고,
+    //   DOM/오버레이 생성에 실제로 반영되는 4개만 담는다: kind→className·zIndex / emoji→textContent /
+    //   lat·lng→position. ⚠️ selected는 넣지 않는다 — 선택은 SET_SELECTED가 클래스 토글로 단독 처리하며
+    //   (map-pin-select §3.4), sig에 넣으면 선택할 때마다 핀이 재생성돼 그 결정을 되돌린다.
+    function pinSig(m) {
+      return m.kind + '|' + m.emoji + '|' + m.lat + '|' + m.lng;
     }
 
-    function renderMarkers(markers) {
-      clearMarkers();
-      if (!mkMap || !markers) return;
-      for (var i = 0; i < markers.length; i++) {
-        (function (m) {
-          var el = document.createElement('div');
-          // map-wish-pins: kind 분기 — nearby=웜그레이(.mk-pin--nearby), wish=앰버(.mk-pin--wish), saved=primary(base).
-          el.className = m.kind === 'nearby' ? 'mk-pin mk-pin--nearby'
-            : (m.kind === 'wish' ? 'mk-pin mk-pin--wish' : 'mk-pin');
-          el.dataset.pinId = m.id; // map-pin-select: id로 추적(SET_SELECTED 토글 대상).
-          el.textContent = m.emoji;
-          // map-pin-select: SET_MARKERS 재주입 후에도 선택 유지 — 현재 선택 id면 active 클래스 재적용.
-          var active = m.id === mkSelectedId;
-          if (active) el.classList.add('mk-pin--active');
-          el.addEventListener('click', function markerTap(event) {
-            // map-pin-select: 마커 탭이 지도 배경 click(MAP_TAP)으로 새어 즉시 해제되지 않게 경합 차단.
-            if (event && event.stopPropagation) event.stopPropagation();
-            // map-wish-pins: kind 동봉(MapTabScreen이 SelectedSpotCard/NearbySpotCard/WishSpotCard 분기).
-            post({ type: 'MARKER_TAP', id: m.id, kind: m.kind });
-          });
-          var overlay = new kakao.maps.CustomOverlay({
-            position: new kakao.maps.LatLng(m.lat, m.lng),
-            content: el,
-            yAnchor: 1,
-            zIndex: pinZIndex(m.kind, active), // active 5 / saved 3 / wish 2 / nearby 1.
-          });
-          // map-clustering: 클러스터러가 있으면 표시는 클러스터러가 관리한다(여기서 setMap하면 이중 표시).
-          //   없으면(강등) 기존대로 각 오버레이를 직접 지도에 붙인다(§3.6 C2 폴백).
-          if (!mkClusterer) overlay.setMap(mkMap);
-          mkOverlays.push(overlay);
-          mkPins[m.id] = { el: el, overlay: overlay, kind: m.kind };
-        })(markers[i]);
+    // 핀 1건의 DOM + 오버레이를 만들고 레지스트리에 등록한다. 지도 표시는 하지 않는다 —
+    //   표시 소유권은 모드별로 갈리므로 applyOverlayDelta가 단독으로 반영한다(§4.4 이중 표시 방지).
+    function createPinOverlay(m) {
+      var el = document.createElement('div');
+      // map-wish-pins: kind 분기 — nearby=웜그레이(.mk-pin--nearby), wish=앰버(.mk-pin--wish), saved=primary(base).
+      el.className = m.kind === 'nearby' ? 'mk-pin mk-pin--nearby'
+        : (m.kind === 'wish' ? 'mk-pin mk-pin--wish' : 'mk-pin');
+      el.dataset.pinId = m.id; // map-pin-select: id로 추적(SET_SELECTED 토글 대상).
+      el.textContent = m.emoji;
+      // map-pin-select: SET_MARKERS 재주입 후에도 선택 유지 — 현재 선택 id면 active 클래스 재적용.
+      var active = m.id === mkSelectedId;
+      if (active) el.classList.add('mk-pin--active');
+      el.addEventListener('click', function markerTap(event) {
+        // map-pin-select: 마커 탭이 지도 배경 click(MAP_TAP)으로 새어 즉시 해제되지 않게 경합 차단.
+        if (event && event.stopPropagation) event.stopPropagation();
+        // map-wish-pins: kind 동봉(MapTabScreen이 SelectedSpotCard/NearbySpotCard/WishSpotCard 분기).
+        post({ type: 'MARKER_TAP', id: m.id, kind: m.kind });
+      });
+      var overlay = new kakao.maps.CustomOverlay({
+        position: new kakao.maps.LatLng(m.lat, m.lng),
+        content: el,
+        yAnchor: 1,
+        zIndex: pinZIndex(m.kind, active), // active 5 / saved 3 / wish 2 / nearby 1.
+      });
+      mkPins[m.id] = { el: el, overlay: overlay, kind: m.kind, sig: pinSig(m) };
+      return overlay;
+    }
+
+    // 레지스트리에 등록된 오버레이 전량(= 지금 표시되어야 할 전부). mkMeOverlay는 mkPins에 등록되지
+    //   않으므로 여기 절대 섞이지 않는다 → 현재위치 점은 클러스터 대상이 아니다(§3.6 C4 유지).
+    function allPinOverlays() {
+      var list = [];
+      for (var id in mkPins) {
+        if (!mkPins.hasOwnProperty(id)) continue;
+        list.push(mkPins[id].overlay);
       }
-      if (mkClusterer) {
-        try {
-          mkClusterer.addMarkers(mkOverlays); // me 오버레이는 mkOverlays에 없다 → 클러스터 대상 아님(§3.6 C4).
-        } catch (e) {
-          // 강등(E4): 클러스터러가 CustomOverlay를 받지 못하면 이후로도 개별 핀 경로로 렌더한다.
-          try { mkClusterer.clear(); } catch (e2) {}
-          mkClusterer = null;
-          for (var j = 0; j < mkOverlays.length; j++) { mkOverlays[j].setMap(mkMap); }
+      return list;
+    }
+
+    // 레지스트리에서 특정 오버레이의 핀 항목을 지운다(부착 실패 롤백 전용, qa-logic L1).
+    //   실패 경로에서만 도는 O(n) 스캔이라 정상 경로 비용은 0이다.
+    function forgetPinByOverlay(overlay) {
+      for (var id in mkPins) {
+        if (!mkPins.hasOwnProperty(id)) continue;
+        if (mkPins[id].overlay === overlay) {
+          delete mkPins[id];
+          return;
         }
       }
+    }
+
+    // 강등(§3.6 E4 / §4.4): 클러스터러 조작이 던지면 폐기하고 이후 개별 핀 경로로 간다.
+    //   ⚠️ delta(added)만 다시 붙이면 클러스터러가 그리고 있던 "유지" 핀들이 어디에도 안 붙어 핀이
+    //   통째로 사라진다 → 반드시 레지스트리 전량을 지도에 부착한다. 지도 자체는 멀쩡하므로 ERROR는
+    //   발신하지 않는다(기존 정책). 강등은 단방향이며 클러스터러 부활 경로는 재-INIT뿐이다.
+    function demoteClusterer() {
+      if (mkClusterer) { try { mkClusterer.clear(); } catch (e) {} }
+      mkClusterer = null;
+      mkClusterMode = 'none';
+      var all = allPinOverlays();
+      for (var i = 0; i < all.length; i++) {
+        try { all[i].setMap(mkMap); } catch (e2) {}
+      }
+    }
+
+    // 조정 결과(added/removed)를 실제 표시에 반영한다 — 표시 소유권 규칙(§3.6 C2)에 따라 모드별로 갈린다.
+    //   변화가 0이면 아무것도 하지 않는다(E1: 같은 집합 재주입 시 redraw조차 돌지 않는다).
+    function applyOverlayDelta(added, removed) {
+      if (added.length === 0 && removed.length === 0) return;
+      if (mkClusterMode === 'none') {
+        // 핀별 격리(qa-logic L1) — 한 오버레이의 실패가 나머지 조정을 막지 않는다(E7과 같은 원칙).
+        //   여기가 유일하게 무방비였다: partial/full은 catch→강등으로 보호되고 resetMarkers도 핀별 격리다.
+        //   예외가 새면 __muklogSetMarkers 밖으로 전파되는데 RN 주입부에는 try/catch가 없어 조용히 실패한다.
+        for (var i = 0; i < removed.length; i++) {
+          try { removed[i].setMap(null); } catch (e) {}
+        }
+        for (var j = 0; j < added.length; j++) {
+          try {
+            added[j].setMap(mkMap);
+          } catch (e2) {
+            // 부착 실패 핀은 레지스트리에서 되돌린다. 남겨두면 sig가 맞아 다음 주입에서 "유지"로 판정돼
+            //   영원히 안 붙는다 — §4.1이 명령형 패치를 기각하며 내세운 "전체 집합 재주입 1회로 자기치유"가
+            //   이 분기에서만 깨지는 경로다. 되돌려 두면 다음 주입이 새로 만들어 붙인다.
+            forgetPinByOverlay(added[j]);
+          }
+        }
+        return;
+      }
+      try {
+        if (mkClusterMode === 'partial') {
+          // nodraw로 다시 그리기를 미룬 뒤 마지막에 redraw() 1회 — redraw가 없는 SDK면 nodraw도 쓰지 않는다.
+          var canRedraw = typeof mkClusterer.redraw === 'function';
+          if (removed.length) {
+            if (canRedraw) mkClusterer.removeMarkers(removed, true);
+            else mkClusterer.removeMarkers(removed);
+          }
+          if (added.length) {
+            if (canRedraw) mkClusterer.addMarkers(added, true);
+            else mkClusterer.addMarkers(added);
+          }
+          if (canRedraw) mkClusterer.redraw();
+        } else {
+          // full: 멤버십만 전량 재구성한다. 오버레이·DOM은 재사용하므로 깜빡임은 버블 수준에 그친다.
+          mkClusterer.clear();
+          mkClusterer.addMarkers(allPinOverlays());
+        }
+      } catch (e) {
+        // 제거 대상은 renderMarkers 2단계에서 이미 mkPins에서 빠졌다 — 클러스터러가 못 떼고 강등되면
+        //   레지스트리에도 없고 화면에만 남는 영구 유령이 된다(회수 수단 0). 강등 전에 직접 떼어낸다
+        //   (qa-logic L2: removeMarkers 실패 + clear() 실패의 이중 고장 경로).
+        for (var k = 0; k < removed.length; k++) {
+          try { removed[k].setMap(null); } catch (e3) {}
+        }
+        demoteClusterer();
+      }
+    }
+
+    // 재-INIT 전용 전량 폐기(§4.5). __muklogInit은 새 kakao.maps.Map을 만들기 때문에 레지스트리에 남은
+    //   오버레이는 "죽은 지도"에 묶여 있다. 리셋이 없으면 조정 알고리즘이 sig 일치를 보고 "유지"로 판정해
+    //   새 지도에 아무것도 안 붙는 조용한 실패(빈 지도)가 된다. 개별 setMap(null)은 죽은 지도에서 던질 수
+    //   있으므로 핀별로 격리한다 — 한 핀의 실패가 나머지 정리를 막지 않는다.
+    function resetMarkers() {
+      for (var id in mkPins) {
+        if (!mkPins.hasOwnProperty(id)) continue;
+        try { mkPins[id].overlay.setMap(null); } catch (e) {}
+      }
+      mkPins = {}; // mkSelectedId는 유지 — 재주입 시 같은 id 핀에 active가 재적용된다(§4.5).
+    }
+
+    // SET_MARKERS는 여전히 "표시되어야 할 마커 전체 집합"이라는 선언적 의미다(RN 무변경 §4.1).
+    //   증분화는 여기 내부 구현 — 목표 집합과 레지스트리를 비교해 add/remove/keep으로 나눈다.
+    //   ⚠️ 기존과 달리 선행 전량 삭제를 하지 않는다. 유지 핀은 DOM·오버레이·리스너까지 그대로 산다.
+    function renderMarkers(markers) {
+      if (!mkMap || !markers) return;
+      // 1) 목표 집합 — 중복 id는 뒤가 이긴다(RN mergeMapMarkers가 이미 dedup하지만 방어, E3).
+      var next = {};
+      for (var i = 0; i < markers.length; i++) next[markers[i].id] = markers[i];
+      // 2) 제거 대상: 목표에 없거나(사라짐) sig가 달라진(내용 변경) 기존 핀.
+      var removed = [];
+      for (var id in mkPins) {
+        if (!mkPins.hasOwnProperty(id)) continue;
+        var keep = next.hasOwnProperty(id) && pinSig(next[id]) === mkPins[id].sig;
+        if (!keep) {
+          removed.push(mkPins[id].overlay);
+          delete mkPins[id];
+        }
+      }
+      // 3) 추가 대상: 레지스트리에 없는 목표 핀(= 신규 + sig 변경으로 방금 빠진 것).
+      var added = [];
+      for (var id2 in next) {
+        if (!next.hasOwnProperty(id2)) continue;
+        if (mkPins.hasOwnProperty(id2)) continue; // 유지 핀 — 절대 손대지 않는다(I1).
+        added.push(createPinOverlay(next[id2]));
+      }
+      // 4) 표시 반영(§4.4). 이 시점의 mkPins 키 집합 == 주입 id 집합(I2).
+      applyOverlayDelta(added, removed);
     }
 
     // RN → WebView: 초기화(center/markers/me).
@@ -232,6 +369,12 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
           });
           mkMeOverlay.setMap(mkMap);
         }
+        // map-nearby-load(§4.5): 실행 순서를 계약으로 고정한다 —
+        //   new Map → me 오버레이 → 레지스트리 리셋 → 클러스터러 준비 → 마커 렌더.
+        //   resetMarkers가 ensureClusterer보다 **앞**이어야 한다: 뒤로 가면 ensureClusterer의 clear()가
+        //   이미 참조를 놓은 뒤라 setMap(null)이 무의미해질 수 있고, 앞에 두면 clear()가 클러스터러
+        //   내부 목록까지 비워 유령 버블 0(E8)이 유지된다.
+        resetMarkers();
         // map-clustering: mkMap 생성 후 · 첫 renderMarkers 전에 클러스터러를 준비한다(§3.6 C3).
         ensureClusterer();
         renderMarkers(payload.markers);

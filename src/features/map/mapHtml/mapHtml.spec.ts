@@ -2,6 +2,11 @@
 // Kakao JS SDK 로드 HTML 생성 함수 단위 테스트 (plan §3.5·§5-1 HTML 템플릿).
 //   JS 키 주입(placeholder 치환) / Kakao SDK 스크립트 src / READY·MARKER_TAP·ERROR postMessage 송신부
 //   / 마커 직렬화(이모지 렌더)·INIT/SET_MARKERS 핸들러 정의 존재를 문자열로 검증. 실 SDK는 스모크.
+//   ⚠️ map-nearby-load: 아래 describe('mapHtml')는 여전히 **문자열 계약** 단위다. 증분 조정 알고리즘처럼
+//      분기·상태가 있는 코드는 문자열로 회귀를 못 잡으므로, 파일 하단 describe('mapHtml 실행')이
+//      createMapSandbox로 스크립트를 실제 실행해 동작을 단언한다(plan §6 T1~T6).
+import { MapPinKind, type MapMarker, type Region } from '../types';
+import { createMapSandbox, type ClustererConfig } from '@/test/createMapSandbox';
 import { mapHtml } from './mapHtml';
 
 describe('mapHtml', () => {
@@ -274,21 +279,35 @@ describe('mapHtml', () => {
     expect(styles.match(/mkClusterStyle\(/g)).toHaveLength(3); // calculator [10,100]과 짝이 맞는 3단계
   });
 
-  it('renderMarkers가 클러스터러에 mkOverlays를 넘긴다(me 오버레이 제외 — §3.6 C4)', () => {
-    const render = fnBody({ fnName: 'renderMarkers' });
-    expect(render).toContain('mkClusterer.addMarkers(mkOverlays)');
-    // me 오버레이(mkMeOverlay)는 mkOverlays에 push되지 않으므로 클러스터 대상이 아니다.
-    expect(html).not.toContain('mkOverlays.push(mkMeOverlay)');
-    expect(html.match(/mkOverlays\.push\(/g)).toHaveLength(1);
+  // ⚠️ map-nearby-load(§4.6)로 `mkOverlays` 배열과 `clearMarkers()`가 폐기됐다. 아래 두 건은 그 심볼에
+  //   직접 묶여 있어 문장 그대로는 유지가 불가능한 유일한 케이스다 — **의도(클러스터 대상에서 me 오버레이
+  //   제외 / 고스트 핀 방지 정리)는 후속 심볼(allPinOverlays·resetMarkers) 위에서 더 강하게 다시 잠근다.**
+  it('클러스터러에 넘기는 오버레이는 레지스트리(mkPins)에서만 파생된다(me 오버레이 제외 — §3.6 C4)', () => {
+    const all = fnBody({ fnName: 'allPinOverlays' });
+    expect(all).toContain('mkPins[id].overlay');
+    // me 오버레이(mkMeOverlay)는 mkPins에 등록되지 않으므로 클러스터 대상이 될 경로가 없다.
+    //   레지스트리 등록 지점이 createPinOverlay 한 곳뿐임을 개수로 잠근다(다른 곳에서 끼워 넣으면 red).
+    expect(html.match(/mkPins\[[^\]]+\] = \{/g)).toHaveLength(1);
+    // 클러스터러가 받는 오버레이는 delta(added/removed) 또는 allPinOverlays() 결과뿐이다.
+    const apply = fnBody({ fnName: 'applyOverlayDelta' });
+    expect(apply).toContain('mkClusterer.addMarkers(added');
+    expect(apply).toContain('mkClusterer.addMarkers(allPinOverlays())');
+    expect(apply).not.toContain('mkMeOverlay');
   });
 
-  it('clearMarkers가 클러스터러를 먼저 비운다(고스트 핀 방지 — §3.6 C2)', () => {
-    const clear = fnBody({ fnName: 'clearMarkers' });
-    expect(clear).toContain('mkClusterer.clear()');
-    // 클러스터러 밖 오버레이까지 확실히 제거하는 기존 루프도 유지된다.
-    //   ⚠️ 'setMap(null)'로만 보면 바로 위 주석 문장이 단언을 통과시킨다(qa-logic L3 — 죽은 단언).
+  it('resetMarkers가 레지스트리 오버레이를 전량 떼고 클러스터러 정리보다 먼저 돈다(고스트 핀 방지 — §3.6 C2·§4.5)', () => {
+    const reset = fnBody({ fnName: 'resetMarkers' });
+    expect(reset).not.toBe('');
+    // ⚠️ 'setMap(null)'로만 보면 바로 위 주석 문장이 단언을 통과시킨다(qa-logic L3 — 죽은 단언).
     //   강등 상태에선 이 루프가 오버레이를 지우는 유일한 수단이라 사라지면 고스트가 누적된다.
-    expect(clear).toContain('mkOverlays[i].setMap(null)');
+    expect(reset).toContain('mkPins[id].overlay.setMap(null)');
+    expect(reset).toContain('catch'); // 죽은 지도에서 던져도 나머지 정리를 막지 않는다(E7)
+    expect(reset).toContain('mkPins = {}');
+    // 클러스터러 내부 목록 비우기는 ensureClusterer의 clear()가 이어받는다 → 순서가 계약이다(§4.5).
+    const init = html.slice(html.indexOf('window.__muklogInit'), html.indexOf('window.__muklogSetMarkers'));
+    expect(init).toContain('resetMarkers();');
+    expect(init.indexOf('resetMarkers();')).toBeLessThan(init.indexOf('ensureClusterer();'));
+    expect(html).not.toContain('clearMarkers'); // 폐기된 심볼의 잔재 0(§4.6)
   });
 
   it('클러스터러 미정의·생성 실패 시 예외를 삼키고 강등한다 — ERROR 미발신(§3.6 E4)', () => {
@@ -303,20 +322,27 @@ describe('mapHtml', () => {
     expect(html.match(/type: 'ERROR'/g)).toHaveLength(3);
   });
 
-  it('클러스터러가 없으면 기존 개별 핀 경로(setMap(mkMap))로 렌더한다(강등 경로 잔존)', () => {
-    const render = fnBody({ fnName: 'renderMarkers' });
-    expect(render).toContain('setMap(mkMap)');
-    expect(render).toContain('!mkClusterer'); // 클러스터러 유무 분기
+  it("클러스터러가 없으면(mkClusterMode 'none') 기존 개별 핀 경로(setMap)로 표시한다(강등 경로 잔존)", () => {
+    const apply = fnBody({ fnName: 'applyOverlayDelta' });
+    expect(apply).toContain("mkClusterMode === 'none'"); // 클러스터러 유무 분기(모드로 대체 — §4.4)
+    expect(apply).toContain('setMap(mkMap)'); // 추가분 부착
+    expect(apply).toContain('setMap(null)'); // 제거분 탈착
   });
 
   // qa-logic L2: addMarkers 런타임 강등(클러스터러가 CustomOverlay를 거부하는 T0 실패 형태)을 직접 잠근다.
-  //   위 단언들은 생성 루프의 `if (!mkClusterer)` 가드로도 충족돼, try/catch를 통째로 지워도 green이었다.
+  //   위 단언들은 모드 분기로도 충족돼, try/catch를 통째로 지워도 green이었다.
   it('addMarkers가 던지면 클러스터러를 폐기하고 개별 핀으로 되돌린다(런타임 강등 — §3.6 E4)', () => {
-    const render = fnBody({ fnName: 'renderMarkers' });
-    const afterAdd = render.slice(render.indexOf('addMarkers'));
+    const apply = fnBody({ fnName: 'applyOverlayDelta' });
+    const afterAdd = apply.slice(apply.indexOf('addMarkers'));
     expect(afterAdd).toContain('catch');
-    expect(afterAdd).toContain('mkClusterer = null'); // 이후 렌더도 개별 핀 경로 유지
-    expect(afterAdd).toContain('setMap(mkMap)'); // 이번 렌더분 오버레이 복구
+    expect(afterAdd).toContain('demoteClusterer()');
+    const demote = fnBody({ fnName: 'demoteClusterer' });
+    expect(demote).toContain('mkClusterer = null'); // 이후 렌더도 개별 핀 경로 유지
+    expect(demote).toContain("mkClusterMode = 'none'");
+    // ⚠️ delta가 아니라 **레지스트리 전량**을 다시 붙인다 — delta만 붙이면 클러스터러가 그리던 유지 핀이
+    //   어디에도 안 붙어 핀이 통째로 사라진다(§4.4).
+    expect(demote).toContain('allPinOverlays()');
+    expect(demote).toContain('setMap(mkMap)');
   });
 
   // qa-logic L1 [중대 회귀]: 재-INIT(handleRetry→sendInit)은 같은 WebView에 INIT을 재주입하므로
@@ -341,5 +367,568 @@ describe('mapHtml', () => {
     expect(ensure).toContain('if (mkClusterer) return;');
     // 생성은 ensureClusterer 한 곳에서만 일어난다.
     expect(html.match(/new kakao\.maps\.MarkerClusterer\(/g)).toHaveLength(1);
+  });
+
+  // ── map-nearby-load 증분(문자열 계약, plan §6 T7) ─────────────────────────────
+  // 실행 검증은 아래 createMapSandbox describe가 담당한다. 여기 단언들은 계약 심볼이 실수로 사라지거나
+  //   폐기 심볼이 되살아나는 회귀를 막는 안전망이다.
+  it('핀 시그니처(pinSig)를 두고 id는 넣지 않는다(키=동일성 / sig=내용 — §4.2)', () => {
+    expect(html).toContain('function pinSig(m)');
+    const sig = fnBody({ fnName: 'pinSig' });
+    expect(sig).toContain('m.kind');
+    expect(sig).toContain('m.emoji');
+    expect(sig).toContain('m.lat');
+    expect(sig).toContain('m.lng');
+    expect(sig).not.toContain('m.id'); // id는 레지스트리 키다 — sig에 넣으면 내용 비교가 무의미해진다
+    // selected는 SET_SELECTED가 클래스 토글로 단독 처리한다(map-pin-select 결정 회귀 금지 — §4.2).
+    expect(sig).not.toContain('mkSelectedId');
+  });
+
+  it('폐기 심볼(mkOverlays·clearMarkers)의 잔재가 0이다(§4.6)', () => {
+    expect(html).not.toContain('mkOverlays');
+    expect(html).not.toContain('clearMarkers');
+  });
+
+  it('renderMarkers는 선행 전량 삭제 없이 add/remove/keep으로 조정한다(§4.3)', () => {
+    const render = fnBody({ fnName: 'renderMarkers' });
+    expect(render).toContain('pinSig(next[id]) === mkPins[id].sig'); // 유지 판정의 단일 기준
+    expect(render).toContain('if (mkPins.hasOwnProperty(id2)) continue;'); // 유지 핀 미접촉
+    expect(render).toContain('createPinOverlay(next[id2])');
+    expect(render).toContain('applyOverlayDelta(added, removed)');
+  });
+
+  it('클러스터 모드를 mkClusterMode로 1회 확정하고 typeof로 API 실존을 확인한다(§4.4)', () => {
+    expect(html).toContain("var mkClusterMode = 'none';");
+    const sync = fnBody({ fnName: 'syncClusterMode' });
+    expect(sync).toContain("typeof mkClusterer.removeMarkers === 'function'");
+    expect(sync).toContain("'partial'");
+    expect(sync).toContain("'full'");
+    // 모드 확정은 ensureClusterer에서만 한다(렌더마다 재판정 금지).
+    expect(html.match(/syncClusterMode\(\);/g)).toHaveLength(2); // 재사용 경로 + 신규 생성 경로
+    const apply = fnBody({ fnName: 'applyOverlayDelta' });
+    expect(apply).not.toContain('syncClusterMode');
+    // redraw/nodraw도 실존 확인 후에만 쓴다("없는 API를 지어내지 않는다").
+    expect(apply).toContain("typeof mkClusterer.redraw === 'function'");
+  });
+
+  it('변화가 0이면 클러스터러를 건드리지 않는다(E1 — redraw조차 돌지 않는다)', () => {
+    const apply = fnBody({ fnName: 'applyOverlayDelta' });
+    expect(apply).toContain('if (added.length === 0 && removed.length === 0) return;');
+  });
+});
+
+// ── map-nearby-load: WebView 스크립트 실행 검증 (plan §6 T1~T6 / §4 불변식 I1~I4) ────────────────
+// 여기서부터는 "코드가 무엇을 하는지"를 실제로 돌려서 본다. 위 문자열 단언과 달리 유지/추가/제거 판정,
+//   클러스터 3모드, 재-INIT 리셋 같은 상태 기계가 검증 대상이다.
+//   ⚠️ 샌드박스는 Kakao SDK의 문서화된 표면을 모사할 뿐이다 — 실 SDK 동작의 단독 권위는 디바이스 스모크(§7).
+describe('mapHtml 실행(createMapSandbox)', () => {
+  const CENTER: Region = { lat: 37.5665, lng: 126.978, zoom: 4 };
+
+  const makeMarker = ({
+    id,
+    kind = MapPinKind.Nearby,
+    emoji = '🍜',
+    lat = 37.5,
+    lng = 127.0,
+  }: {
+    id: string;
+    kind?: MapPinKind;
+    emoji?: string;
+    lat?: number;
+    lng?: number;
+  }): MapMarker => ({ id, kind, emoji, lat, lng });
+
+  // p0..p{count-1} — 앞부분이 항상 동일해서 "10건 → 15건"처럼 상위집합 주입을 만들기 쉽다.
+  const makeMarkers = ({ count, from = 0 }: { count: number; from?: number }): MapMarker[] =>
+    Array.from({ length: count }, (_unused, index) =>
+      makeMarker({ id: 'p' + (from + index), lat: 37.5 + (from + index) / 1000 }),
+    );
+
+  const idsOf = ({ markers }: { markers: MapMarker[] }): string[] =>
+    markers.map((marker) => marker.id).sort();
+
+  const boot = ({
+    clusterer,
+    markers,
+  }: { clusterer?: ClustererConfig; markers?: MapMarker[] } = {}) => {
+    const sandbox = createMapSandbox({ clusterer });
+    sandbox.loadSdk();
+    sandbox.init({ center: CENTER, markers: markers ?? [], me: null });
+    return sandbox;
+  };
+
+  const errorsOf = ({ posted }: { posted: Array<Record<string, unknown>> }) =>
+    posted.filter((message) => message.type === 'ERROR');
+
+  // ── T1. 샌드박스 인프라 자체 ────────────────────────────────────────────────
+  it('T1 SDK onload 시뮬레이션으로 READY가 1건 post된다', () => {
+    const sandbox = createMapSandbox();
+    expect(sandbox.posted).toHaveLength(0);
+    sandbox.loadSdk();
+    expect(sandbox.posted).toEqual([{ type: 'READY' }]);
+  });
+
+  it('T1 SDK 로드 실패는 ERROR(SDK_LOAD_FAILED)로 post된다', () => {
+    const sandbox = createMapSandbox();
+    sandbox.failSdk();
+    expect(sandbox.posted).toEqual([{ type: 'ERROR', reason: 'SDK_LOAD_FAILED' }]);
+  });
+
+  it('T1 init(핀 2건)이 CustomOverlay 2개 + addMarkers(길이 2) 1회로 이어진다', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 2 }) });
+    expect(sandbox.overlays).toHaveLength(2);
+    expect(sandbox.counts.div).toBe(2);
+    expect(sandbox.clusterer?.addMarkersCalls).toHaveLength(1);
+    expect(sandbox.clusterer?.addMarkersCalls[0].markers).toHaveLength(2);
+  });
+
+  // ── 기존 핀 계약(6종) 회귀 — 증분화로 바뀌면 안 되는 것들 ───────────────────
+  it('핀 계약 불변: 이모지·3-way className·pinId·zIndex·MARKER_TAP(stopPropagation)', () => {
+    const sandbox = boot({
+      markers: [
+        makeMarker({ id: 's1', kind: MapPinKind.Saved, emoji: '🍜' }),
+        makeMarker({ id: 'w1', kind: MapPinKind.Wish, emoji: '🍕', lat: 37.51 }),
+        makeMarker({ id: 'n1', kind: MapPinKind.Nearby, emoji: '🍣', lat: 37.52 }),
+      ],
+    });
+    expect(sandbox.pins.s1.el.className).toBe('mk-pin');
+    expect(sandbox.pins.w1.el.className).toBe('mk-pin mk-pin--wish');
+    expect(sandbox.pins.n1.el.className).toBe('mk-pin mk-pin--nearby');
+    expect(sandbox.pins.s1.el.textContent).toBe('🍜');
+    expect(sandbox.pins.s1.el.dataset.pinId).toBe('s1');
+    expect(sandbox.pins.s1.overlay.options.zIndex).toBe(3);
+    expect(sandbox.pins.w1.overlay.options.zIndex).toBe(2);
+    expect(sandbox.pins.n1.overlay.options.zIndex).toBe(1);
+    const tap = sandbox.pins.n1.el.click();
+    expect(tap.propagationStopped).toBe(true);
+    expect(sandbox.posted.at(-1)).toEqual({ type: 'MARKER_TAP', id: 'n1', kind: 'nearby' });
+  });
+
+  it('me 오버레이는 레지스트리에도 클러스터에도 들어가지 않는다(§3.6 C4)', () => {
+    const sandbox = createMapSandbox();
+    sandbox.loadSdk();
+    sandbox.init({ center: CENTER, markers: makeMarkers({ count: 2 }), me: { lat: 37.5, lng: 127 } });
+    expect(sandbox.overlays).toHaveLength(3); // me 1 + 핀 2
+    expect(sandbox.pinIds).toHaveLength(2);
+    expect(sandbox.clusterer?.addMarkersCalls[0].markers).toHaveLength(2);
+  });
+
+  // ── T3. 증분 조정 (§4.3, AC1~AC6) ──────────────────────────────────────────
+  it('AC1 동일 집합 재주입은 DOM·오버레이·표시를 전혀 건드리지 않는다(I1·E1)', () => {
+    const markers = makeMarkers({ count: 3 });
+    const sandbox = boot({ markers });
+    const divsAfterFirst = sandbox.counts.div;
+    const overlaysAfterFirst = sandbox.overlays.length;
+
+    sandbox.setMarkers({ markers });
+
+    expect(sandbox.counts.div).toBe(divsAfterFirst);
+    expect(sandbox.overlays).toHaveLength(overlaysAfterFirst);
+    sandbox.overlays.forEach((overlay) => expect(overlay.setMapCalls).toHaveLength(0));
+    // E1: 변화가 0이면 클러스터러도 안 건드린다(첫 렌더의 addMarkers 1 + redraw 1에서 멈춘다).
+    expect(sandbox.clusterer?.addMarkersCalls).toHaveLength(1);
+    expect(sandbox.clusterer?.redrawCalls).toBe(1);
+  });
+
+  it('AC2 10건 → 15건: 신규 5건만 생성되고 제거는 0이다', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 10 }) });
+    const divsAfterFirst = sandbox.counts.div;
+
+    sandbox.setMarkers({ markers: makeMarkers({ count: 15 }) });
+
+    expect(sandbox.counts.div - divsAfterFirst).toBe(5);
+    expect(sandbox.clusterer?.addMarkersCalls.at(-1)?.markers).toHaveLength(5);
+    expect(sandbox.clusterer?.removeMarkersCalls).toHaveLength(0);
+    expect(sandbox.pinIds).toEqual(idsOf({ markers: makeMarkers({ count: 15 }) }));
+  });
+
+  it('AC3 15건 → 12건: 생성 0, 이탈한 3건의 오버레이만 정확히 제거되고 나머지는 미접촉', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 15 }) });
+    const droppedOverlays = ['p12', 'p13', 'p14'].map((id) => sandbox.pins[id].overlay);
+    const keptOverlays = makeMarkers({ count: 12 }).map((marker) => sandbox.pins[marker.id].overlay);
+    const divsAfterFirst = sandbox.counts.div;
+
+    sandbox.setMarkers({ markers: makeMarkers({ count: 12 }) });
+
+    expect(sandbox.counts.div).toBe(divsAfterFirst);
+    const removed = sandbox.clusterer?.removeMarkersCalls.at(-1)?.markers ?? [];
+    expect(removed).toHaveLength(3);
+    droppedOverlays.forEach((overlay) => expect(removed).toContain(overlay));
+    keptOverlays.forEach((overlay) => expect(removed).not.toContain(overlay));
+    expect(sandbox.pinIds).toEqual(idsOf({ markers: makeMarkers({ count: 12 }) }));
+  });
+
+  it('AC4 emoji만 바뀐 1건은 그 핀만 재생성된다(sig 불일치)', () => {
+    const first = makeMarkers({ count: 3 });
+    const sandbox = boot({ markers: first });
+    const divsAfterFirst = sandbox.counts.div;
+    const keptOverlay = sandbox.pins.p0.overlay;
+    const staleOverlay = sandbox.pins.p1.overlay;
+
+    sandbox.setMarkers({
+      markers: first.map((marker) => (marker.id === 'p1' ? { ...marker, emoji: '🍕' } : marker)),
+    });
+
+    expect(sandbox.counts.div - divsAfterFirst).toBe(1);
+    expect(sandbox.pins.p1.el.textContent).toBe('🍕');
+    expect(sandbox.pins.p1.overlay).not.toBe(staleOverlay);
+    expect(keptOverlay.setMapCalls).toHaveLength(0);
+    expect(sandbox.clusterer?.removeMarkersCalls.at(-1)?.markers).toEqual([staleOverlay]);
+  });
+
+  it('AC4-b 좌표만 바뀐 1건도 재생성된다(sig에 lat/lng이 들어 있다)', () => {
+    const first = makeMarkers({ count: 3 });
+    const sandbox = boot({ markers: first });
+    const divsAfterFirst = sandbox.counts.div;
+    const staleOverlay = sandbox.pins.p2.overlay;
+
+    sandbox.setMarkers({
+      markers: first.map((marker) => (marker.id === 'p2' ? { ...marker, lat: 38.1 } : marker)),
+    });
+
+    expect(sandbox.counts.div - divsAfterFirst).toBe(1);
+    expect(sandbox.pins.p2.overlay).not.toBe(staleOverlay);
+    expect(sandbox.clusterer?.removeMarkersCalls.at(-1)?.markers).toEqual([staleOverlay]);
+  });
+
+  it('AC5 빈 배열 주입은 전 핀을 제거하고 레지스트리를 비운다(예외 0 — E2)', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 4 }) });
+
+    sandbox.setMarkers({ markers: [] });
+
+    expect(sandbox.pinIds).toEqual([]);
+    expect(sandbox.clusterer?.removeMarkersCalls.at(-1)?.markers).toHaveLength(4);
+    expect(errorsOf({ posted: sandbox.posted })).toHaveLength(0);
+  });
+
+  it('AC6 조정 후 mkPins 키 집합 == 주입 id 집합이다(I2)', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 5 }) });
+    expect(sandbox.pinIds).toEqual(idsOf({ markers: makeMarkers({ count: 5 }) }));
+
+    const next = [...makeMarkers({ count: 2 }), ...makeMarkers({ count: 3, from: 20 })];
+    sandbox.setMarkers({ markers: next });
+
+    expect(sandbox.pinIds).toEqual(idsOf({ markers: next }));
+  });
+
+  it('E3 중복 id는 뒤가 이긴다(RN dedup의 방어선)', () => {
+    const sandbox = boot({
+      markers: [makeMarker({ id: 'dup', emoji: '🍜' }), makeMarker({ id: 'dup', emoji: '🍕' })],
+    });
+    expect(sandbox.pinIds).toEqual(['dup']);
+    expect(sandbox.pins.dup.el.textContent).toBe('🍕');
+    expect(sandbox.overlays).toHaveLength(1);
+  });
+
+  it('E9 INIT 전 SET_MARKERS는 조용히 무시된다(mkMap null — READY 후 RN이 재주입)', () => {
+    const sandbox = createMapSandbox();
+    sandbox.loadSdk();
+
+    sandbox.setMarkers({ markers: makeMarkers({ count: 2 }) });
+
+    expect(sandbox.pinIds).toEqual([]);
+    expect(sandbox.counts.div ?? 0).toBe(0);
+    expect(errorsOf({ posted: sandbox.posted })).toHaveLength(0);
+  });
+
+  // ── T4. 클러스터러 3모드 (§4.4, AC7~AC10) ──────────────────────────────────
+  it('AC7 partial: delta만 동기화하고 clear 0 · redraw 1회/배치', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 3 }) });
+    expect(sandbox.clusterMode).toBe('partial');
+    const clusterer = sandbox.clusterer;
+    expect(clusterer).not.toBeNull();
+
+    sandbox.setMarkers({ markers: makeMarkers({ count: 6 }) }); // 추가만
+    expect(clusterer?.addMarkersCalls.at(-1)?.markers).toHaveLength(3);
+    expect(clusterer?.addMarkersCalls.at(-1)?.nodraw).toBe(true); // 재계산은 redraw 1회로 모은다
+    expect(clusterer?.removeMarkersCalls).toHaveLength(0);
+    expect(clusterer?.redrawCalls).toBe(2);
+
+    const addCallsBefore = clusterer?.addMarkersCalls.length;
+    sandbox.setMarkers({ markers: makeMarkers({ count: 3 }) }); // 제거만
+    expect(clusterer?.removeMarkersCalls.at(-1)?.markers).toHaveLength(3);
+    expect(clusterer?.addMarkersCalls).toHaveLength(addCallsBefore ?? 0);
+    expect(clusterer?.redrawCalls).toBe(3);
+    expect(clusterer?.clearCalls).toBe(0); // 전량 재구성 0 — 그게 partial의 존재 이유다
+  });
+
+  it('AC7-b redraw가 없는 SDK면 nodraw 없이 호출한다(없는 API를 지어내지 않는다)', () => {
+    const sandbox = boot({ clusterer: { hasRedraw: false }, markers: makeMarkers({ count: 2 }) });
+    expect(sandbox.clusterMode).toBe('partial');
+    expect(sandbox.clusterer?.addMarkersCalls.at(-1)?.nodraw).toBeUndefined();
+    expect(sandbox.clusterer?.redrawCalls).toBe(0);
+  });
+
+  it('AC8 full(removeMarkers 부재): clear + 전체 재등록, DOM 생성은 delta분만', () => {
+    const sandbox = boot({
+      clusterer: { hasRemoveMarkers: false },
+      markers: makeMarkers({ count: 3 }),
+    });
+    expect(sandbox.clusterMode).toBe('full');
+    const clusterer = sandbox.clusterer;
+    expect(clusterer?.clearCalls).toBe(1);
+    const divsAfterFirst = sandbox.counts.div;
+
+    sandbox.setMarkers({ markers: makeMarkers({ count: 5 }) });
+
+    expect(sandbox.counts.div - divsAfterFirst).toBe(2); // 오버레이·DOM은 재사용
+    expect(clusterer?.clearCalls).toBe(2);
+    expect(clusterer?.addMarkersCalls.at(-1)?.markers).toHaveLength(5); // 현재 전체 오버레이
+    expect(errorsOf({ posted: sandbox.posted })).toHaveLength(0);
+  });
+
+  it('AC9 none(클러스터러 미로드): 추가만 부착·제거만 탈착, 유지 핀 setMap 0', () => {
+    const sandbox = boot({ clusterer: { available: false }, markers: makeMarkers({ count: 3 }) });
+    expect(sandbox.clusterMode).toBe('none');
+    expect(sandbox.clusterer).toBeNull();
+    const keptOverlay = sandbox.pins.p0.overlay;
+    const droppedOverlay = sandbox.pins.p2.overlay;
+    expect(keptOverlay.setMapCalls).toHaveLength(1);
+    expect(keptOverlay.setMapCalls[0]).toBe(sandbox.map);
+
+    sandbox.setMarkers({
+      markers: [...makeMarkers({ count: 2 }), makeMarker({ id: 'p9', lat: 37.509 })],
+    });
+
+    expect(keptOverlay.setMapCalls).toHaveLength(1); // 유지 핀 미접촉
+    expect(droppedOverlay.setMapCalls).toHaveLength(2);
+    expect(droppedOverlay.setMapCalls[1]).toBeNull();
+    expect(sandbox.pins.p9.overlay.setMapCalls[0]).toBe(sandbox.map);
+  });
+
+  it('AC10 클러스터 조작이 던지면 강등하고 레지스트리 **전량**을 직접 부착한다(ERROR 0)', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 3 }) });
+    const clusterer = sandbox.clusterer;
+    const keptOverlays = makeMarkers({ count: 3 }).map((marker) => sandbox.pins[marker.id].overlay);
+    keptOverlays.forEach((overlay) => expect(overlay.setMapCalls).toHaveLength(0));
+
+    if (clusterer) clusterer.throwOnAddMarkers = true; // 두 번째 렌더부터 거부
+    sandbox.setMarkers({ markers: makeMarkers({ count: 5 }) });
+
+    expect(sandbox.clusterer).toBeNull();
+    expect(sandbox.clusterMode).toBe('none');
+    // ⚠️ delta(신규 2건)가 아니라 5건 전부가 붙어야 한다 — 유지 3건이 빠지면 핀이 통째로 사라진다.
+    expect(sandbox.pinIds).toHaveLength(5);
+    sandbox.pinIds.forEach((id) => {
+      expect(sandbox.pins[id].overlay.setMapCalls.at(-1)).toBe(sandbox.map);
+    });
+    keptOverlays.forEach((overlay) => expect(overlay.setMapCalls).toHaveLength(1));
+    expect(errorsOf({ posted: sandbox.posted })).toHaveLength(0);
+
+    // 이후 렌더는 none 모드로 이어진다(강등은 단방향).
+    const divsBefore = sandbox.counts.div;
+    sandbox.setMarkers({ markers: makeMarkers({ count: 6 }) });
+    expect(sandbox.counts.div - divsBefore).toBe(1);
+    expect(sandbox.pins.p5.overlay.setMapCalls[0]).toBe(sandbox.map);
+  });
+
+  it('E5 클러스터러 생성이 던져도 지도는 살아서 개별 핀으로 렌더된다(ERROR 0)', () => {
+    const sandbox = boot({ clusterer: { constructThrows: true }, markers: makeMarkers({ count: 2 }) });
+    expect(sandbox.clusterMode).toBe('none');
+    expect(sandbox.pinIds).toHaveLength(2);
+    expect(sandbox.pins.p0.overlay.setMapCalls[0]).toBe(sandbox.map);
+    expect(errorsOf({ posted: sandbox.posted })).toHaveLength(0);
+  });
+
+  // ── T5. 재-INIT 리셋 (§4.5, AC11~AC13) ─────────────────────────────────────
+  it('AC11 재-INIT(none): 동일 집합이어도 전 핀이 **새 Map**에 다시 부착된다(빈 지도 0)', () => {
+    const markers = makeMarkers({ count: 3 });
+    const sandbox = boot({ clusterer: { available: false }, markers });
+    const firstMap = sandbox.map;
+    const oldOverlays = markers.map((marker) => sandbox.pins[marker.id].overlay);
+
+    sandbox.init({ center: CENTER, markers, me: null });
+
+    expect(sandbox.maps).toHaveLength(2);
+    expect(sandbox.map).not.toBe(firstMap);
+    expect(sandbox.pinIds).toEqual(idsOf({ markers }));
+    // AC12: 이전 오버레이는 setMap(null)로 떨어진다(유령 0).
+    oldOverlays.forEach((overlay) => {
+      expect(overlay.setMapCalls).toHaveLength(2);
+      expect(overlay.setMapCalls[1]).toBeNull();
+    });
+    markers.forEach((marker) => {
+      const overlay = sandbox.pins[marker.id].overlay;
+      expect(oldOverlays).not.toContain(overlay);
+      expect(overlay.setMapCalls.at(-1)).toBe(sandbox.map);
+    });
+  });
+
+  it('AC11-b 재-INIT(partial): 클러스터러를 재사용하되 새 Map 재바인딩 + 전량 재등록한다', () => {
+    const markers = makeMarkers({ count: 3 });
+    const sandbox = boot({ markers });
+    const firstClusterer = sandbox.clusterer;
+
+    sandbox.init({ center: CENTER, markers, me: null });
+
+    expect(sandbox.clusterer).toBe(firstClusterer); // 1회 생성·재사용(§3.6 C3·E8)
+    expect(sandbox.clusterers).toHaveLength(1);
+    expect(firstClusterer?.setMapCalls.at(-1)).toBe(sandbox.map);
+    expect(firstClusterer?.addMarkersCalls.at(-1)?.markers).toHaveLength(3);
+  });
+
+  it('AC12 재-INIT에서 setMap이 던져도 레지스트리는 비워지고 렌더가 정상 진행된다(E7)', () => {
+    const markers = makeMarkers({ count: 3 });
+    const sandbox = boot({ clusterer: { available: false }, markers });
+    markers.forEach((marker) => {
+      sandbox.pins[marker.id].overlay.setMap = () => {
+        throw new Error('죽은 지도');
+      };
+    });
+
+    sandbox.init({ center: CENTER, markers, me: null });
+
+    expect(errorsOf({ posted: sandbox.posted })).toHaveLength(0);
+    expect(sandbox.pinIds).toEqual(idsOf({ markers }));
+    expect(sandbox.overlays).toHaveLength(6); // 3건 전량 재생성
+    markers.forEach((marker) =>
+      expect(sandbox.pins[marker.id].overlay.setMapCalls.at(-1)).toBe(sandbox.map),
+    );
+  });
+
+  it('AC13 재-INIT 후에도 선택 id가 유지돼 재생성된 핀에 active가 적용된다(I4)', () => {
+    const markers = makeMarkers({ count: 3 });
+    const sandbox = boot({ markers });
+    sandbox.setSelected({ selectedId: 'p1' });
+    expect(sandbox.pins.p1.el.classList.contains('mk-pin--active')).toBe(true);
+
+    sandbox.init({ center: CENTER, markers, me: null });
+
+    expect(sandbox.selectedId).toBe('p1');
+    expect(sandbox.pins.p1.el.classList.contains('mk-pin--active')).toBe(true);
+    expect(sandbox.pins.p1.overlay.options.zIndex).toBe(5);
+  });
+
+  // ── T6. 선택(SET_SELECTED) 상호작용 (AC14~AC16) ────────────────────────────
+  it('AC14 선택 핀은 신규 핀 유입에도 같은 el을 유지하고 active가 끊기지 않는다', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 3 }) });
+    sandbox.setSelected({ selectedId: 'p0' });
+    const selectedEl = sandbox.pins.p0.el;
+    const selectedOverlay = sandbox.pins.p0.overlay;
+
+    sandbox.setMarkers({ markers: makeMarkers({ count: 4 }) });
+
+    expect(sandbox.pins.p0.el).toBe(selectedEl);
+    expect(sandbox.pins.p0.overlay).toBe(selectedOverlay);
+    expect(selectedEl.classList.contains('mk-pin--active')).toBe(true);
+  });
+
+  it('AC15 선택 id와 같은 핀이 새로 추가되면 생성 시점에 active + zIndex 5가 적용된다', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 2 }) });
+    sandbox.setSelected({ selectedId: 'p5' }); // 아직 뷰포트에 없던 핀
+
+    sandbox.setMarkers({
+      markers: [...makeMarkers({ count: 2 }), makeMarker({ id: 'p5', lat: 37.505 })],
+    });
+
+    expect(sandbox.pins.p5.el.classList.contains('mk-pin--active')).toBe(true);
+    expect(sandbox.pins.p5.overlay.options.zIndex).toBe(5);
+  });
+
+  it('AC16 선택된 핀이 제거돼도 mkSelectedId는 남는다(해제는 RN 담당 — E8)', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 3 }) });
+    sandbox.setSelected({ selectedId: 'p2' });
+    const removedOverlay = sandbox.pins.p2.overlay;
+
+    sandbox.setMarkers({ markers: makeMarkers({ count: 2 }) });
+
+    expect(sandbox.pinIds).toEqual(['p0', 'p1']);
+    expect(sandbox.selectedId).toBe('p2');
+    expect(sandbox.clusterer?.removeMarkersCalls.at(-1)?.markers).toContain(removedOverlay);
+  });
+
+  it('선택 상태는 sig에 없다 — 선택 후 같은 집합 재주입에도 재생성 0(B5)', () => {
+    const markers = makeMarkers({ count: 3 });
+    const sandbox = boot({ markers });
+    sandbox.setSelected({ selectedId: 'p1' });
+    const divsAfterSelect = sandbox.counts.div;
+
+    sandbox.setMarkers({ markers });
+
+    expect(sandbox.counts.div).toBe(divsAfterSelect);
+    expect(sandbox.pins.p1.el.classList.contains('mk-pin--active')).toBe(true);
+  });
+
+  it('SET_SELECTED는 유지 핀의 클래스·zIndex만 토글한다(재생성 0 — map-pin-select 회귀)', () => {
+    const sandbox = boot({
+      markers: [
+        makeMarker({ id: 's1', kind: MapPinKind.Saved }),
+        makeMarker({ id: 'n1', kind: MapPinKind.Nearby, lat: 37.51 }),
+      ],
+    });
+    const divsAfterInit = sandbox.counts.div;
+
+    sandbox.setSelected({ selectedId: 'n1' });
+    expect(sandbox.pins.n1.el.className).toBe('mk-pin mk-pin--nearby mk-pin--active');
+    expect(sandbox.pins.n1.overlay.setZIndexCalls.at(-1)).toBe(5);
+    expect(sandbox.pins.s1.overlay.setZIndexCalls.at(-1)).toBe(3);
+
+    sandbox.setSelected({ selectedId: null });
+    expect(sandbox.pins.n1.el.className).toBe('mk-pin mk-pin--nearby');
+    expect(sandbox.pins.n1.overlay.setZIndexCalls.at(-1)).toBe(1);
+    expect(sandbox.counts.div).toBe(divsAfterInit);
+  });
+
+  // ── qa-logic 하드닝(L1·L2): 표시 반영 실패가 남기는 흔적 ────────────────────
+  it('L1 none 모드: 한 오버레이의 setMap 실패가 나머지 조정을 막지 않는다(E7과 동일 원칙)', () => {
+    const sandbox = boot({ clusterer: { available: false }, markers: makeMarkers({ count: 3 }) });
+    sandbox.pins.p1.overlay.setMap = () => {
+      throw new Error('죽은 오버레이');
+    };
+
+    expect(() =>
+      sandbox.setMarkers({
+        markers: [
+          makeMarker({ id: 'p0', lat: 37.5 }),
+          makeMarker({ id: 'p2', lat: 37.502 }),
+          makeMarker({ id: 'p9', lat: 37.509 }),
+        ],
+      }),
+    ).not.toThrow();
+
+    // 제거 1건이 던져도 신규 1건은 정상 부착된다(RN 주입부엔 try/catch가 없어 새면 조용히 실패).
+    expect(sandbox.pins.p9.overlay.setMapCalls.at(-1)).toBe(sandbox.map);
+  });
+
+  it('L1-b 부착에 실패한 핀은 레지스트리에서 되돌아가 다음 주입에서 다시 만들어진다(§4.1 자기치유)', () => {
+    const markers = makeMarkers({ count: 2 });
+    const nextMarkers = [...markers, makeMarker({ id: 'p9', lat: 37.509 })];
+    const sandbox = boot({ clusterer: { available: false }, markers });
+
+    sandbox.setOverlayFault({ throwOnSetMap: true });
+    sandbox.setMarkers({ markers: nextMarkers });
+    // ⚠️ 여기서 mkPins에 남겨두면 sig가 맞아 다음 주입에서 "유지"로 판정돼 영원히 안 붙는다.
+    expect(sandbox.pinIds).toEqual(['p0', 'p1']);
+
+    sandbox.setOverlayFault({ throwOnSetMap: false });
+    sandbox.setMarkers({ markers: nextMarkers });
+
+    expect(sandbox.pinIds).toEqual(['p0', 'p1', 'p9']);
+    expect(sandbox.pins.p9.overlay.setMapCalls.at(-1)).toBe(sandbox.map);
+  });
+
+  it('L2 강등 시 제거 대상 오버레이를 직접 떼어낸다(레지스트리에도 없고 화면에만 남는 유령 0)', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 4 }) });
+    const clusterer = sandbox.clusterer;
+    const droppedOverlays = [sandbox.pins.p2.overlay, sandbox.pins.p3.overlay];
+    if (clusterer) clusterer.throwOnRemoveMarkers = true;
+
+    sandbox.setMarkers({ markers: makeMarkers({ count: 2 }) });
+
+    expect(sandbox.clusterer).toBeNull();
+    expect(sandbox.pinIds).toEqual(['p0', 'p1']);
+    // removed는 renderMarkers 2단계에서 이미 mkPins에서 빠졌다 → 여기서 못 떼면 회수 수단이 없다.
+    droppedOverlays.forEach((overlay) => expect(overlay.setMapCalls.at(-1)).toBeNull());
+  });
+
+  // ── 성능 회귀 방지: 100건 규모에서도 조정 비용은 delta에 비례한다(E11) ──────
+  it('E11 100건 유지 + 1건 유입 시 DOM 생성은 1건뿐이다(전량 재생성이면 101)', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 100 }) });
+    expect(sandbox.counts.div).toBe(100);
+
+    sandbox.setMarkers({ markers: makeMarkers({ count: 101 }) });
+
+    expect(sandbox.counts.div).toBe(101);
+    expect(sandbox.overlays).toHaveLength(101);
   });
 });
