@@ -39,12 +39,16 @@ describe('app.json OTA 설정 계약 (T1)', () => {
   });
 
   // expo-updates 플러그인은 app.json에 추가하지 않는다 — @expo/prebuild-config의 versionedExpoSDKPackages에
-  // 'expo-updates'가 포함되어 설치만으로 자동 적용된다(withDefaultPlugins.js:187). plugins 배열은 10개 그대로.
+  // 'expo-updates'가 포함되어 설치만으로 자동 적용된다(withDefaultPlugins.js:187).
+  // 2026-08-19: withAndroidLaunchMode 제거로 10 → 9. 그 플러그인이 MainActivity를 singleTop으로 바꿔
+  //   커스텀탭 OAuth 리다이렉트 인텐트 전달을 깨뜨렸다(Android 구글 로그인 불가). picker hang의 실제
+  //   근본 원인은 expo-file-system 누락이었고 그건 별도로 복구됨 — singleTop은 불필요한 부수 변경이었다.
   it('기존 네이티브 설정 키가 불변이다(plugins 구성·번들 식별자)', () => {
-    expect(expo.plugins).toHaveLength(10);
+    expect(expo.plugins).toHaveLength(9);
     expect(expo.plugins).toContain('expo-dev-client');
     expect(expo.plugins).toContain('./plugins/withFmtConstevalFix');
-    expect(expo.plugins).toContain('./plugins/withAndroidLaunchMode');
+    // launchMode 플러그인은 다시 들어오면 안 된다(OAuth 회귀 재발 방지).
+    expect(expo.plugins).not.toContain('./plugins/withAndroidLaunchMode');
     expect(expo.ios.bundleIdentifier).toBe('com.muklog.app');
     expect(expo.android.package).toBe('com.muklog.app');
   });

@@ -12,6 +12,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '@/lib/supabase';
 
 import { AuthErrorToken } from '../errors';
+import { exchangeOAuthCode } from '../oauthCallback';
 
 // 인앱 브라우저 리다이렉트 복귀를 정리한다(모듈 로드 시 1회).
 WebBrowser.maybeCompleteAuthSession();
@@ -36,7 +37,16 @@ export const signInWithGoogleOAuth = async (): Promise<OAuthSignInResult> => {
     return { ok: false, cancelled: false, token: AuthErrorToken.NetworkFailed };
   }
 
-  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  // Android 커스텀탭 옵션(2026-08-19 실기기 확증):
+  //   expo-web-browser 폴리필은 커스텀탭을 FLAG_ACTIVITY_NEW_TASK(별도 태스크)로 띄우는데, 별도 태스크에서는
+  //   Supabase 302 → muklog:// 리다이렉트 인텐트가 MainActivity에 전달되지 않아 로그인이 dismiss로 끝난다
+  //   (일반 Chrome 탭·직접 링크 탭에서는 동일 스킴이 정상 전달됨 — 커스텀탭 태스크 분리만이 변인).
+  //   createTask:false = 같은 태스크에 열어 리다이렉트가 onNewIntent로 도달, showInRecents:true = 백그라운드
+  //   전환 시 태스크 정리로 플로우가 끊기는 것 방지. iOS는 네이티브 ASWebAuthenticationSession 경로라 무시.
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo, {
+    createTask: false,
+    showInRecents: true,
+  });
   if (result.type === 'cancel' || result.type === 'dismiss') {
     return { ok: false, cancelled: true, token: AuthErrorToken.GoogleCancelled };
   }
@@ -45,15 +55,15 @@ export const signInWithGoogleOAuth = async (): Promise<OAuthSignInResult> => {
   }
 
   // 리다이렉트 URL의 PKCE code 추출 → 세션 교환.
+  //   교환은 oauthCallback.exchangeOAuthCode에 위임한다 — 딥링크 복구 경로와 같은 code가 겹쳐도
+  //   실제 교환은 1회만 일어나고(code는 1회용), 뒤늦은 재교환 실패가 성공을 덮어쓰지 않는다.
   const code = Linking.parse(result.url).queryParams?.code;
   if (typeof code !== 'string') {
     return { ok: false, cancelled: false, token: AuthErrorToken.TokenExchangeFailed };
   }
 
-  const { data: sessionData, error: exchangeError } =
-    await supabase.auth.exchangeCodeForSession(code);
-  const userId = sessionData?.session?.user?.id;
-  if (exchangeError || !userId) {
+  const userId = await exchangeOAuthCode({ code });
+  if (!userId) {
     return { ok: false, cancelled: false, token: AuthErrorToken.TokenExchangeFailed };
   }
   return { ok: true, userId };
