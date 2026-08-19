@@ -13,12 +13,25 @@ export const AUTH_DIAGNOSTICS_ENABLED = true;
 const MAX_LINES = 12;
 let lines: string[] = [];
 
+// 구독자(화면). 비동기로 늦게 추가되는 줄도 즉시 보이게 하려면 재렌더를 직접 깨워야 한다 —
+// 상태 전이 없이 추가되는 줄(포그라운드 복귀 트레이스 등)은 구독 없이는 화면에 영영 안 나타난다.
+let listeners: (() => void)[] = [];
+
+/** 트레이스 변경 구독. 반환값은 해제 함수. */
+export const subscribeAuthTrace = ({ onChange }: { onChange: () => void }): (() => void) => {
+  listeners = [...listeners, onChange];
+  return function unsubscribeAuthTrace() {
+    listeners = listeners.filter((listener) => listener !== onChange);
+  };
+};
+
 /** 트레이스 1줄 기록. 비활성 시 no-op. */
 export const traceAuth = ({ line }: { line: string }): void => {
   if (!AUTH_DIAGNOSTICS_ENABLED) return;
   lines = [...lines, line].slice(-MAX_LINES);
   // logcat/Metro 로 함께 흘린다(케이블 연결 시 병행 확인용).
   console.log(`[authDiag] ${line}`);
+  listeners.forEach((notify) => notify());
 };
 
 /** 기록된 트레이스 전체(오래된 순). */

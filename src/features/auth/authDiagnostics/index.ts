@@ -4,4 +4,5 @@ export {
   traceAuth,
   readAuthTrace,
   clearAuthTrace,
+  subscribeAuthTrace,
 } from './authDiagnostics';
