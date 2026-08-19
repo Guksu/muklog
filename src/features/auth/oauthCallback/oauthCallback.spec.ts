@@ -12,6 +12,12 @@ jest.mock('expo-linking', () => ({
   addEventListener: (...a: unknown[]) => mockAddEventListener(...a),
 }));
 
+// react-native AppState: 포그라운드 복귀 감지(Android 새 액티비티 인텐트 회수 경로).
+const mockAppStateAdd = jest.fn();
+jest.mock('react-native', () => ({
+  AppState: { addEventListener: (...a: unknown[]) => mockAppStateAdd(...a) },
+}));
+
 // supabase: exchangeCodeForSession(PKCE code → 세션). verifier는 SecureStore에 남아 재시작 후에도 유효.
 const mockExchangeCode = jest.fn();
 jest.mock('@/lib/supabase', () => ({
@@ -32,7 +38,15 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockExchangeCode.mockResolvedValue({ data: { session: { user: { id: 'gid' } } }, error: null });
   mockAddEventListener.mockReturnValue({ remove: jest.fn() });
+  mockAppStateAdd.mockReturnValue({ remove: jest.fn() });
+  mockGetInitialURL.mockResolvedValue(null);
 });
+
+// AppState 'active' 핸들러를 꺼낸다(구독 등록 순서 무관하게 이름으로 찾음).
+const takeAppStateHandler = (): ((state: string) => void) => {
+  const call = mockAppStateAdd.mock.calls.find(([event]) => event === 'change');
+  return call?.[1] as (state: string) => void;
+};
 
 describe('exchangeOAuthCode', () => {
   it('code를 교환해 userId를 반환한다', async () => {
@@ -140,13 +154,78 @@ describe('subscribeOAuthCallback', () => {
     expect(onUserId).not.toHaveBeenCalled();
   });
 
-  it('구독 해제는 리스너 remove를 호출한다', () => {
-    const remove = jest.fn();
-    mockAddEventListener.mockReturnValue({ remove });
+  it('구독 해제는 url·AppState 리스너를 모두 remove 한다', () => {
+    const removeUrl = jest.fn();
+    const removeAppState = jest.fn();
+    mockAddEventListener.mockReturnValue({ remove: removeUrl });
+    mockAppStateAdd.mockReturnValue({ remove: removeAppState });
 
     const unsubscribe = subscribeOAuthCallback({ onUserId: jest.fn() });
     unsubscribe();
 
-    expect(remove).toHaveBeenCalled();
+    expect(removeUrl).toHaveBeenCalled();
+    expect(removeAppState).toHaveBeenCalled();
+  });
+});
+
+// Android singleTop 실측 경로: 커스텀탭 리다이렉트가 새 MainActivity 인스턴스를 만들지만 JS 컨텍스트는
+// 살아남는다. RN은 'url' 이벤트를 onNewIntent 에서만 발행하므로 새 액티비티(onCreate 인텐트)에서는
+// 이벤트가 없고, 대신 getInitialURL()이 그 인텐트를 돌려준다 → 포그라운드 복귀 시 재확인해야 한다.
+describe('subscribeOAuthCallback — 포그라운드 복귀 재확인', () => {
+  it('active 복귀 시 getInitialURL의 code를 교환해 통지한다(url 이벤트 없이)', async () => {
+    const code = nextCode();
+    mockGetInitialURL.mockResolvedValue(`muklog://auth/callback?code=${code}`);
+    mockParse.mockReturnValue({ queryParams: { code } });
+    const onUserId = jest.fn();
+
+    subscribeOAuthCallback({ onUserId });
+    await takeAppStateHandler()('active');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mockExchangeCode).toHaveBeenCalledWith(code);
+    expect(onUserId).toHaveBeenCalledWith({ userId: 'gid' });
+  });
+
+  it('background 전환에는 아무것도 하지 않는다', async () => {
+    mockGetInitialURL.mockResolvedValue('muklog://auth/callback?code=x');
+    const onUserId = jest.fn();
+
+    subscribeOAuthCallback({ onUserId });
+    await takeAppStateHandler()('background');
+    await Promise.resolve();
+
+    expect(mockGetInitialURL).not.toHaveBeenCalled();
+    expect(onUserId).not.toHaveBeenCalled();
+  });
+
+  it('같은 인텐트로 여러 번 복귀해도 통지는 1회다(로그아웃 후 재인증 방지)', async () => {
+    const code = nextCode();
+    mockGetInitialURL.mockResolvedValue(`muklog://auth/callback?code=${code}`);
+    mockParse.mockReturnValue({ queryParams: { code } });
+    const onUserId = jest.fn();
+
+    subscribeOAuthCallback({ onUserId });
+    const handler = takeAppStateHandler();
+    await handler('active');
+    await Promise.resolve();
+    await Promise.resolve();
+    await handler('active');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onUserId).toHaveBeenCalledTimes(1);
+  });
+
+  it('초기 URL이 OAuth 콜백이 아니면 통지하지 않는다', async () => {
+    mockGetInitialURL.mockResolvedValue('muklog://room/abc');
+    mockParse.mockReturnValue({ queryParams: { roomId: 'abc' } });
+    const onUserId = jest.fn();
+
+    subscribeOAuthCallback({ onUserId });
+    await takeAppStateHandler()('active');
+    await Promise.resolve();
+
+    expect(onUserId).not.toHaveBeenCalled();
   });
 });

@@ -14,6 +14,7 @@
 //     · 콜드 재시작 → Linking.getInitialURL()  (recoverOAuthSessionFromInitialUrl)
 //     · 웜 복귀     → Linking 'url' 이벤트      (subscribeOAuthCallback)
 //   두 경로와 기존 openAuthSessionAsync 경로가 같은 code 로 겹칠 수 있어 exchangeOAuthCode 가 1회 교환을 보장한다.
+import { AppState } from 'react-native';
 import * as Linking from 'expo-linking';
 
 import { supabase } from '@/lib/supabase';
@@ -24,6 +25,10 @@ import { traceAuth } from '../authDiagnostics';
 //   code 는 1회용이라 재교환은 반드시 실패하고, 그 실패가 이미 성공한 로그인을 에러로 덮어쓸 수 있다.
 //   직전 1건만 들고 있으므로 누적 없이 경계가 닫힌다(중복 도착은 언제나 최신 code 건이다).
 let lastExchange: { code: string; result: Promise<string | null> } | null = null;
+
+// 구독 경로가 이미 통지를 끝낸 code. 포그라운드 복귀 재확인은 같은 인텐트를 반복해서 돌려주므로
+// 이 가드가 없으면 로그아웃 뒤 복귀만으로 다시 로그인되어 버린다.
+let notifiedCode: string | null = null;
 
 // 실제 교환. 실패·throw 를 모두 null 로 정규화한다(호출부는 "userId 확보 실패"만 알면 된다).
 const runExchange = async ({ code }: { code: string }): Promise<string | null> => {
@@ -85,14 +90,36 @@ export const subscribeOAuthCallback = ({
 }: {
   onUserId: (params: { userId: string }) => void;
 }): (() => void) => {
-  const subscription = Linking.addEventListener('url', async ({ url }: { url: string }) => {
-    const code = codeFromUrl({ url });
-    if (!code) return;
+  // code 를 확보해 1회만 통지한다. 재확인 경로는 같은 인텐트를 계속 돌려주므로(아래) 중복 통지를 막아야
+  // 로그아웃 뒤 포그라운드 복귀가 사용자를 되살리는 사고를 피할 수 있다.
+  const notifyOnce = async ({ code }: { code: string }): Promise<void> => {
+    if (notifiedCode === code) return;
+    notifiedCode = code;
     const userId = await exchangeOAuthCode({ code });
     if (userId) onUserId({ userId });
+  };
+
+  const linkSubscription = Linking.addEventListener('url', async ({ url }: { url: string }) => {
+    const code = codeFromUrl({ url });
+    if (code) await notifyOnce({ code });
+  });
+
+  // Android singleTop 실측 경로(2026-08-19):
+  //   커스텀탭 리다이렉트가 MainActivity 새 인스턴스를 만들지만 JS 컨텍스트는 프로세스 단위라 살아남는다.
+  //   RN 은 'url' 이벤트를 onNewIntent 에서만 발행하므로 새 액티비티(onCreate 인텐트)에서는 이벤트가 없고,
+  //   부트스트랩도 이미 끝나 재실행되지 않는다 → 콜백이 인텐트 안에 갇힌다.
+  //   getInitialURL()은 현재 액티비티의 인텐트를 읽으므로, 포그라운드 복귀 때 다시 확인하면 회수된다.
+  const appStateSubscription = AppState.addEventListener('change', async (state: string) => {
+    if (state !== 'active') return;
+    const url = await Linking.getInitialURL();
+    traceAuth({ line: `복귀 initialUrl=${url ? url.slice(0, 120) : '없음'}` });
+    if (!url) return;
+    const code = codeFromUrl({ url });
+    if (code) await notifyOnce({ code });
   });
 
   return function unsubscribeOAuthCallback() {
-    subscription.remove();
+    linkSubscription.remove();
+    appStateSubscription.remove();
   };
 };
