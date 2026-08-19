@@ -44,6 +44,14 @@ jest.mock('../socialSignIn', () => ({
   signInWithAppleNative: (...a: unknown[]) => mockAppleNative(...a),
 }));
 
+// --- OAuth 콜백 딥링크 복구 모킹 (Android singleTop 회귀 대비, oauthCallback.spec이 SDK 동작 별도 검증) ---
+const mockRecoverFromInitialUrl = jest.fn();
+const mockSubscribeCallback = jest.fn();
+jest.mock('../oauthCallback', () => ({
+  recoverOAuthSessionFromInitialUrl: (...a: unknown[]) => mockRecoverFromInitialUrl(...a),
+  subscribeOAuthCallback: (...a: unknown[]) => mockSubscribeCallback(...a),
+}));
+
 import { AuthErrorToken } from '../errors';
 import { AuthProvider, useAuth } from './AuthProvider';
 
@@ -64,6 +72,11 @@ const Probe = () => {
 // onAuthStateChange 콜백을 캡처해 테스트에서 직접 발화.
 let authChangeCb: ((event: string, session: unknown) => void) | null = null;
 
+// subscribeOAuthCallback에 넘긴 onUserId를 캡처해 딥링크 도착을 테스트에서 직접 발화.
+type OnUserId = (params: { userId: string }) => void;
+let callbackOnUserId: OnUserId | null = null;
+const unsubscribeCallback = jest.fn();
+
 const renderProvider = () =>
   render(
     <AuthProvider>
@@ -80,12 +93,19 @@ beforeEach(() => {
   jest.clearAllMocks();
   captured = null;
   authChangeCb = null;
+  callbackOnUserId = null;
   mockUpsert.mockResolvedValue({ error: null });
   mockSignOut.mockResolvedValue({ error: null });
   mockUnregisterDeviceToken.mockResolvedValue(undefined);
   mockOnAuthStateChange.mockImplementation((cb: (e: string, s: unknown) => void) => {
     authChangeCb = cb;
     return { data: { subscription: { unsubscribe } } };
+  });
+  // 기본: 딥링크 복구 없음(정상 경로) + 구독은 no-op 해제 함수 반환.
+  mockRecoverFromInitialUrl.mockResolvedValue(null);
+  mockSubscribeCallback.mockImplementation(({ onUserId }: { onUserId: OnUserId }) => {
+    callbackOnUserId = onUserId;
+    return unsubscribeCallback;
   });
 });
 
@@ -123,6 +143,97 @@ describe('AuthProvider — 부트스트랩', () => {
       captured?.retry();
     });
     await waitFor(() => expect(screen.getByText('unauthenticated')).toBeTruthy());
+  });
+});
+
+// Android singleTop 회귀: 커스텀탭 리다이렉트가 MainActivity 새 인스턴스를 띄워 JS가 재시작되면
+// openAuthSessionAsync promise가 유실돼 "로그인 성공했는데 로그인 화면"이 된다. 두 복구 경로를 잠근다.
+describe('AuthProvider — OAuth 콜백 딥링크 복구', () => {
+  it('콜드 재시작: 세션 없어도 초기 URL 복구 성공이면 authenticated (로그인 화면으로 안 떨어짐)', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    mockRecoverFromInitialUrl.mockResolvedValue('u-deeplink');
+
+    renderProvider();
+
+    await waitFor(() => expect(screen.getByText('authenticated:u-deeplink')).toBeTruthy());
+    expect(mockUpsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('콜드 재시작: 복구 대상이 없으면 기존대로 unauthenticated', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    mockRecoverFromInitialUrl.mockResolvedValue(null);
+
+    renderProvider();
+
+    await waitFor(() => expect(screen.getByText('unauthenticated')).toBeTruthy());
+    expect(mockRecoverFromInitialUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it('세션이 이미 있으면 딥링크 복구를 시도하지 않는다', async () => {
+    mockGetSession.mockResolvedValue(session({ id: 'u-soc' }));
+
+    renderProvider();
+
+    await waitFor(() => expect(screen.getByText('authenticated:u-soc')).toBeTruthy());
+    expect(mockRecoverFromInitialUrl).not.toHaveBeenCalled();
+  });
+
+  it('웜 복귀: 구독 onUserId 통지 → authenticated', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    renderProvider();
+    await waitFor(() => expect(screen.getByText('unauthenticated')).toBeTruthy());
+
+    await act(async () => {
+      callbackOnUserId?.({ userId: 'u-warm' });
+    });
+
+    await waitFor(() => expect(screen.getByText('authenticated:u-warm')).toBeTruthy());
+    expect(captured?.loginError).toBeNull();
+  });
+
+  it('딥링크 복구가 먼저 성공하면 뒤늦은 브라우저 취소 결과가 상태를 덮어쓰지 않는다', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    // 브라우저 promise는 리다이렉트로 커스텀탭이 닫히면서 취소로 "늦게" resolve된다 — 수동 제어.
+    let resolveBrowser: (result: unknown) => void = () => {};
+    mockGoogleOAuth.mockReturnValue(
+      new Promise((resolve) => {
+        resolveBrowser = resolve;
+      }),
+    );
+    renderProvider();
+    await waitFor(() => expect(screen.getByText('unauthenticated')).toBeTruthy());
+
+    // 사용자가 버튼 탭 → authenticating (브라우저 결과는 아직 미정).
+    let signInDone: Promise<void> | undefined;
+    await act(async () => {
+      signInDone = captured?.signInWithGoogle();
+    });
+    expect(captured?.state.status).toBe('authenticating');
+
+    // 딥링크가 먼저 도착해 로그인을 끝낸다.
+    await act(async () => {
+      callbackOnUserId?.({ userId: 'u-race' });
+    });
+    await waitFor(() => expect(screen.getByText('authenticated:u-race')).toBeTruthy());
+
+    // 그 뒤 브라우저가 취소로 늦게 resolve — authenticated 유지, 에러 문구도 없어야 한다.
+    await act(async () => {
+      resolveBrowser({ ok: false, cancelled: true, token: AuthErrorToken.GoogleCancelled });
+      await signInDone;
+    });
+
+    expect(screen.getByText('authenticated:u-race')).toBeTruthy();
+    expect(captured?.loginError).toBeNull();
+  });
+
+  it('언마운트 시 딥링크 구독을 해제한다', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    const view = renderProvider();
+    await waitFor(() => expect(screen.getByText('unauthenticated')).toBeTruthy());
+
+    view.unmount();
+
+    expect(unsubscribeCallback).toHaveBeenCalled();
   });
 });
 

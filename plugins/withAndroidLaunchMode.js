@@ -9,9 +9,15 @@
 //   getPendingResultAsync(MainActivity 파괴 복구)로도 안 잡힘 = 파괴가 아니라 콜백 유실.
 //
 // 해결:
-//   singleTop 은 picker 의 startActivityForResult 결과를 정상 수신하면서,
-//   딥링크/OAuth(muklog:// 리다이렉트)도 onNewIntent 로 동일하게 처리 → 호환.
-//   ⚠️ Google/Apple 로그인(OAuth 딥링크) 회귀 여부는 빌드 후 디바이스에서 확인 필요.
+//   singleTop 은 picker 의 startActivityForResult 결과를 정상 수신한다.
+//
+// ⚠️ 확인된 회귀 (2026-08-19, Android 실기기):
+//   Google 로그인이 성공해도 로그인 화면으로 되돌아왔다. singleTop 에서는 커스텀탭 리다이렉트
+//   (muklog://auth/callback?code=…)가 기존 MainActivity 의 onNewIntent 로 가지 않고 새 인스턴스를
+//   띄워 JS 컨텍스트째 재시작시킨다 → oauthSignIn 의 openAuthSessionAsync promise 가 유실.
+//   (실패 경로를 탄 게 아니라 증발한 것이라 loginError 도 안 떴다.)
+//   해결은 launchMode 되돌리기가 아니라(picker hang 재발) 브라우저 promise 에 의존하지 않는
+//   딥링크 복구 경로 추가 — src/features/auth/oauthCallback 참조. singleTop 은 그대로 둔다.
 //
 // Expo 는 android/ 를 prebuild 로 재생성(.gitignore)하므로 plugin 으로 박아야 매번 적용된다.
 // 제거 시점: expo-image-picker 가 singleTask 에서도 동작하도록 수정되면 삭제.

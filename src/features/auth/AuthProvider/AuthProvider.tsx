@@ -16,6 +16,11 @@
 //   OAuth 실패(네트워크/토큰) → unauthenticated + loginError=인라인 메시지.
 //   부트스트랩 실패 → error(전체화면 AuthErrorView).
 //
+// OAuth 콜백 딥링크 복구(Android singleTop 회귀 대비 — oauthCallback.ts 참고):
+//   커스텀탭 리다이렉트가 JS 를 재시작시켜 openAuthSessionAsync promise 가 유실되면 로그인 성공이 증발한다.
+//   부트스트랩의 초기 URL(콜드) + 'url' 이벤트 구독(웜) 두 경로로 code 를 잡아 세션을 복구한다.
+//   복구가 먼저 끝난 뒤 도착하는 늦은 실패/취소 결과는 authenticatedRef 가드로 무시한다(failLogin).
+//
 // 익명 잔재 강등(E8): 세션의 user.is_anonymous===true면 signOut→unauthenticated(AsyncStorage 잔존 익명 폐기).
 // profiles 본인 행 보장(ensureProfileAndAuth): upsert {id} onConflict id ignoreDuplicates → FK 무결성 선행.
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
@@ -25,6 +30,7 @@ import { supabase } from '@/lib/supabase';
 import { unregisterDeviceToken, useRegisterPushToken } from '@/features/notif/useRegisterPushToken';
 
 import { AuthErrorToken, messageForAuthError } from '../errors';
+import { recoverOAuthSessionFromInitialUrl, subscribeOAuthCallback } from '../oauthCallback';
 import { signInWithGoogleOAuth } from '../oauthSignIn';
 import { signInWithAppleNative, type NativeSignInResult } from '../socialSignIn';
 
@@ -66,6 +72,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // 동일 userId에 대해 profiles upsert를 1회만 수행하기 위한 가드(토큰 갱신 시 중복 upsert 방지).
   // signOut 시 리셋 → 재로그인 시 upsert 재실행(plan E11).
   const profileEnsuredRef = useRef<string | null>(null);
+  // 이미 authenticated 인지(비동기 클로저에서 state 대신 참조). 딥링크 복구 경로가 먼저 로그인을 끝낸 뒤
+  // 뒤늦게 도착한 브라우저 취소/실패 결과가 로그인 상태를 unauthenticated 로 덮어쓰는 것을 막는다
+  // (Android singleTop 재시작 시 openAuthSessionAsync 가 dismiss 로 늦게 resolve 될 수 있다).
+  const authenticatedRef = useRef(false);
 
   // 푸시 디바이스 토큰 등록(push-notifications S1, T4). authenticated 진입(userId 확보) 시 1회 구동.
   //   authenticated 외 상태에선 userId='' → 훅이 no-op(폴링 없음, 중복은 훅 내부 ref 가드).
@@ -87,9 +97,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (error) throw error;
       profileEnsuredRef.current = userId;
     }
+    authenticatedRef.current = true;
     if (mountedRef.current) {
       setState({ status: 'authenticated', userId });
     }
+  };
+
+  // 로그인 시도 실패 → unauthenticated + 인라인 메시지. 단, 이미 로그인이 끝난 뒤 뒤늦게 도착한
+  // 실패/취소 결과는 무시한다(딥링크 복구가 먼저 성공한 경우 — 상태를 되돌리면 안 된다).
+  const failLogin = ({ token }: { token: AuthErrorToken }) => {
+    if (!mountedRef.current || authenticatedRef.current) return;
+    setState({ status: 'unauthenticated' });
+    setLoginError(messageForAuthError({ token }));
   };
 
   // Apple 네이티브 결과를 상태 전이로 매핑.
@@ -104,10 +123,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     nativeResult: NativeSignInResult;
   }) => {
     if (!nativeResult.ok) {
-      if (mountedRef.current) {
-        setState({ status: 'unauthenticated' });
-        setLoginError(messageForAuthError({ token: nativeResult.token }));
-      }
+      failLogin({ token: nativeResult.token });
       return;
     }
     const { data, error } = await supabase.auth.signInWithIdToken({
@@ -115,10 +131,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       token: nativeResult.token,
     });
     if (error || !data.user) {
-      if (mountedRef.current) {
-        setState({ status: 'unauthenticated' });
-        setLoginError(messageForAuthError({ token: AuthErrorToken.TokenExchangeFailed }));
-      }
+      failLogin({ token: AuthErrorToken.TokenExchangeFailed });
       return;
     }
     // 성공: onAuthStateChange(SIGNED_IN)가 ensureProfileAndAuth→authenticated를 처리.
@@ -132,10 +145,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setState({ status: 'authenticating', provider: 'google' });
     const result = await signInWithGoogleOAuth();
     if (!result.ok) {
-      if (mountedRef.current) {
-        setState({ status: 'unauthenticated' });
-        setLoginError(messageForAuthError({ token: result.token }));
-      }
+      failLogin({ token: result.token });
       return;
     }
     // exchangeCodeForSession이 세션을 설정 → onAuthStateChange가 처리하지만, 일관성을 위해 직접 보장.
@@ -156,6 +166,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     await unregisterDeviceToken({ userId: activeUserId });
     await supabase.auth.signOut();
     profileEnsuredRef.current = null;
+    authenticatedRef.current = false;
     if (mountedRef.current) {
       setState({ status: 'unauthenticated' });
       setLoginError(null);
@@ -182,7 +193,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
           const userId = user?.id ?? null;
           if (!userId) {
-            // 세션 없음 → 자동 로그인 안 함(익명 발급 제거).
+            // 세션 없음 → OAuth 콜백 딥링크로 앱이 뜬 경우인지 먼저 확인한다.
+            //   Android singleTop 은 커스텀탭 리다이렉트에 MainActivity 새 인스턴스를 띄워 JS 를 재시작시키고,
+            //   그러면 openAuthSessionAsync promise 가 유실돼 로그인 성공이 그대로 증발한다.
+            //   PKCE verifier 는 SecureStore 에 남아 있으므로 초기 URL 의 code 만으로 세션 복구가 가능하다.
+            const recoveredUserId = await recoverOAuthSessionFromInitialUrl();
+            if (recoveredUserId) {
+              await ensureProfileAndAuth({ userId: recoveredUserId });
+              return;
+            }
+            // 진짜 세션 없음 → 자동 로그인 안 함(익명 발급 제거).
             if (mountedRef.current) setState({ status: 'unauthenticated' });
             return;
           }
@@ -207,7 +227,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           ensureProfileAndAuth({ userId }).catch((err) => {
             // 리스너 경로의 프로필 보장 실패는 로그인 시도 실패로 취급(전체 error 화면 금지).
             const message = err instanceof Error ? err.message : '프로필 초기화에 실패했습니다.';
-            if (mountedRef.current) {
+            if (mountedRef.current && !authenticatedRef.current) {
               setState({ status: 'unauthenticated' });
               setLoginError(message);
             }
@@ -216,9 +236,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // userId 없음(SIGNED_OUT 등)은 signOut/부트스트랩이 처리 → 여기선 강제 전이하지 않음(error 금지).
       });
 
+      // 실행 중 도착하는 OAuth 콜백 딥링크(웜 복귀) — 브라우저 promise 와 무관하게 세션을 확보한다.
+      //   같은 code 의 중복 교환은 exchangeOAuthCode 가 막으므로 정상 경로와 겹쳐도 무해하다.
+      const unsubscribeCallback = subscribeOAuthCallback({
+        onUserId: ({ userId }) => {
+          setLoginError(null);
+          ensureProfileAndAuth({ userId }).catch(() => {
+            failLogin({ token: AuthErrorToken.TokenExchangeFailed });
+          });
+        },
+      });
+
       return function cleanupAuth() {
         mountedRef.current = false;
         sub.subscription.unsubscribe();
+        unsubscribeCallback();
       };
     },
     [attempt],

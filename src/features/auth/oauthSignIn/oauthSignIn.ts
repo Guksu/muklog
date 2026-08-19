@@ -12,6 +12,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '@/lib/supabase';
 
 import { AuthErrorToken } from '../errors';
+import { exchangeOAuthCode } from '../oauthCallback';
 
 // 인앱 브라우저 리다이렉트 복귀를 정리한다(모듈 로드 시 1회).
 WebBrowser.maybeCompleteAuthSession();
@@ -45,15 +46,15 @@ export const signInWithGoogleOAuth = async (): Promise<OAuthSignInResult> => {
   }
 
   // 리다이렉트 URL의 PKCE code 추출 → 세션 교환.
+  //   교환은 oauthCallback.exchangeOAuthCode에 위임한다 — 딥링크 복구 경로와 같은 code가 겹쳐도
+  //   실제 교환은 1회만 일어나고(code는 1회용), 뒤늦은 재교환 실패가 성공을 덮어쓰지 않는다.
   const code = Linking.parse(result.url).queryParams?.code;
   if (typeof code !== 'string') {
     return { ok: false, cancelled: false, token: AuthErrorToken.TokenExchangeFailed };
   }
 
-  const { data: sessionData, error: exchangeError } =
-    await supabase.auth.exchangeCodeForSession(code);
-  const userId = sessionData?.session?.user?.id;
-  if (exchangeError || !userId) {
+  const userId = await exchangeOAuthCode({ code });
+  if (!userId) {
     return { ok: false, cancelled: false, token: AuthErrorToken.TokenExchangeFailed };
   }
   return { ok: true, userId };

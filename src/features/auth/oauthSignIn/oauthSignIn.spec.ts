@@ -31,12 +31,18 @@ jest.mock('@/lib/supabase', () => ({
 import { AuthErrorToken } from '../errors';
 import { signInWithGoogleOAuth } from './oauthSignIn';
 
+// 교환은 oauthCallback.exchangeOAuthCode에 위임되고, 거긴 같은 code의 재교환을 막는 메모를 들고 있다
+// (딥링크 복구 경로와의 중복 교환 방지). 테스트가 서로 메모를 물려받지 않도록 매 테스트 고유 code를 쓴다.
+let codeSeq = 0;
+let currentCode = '';
+
 beforeEach(() => {
   jest.clearAllMocks();
+  currentCode = `abc${(codeSeq += 1)}`;
   // 기본: OAuth URL 정상 발급 + 브라우저 성공 리다이렉트(code 포함) + 세션 교환 성공.
   mockSignInWithOAuth.mockResolvedValue({ data: { url: 'https://accounts.google.com/o/oauth2/auth' }, error: null });
-  mockOpenAuthSession.mockResolvedValue({ type: 'success', url: 'muklog://auth/callback?code=abc123' });
-  mockParse.mockReturnValue({ queryParams: { code: 'abc123' } });
+  mockOpenAuthSession.mockResolvedValue({ type: 'success', url: `muklog://auth/callback?code=${currentCode}` });
+  mockParse.mockReturnValue({ queryParams: { code: currentCode } });
   mockExchangeCode.mockResolvedValue({ data: { session: { user: { id: 'gid' } } }, error: null });
 });
 
@@ -47,7 +53,7 @@ describe('signInWithGoogleOAuth', () => {
       provider: 'google',
       options: { redirectTo: 'muklog://auth/callback', skipBrowserRedirect: true },
     });
-    expect(mockExchangeCode).toHaveBeenCalledWith('abc123');
+    expect(mockExchangeCode).toHaveBeenCalledWith(currentCode);
     expect(result).toEqual({ ok: true, userId: 'gid' });
   });
 
