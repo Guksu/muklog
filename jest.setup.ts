@@ -13,6 +13,10 @@ process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID =
 process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? 'test-google-ios-client-id';
 
+// react-native-gesture-handler — 네이티브 모듈을 공식 목으로 대체한다(RNGH 배포판의 jestSetup).
+// 공용 Sheet가 드래그-dismiss에 RNGH를 쓰므로, 이게 없으면 Sheet를 렌더하는 모든 spec이 네이티브 모듈 부재로 깨진다.
+require('react-native-gesture-handler/jestSetup');
+
 // expo-linear-gradient — 네이티브 모듈은 colors를 정수로 변환(processColor)해 테스트에서 raw hex 단언이 깨진다.
 // 시각 검증이 아닌 비주얼 충실도 테스트(전달 colors·start/end·testID 단언)를 위해 pass-through View로 모킹한다.
 jest.mock('expo-linear-gradient', () => {

@@ -7,8 +7,9 @@
 //   목록 소스·insert는 developer 몫. 여기선 프리젠테이션 + 선택 콜백만.
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
+import { GestureDetector } from 'react-native-gesture-handler';
 
-import { Icon, IconName, MemberBadge, Sheet, Text } from '@/components';
+import { Icon, IconName, MemberBadge, Sheet, Text, useSheetScrollGesture } from '@/components';
 import { useTheme } from '@/theme';
 
 // 기본 시트 제목(해요체, 카피 단일 출처). 부모가 title로 대체 가능.
@@ -37,14 +38,17 @@ export type LogPickerSheetProps = {
   onSelect: (args: { roomId: string }) => void;
 };
 
-export const LogPickerSheet = ({
-  visible,
-  onClose,
-  title = DEFAULT_TITLE,
+// 스크롤 본문 — **반드시 Sheet의 children으로 렌더돼야 한다.**
+//   useSheetScrollGesture는 Sheet가 body에 깐 컨텍스트를 읽는다. Sheet를 렌더하는 쪽(부모)에서 호출하면
+//   컨텍스트가 null이라 시트 드래그와의 우선순위 관계가 조용히 안 맺어진다(sheet-drag-rework QA L1).
+const LogPickerBody = ({
   logs,
   onSelect,
-}: LogPickerSheetProps) => {
+}: Pick<LogPickerSheetProps, 'logs' | 'onSelect'>) => {
   const theme = useTheme();
+  // 시트 안 유일한 내부 스크롤 — 시트 드래그-dismiss보다 스크롤이 우선권을 갖도록 명시적으로 묶는다
+  //   (RNGH는 관계를 선언하지 않으면 먼저 활성화된 쪽이 이기므로, 리스트 스크롤이 죽을 수 있다).
+  const scrollGesture = useSheetScrollGesture();
 
   // 로그 행 사이 헤어라인 구분선(첫 행 제외). 리스트 관례 — 킷 카드 리스트의 hairline 분리.
   const divider: ViewStyle = {
@@ -53,7 +57,7 @@ export const LogPickerSheet = ({
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title={title}>
+    <GestureDetector gesture={scrollGesture}>
       <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
         {logs.map((log, index) => (
           <Pressable
@@ -77,9 +81,21 @@ export const LogPickerSheet = ({
           </Pressable>
         ))}
       </ScrollView>
-    </Sheet>
+    </GestureDetector>
   );
 };
+
+export const LogPickerSheet = ({
+  visible,
+  onClose,
+  title = DEFAULT_TITLE,
+  logs,
+  onSelect,
+}: LogPickerSheetProps) => (
+  <Sheet visible={visible} onClose={onClose} title={title}>
+    <LogPickerBody logs={logs} onSelect={onSelect} />
+  </Sheet>
+);
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center' },
