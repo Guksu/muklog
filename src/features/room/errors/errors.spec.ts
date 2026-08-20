@@ -60,7 +60,7 @@ describe('mapRoomError — log-invite 신규 토큰 (2종, get_room, C2)', () =>
     );
   });
 
-  it('ROOM_ERROR_MESSAGES는 정확히 12개의 토큰 키를 가진다 (기존 10 + room-lifecycle 2, C2 단일 출처)', () => {
+  it('ROOM_ERROR_MESSAGES는 정확히 13개의 토큰 키를 가진다 (기존 12 + invite-code-hardening 1, C2 단일 출처)', () => {
     expect(Object.keys(ROOM_ERROR_MESSAGES).sort()).toEqual(
       [
         'ALREADY_IN_ROOM',
@@ -75,6 +75,7 @@ describe('mapRoomError — log-invite 신규 토큰 (2종, get_room, C2)', () =>
         'ROOM_FULL',
         'ROOM_NOT_FOUND',
         'SOLO_ROOM_NOT_JOINABLE',
+        'TOO_MANY_ATTEMPTS',
       ].sort(),
     );
   });
@@ -125,6 +126,14 @@ describe('mapRoomError — 포함 매칭 / 기본', () => {
 
   it('빈 메시지는 기본 메시지', () => {
     expect(mapRoomError({ error: new Error('') })).toBe(DEFAULT_ROOM_ERROR_MESSAGE);
+  });
+});
+
+describe('mapRoomError — invite-code-hardening 신규 토큰 (1종, join_room, C2)', () => {
+  it('TOO_MANY_ATTEMPTS — 시도 제한(10회/1시간) 초과', () => {
+    expect(mapRoomError({ error: new Error('TOO_MANY_ATTEMPTS') })).toBe(
+      '입장 시도가 너무 많았어요. 1시간 뒤에 다시 시도해 주세요.',
+    );
   });
 });
 

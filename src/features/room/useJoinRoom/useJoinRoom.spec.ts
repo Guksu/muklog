@@ -46,6 +46,28 @@ describe('useJoinRoom', () => {
     expect(result.current.error).toBe('로그 정원(5명)이 가득 찼어요.');
   });
 
+  it('INVALID_CODE — jsonb { error } 반환 계약(실패 카운터 커밋용)도 토큰 throw + 한국어 메시지', async () => {
+    // invite-code-hardening: raise는 트랜잭션 롤백으로 실패 카운터를 지우므로
+    // join_room이 INVALID_CODE를 jsonb { error }로 반환한다 — 훅이 토큰 throw로 변환.
+    rpc.mockResolvedValueOnce({ data: { error: 'INVALID_CODE' }, error: null });
+    const { result } = renderHook(() => useJoinRoom());
+
+    await act(async () => {
+      await expect(result.current.joinRoom({ code: 'ZZZZZZ' })).rejects.toThrow('INVALID_CODE');
+    });
+    expect(result.current.error).toBe('초대코드를 다시 확인해 주세요.');
+  });
+
+  it('TOO_MANY_ATTEMPTS 토큰(시도 제한 초과) → 한국어 메시지', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: new Error('TOO_MANY_ATTEMPTS') });
+    const { result } = renderHook(() => useJoinRoom());
+
+    await act(async () => {
+      await expect(result.current.joinRoom({ code: 'ABCDEF' })).rejects.toBeTruthy();
+    });
+    expect(result.current.error).toBe('입장 시도가 너무 많았어요. 1시간 뒤에 다시 시도해 주세요.');
+  });
+
   it('bad-response(room_id 누락)는 reject하고 error는 기본 메시지', async () => {
     rpc.mockResolvedValueOnce({ data: {}, error: null });
     const { result } = renderHook(() => useJoinRoom());
