@@ -28,7 +28,12 @@ export const useJoinRoom = () => {
       const { data, error: rpcError } = await supabase.rpc('join_room', { p_code: code });
       if (rpcError) throw rpcError;
 
-      const obj = (data ?? {}) as { room_id?: string };
+      const obj = (data ?? {}) as { room_id?: string; error?: string };
+      // invite-code-hardening: INVALID_CODE는 raise가 아니라 jsonb { error } 반환 계약이다 —
+      // raise는 트랜잭션 롤백으로 서버의 실패 카운터 INSERT까지 지우기 때문. 토큰 throw로 변환.
+      if (obj.error) {
+        throw new Error(obj.error);
+      }
       if (!obj.room_id) {
         throw new Error('JOIN_ROOM_BAD_RESPONSE');
       }

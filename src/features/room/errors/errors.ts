@@ -26,6 +26,9 @@ export const ROOM_ERROR_MESSAGES: Record<string, string> = {
   //   ⚠️ SQL(raise) ↔ 이 매핑이 단일 출처 — 20260616130000_room_lifecycle.sql 과 동기화 유지.
   NOT_SCHEDULED: '이미 삭제 예약이 해제됐거나 없는 로그예요.',
   NOT_DELETION_REQUESTER: '나가기를 요청한 사람만 취소할 수 있어요.',
+  // invite-code-hardening 신규 토큰 (C2). join_room RPC가 시도 제한(10회/1시간) 초과 시 raise.
+  //   ⚠️ SQL(raise) ↔ 이 매핑이 단일 출처 — 20260820120000_invite_code_hardening.sql 과 동기화 유지.
+  TOO_MANY_ATTEMPTS: '입장 시도가 너무 많았어요. 1시간 뒤에 다시 시도해 주세요.',
 };
 
 /** 토큰 미일치(네트워크/그 외) 시 기본 메시지. */
