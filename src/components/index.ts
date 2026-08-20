@@ -8,7 +8,7 @@ export { Avatar, type AvatarProps } from './Avatar';
 export { Icon, IconName, type IconProps } from './Icon';
 export { Card, type CardProps } from './Card';
 export { MemberBadge, type MemberBadgeProps } from './MemberBadge';
-export { Sheet, type SheetProps } from './Sheet';
+export { Sheet, useSheetScrollGesture, type SheetProps } from './Sheet';
 export { DatePickerSheet, type DatePickerSheetProps } from './DatePickerSheet';
 export { RenameDialog, type RenameDialogProps } from './RenameDialog';
 export { SubBar, type SubBarProps } from './SubBar';
