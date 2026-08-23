@@ -185,7 +185,9 @@ export const shadow = {
   md: { shadowColor:'#000', shadowOpacity:0.08, shadowRadius:12, shadowOffset:{width:0,height:4}, elevation:3 },
   lg: { shadowColor:'#000', shadowOpacity:0.12, shadowRadius:24, shadowOffset:{width:0,height:8}, elevation:6 },
   card: { shadowColor:palette.shadowWarm, shadowOpacity:0.10, shadowRadius:10, shadowOffset:{width:0,height:2}, elevation:2 },
-  // fab = 떠 있는 원형 버튼(지도 현재위치 FAB) — 킷 mk-home:292 box-shadow:0 4px 14px rgba(0,0,0,.18) 정합.
+  // fab = 떠 있는 원형 버튼(지도 현재위치 FAB) — 킷 mk-home:365 box-shadow:0 4px 14px rgba(0,0,0,.18) 정합.
+  //   (구 인용 :292는 킷 경로 마이그레이션 ui_kits/muklog→templates/muklog 이전 번호. 선언 내용은 불변.)
+  //   재검색 pill(MapResearchButton)도 같은 "지도 위에 떠 있는 레이어"라 이 토큰을 공유한다(map-pin-loading ui-spec §2.1).
   //   RN은 shadowRadius가 CSS blur와 1:1은 아니나 14로 근사. 컬러 그림자 아님(검정, 킷과 동일).
   fab: { shadowColor:'#000', shadowOpacity:0.18, shadowRadius:14, shadowOffset:{width:0,height:4}, elevation:5 },
   // seg = 세그먼트 컨트롤 선택칸(트랙 위에 떠 있는 카드) — 킷 mk-log:65 box-shadow 0 1px 4px rgba(0,0,0,.08).

@@ -18,6 +18,7 @@ import {
   LogPickerSheet,
   MapLegend,
   MapLocateButton,
+  MapResearchButton,
   MapStatusOverlay,
   MapStatusTone,
   MapWebView,
@@ -42,6 +43,12 @@ import { filterByAppCategory } from '@/features/map/filterByAppCategory';
 import { filterNearbyByCategory } from '@/features/map/filterNearbyByCategory';
 import { mergeMapMarkers } from '@/features/map/mergeMapMarkers';
 import { nearbyCategoryEmoji } from '@/features/map/nearbyCategoryEmoji';
+import { NEARBY_FALLBACK_SPAN, nearbyPreloadBbox } from '@/features/map/nearbyPreloadBbox';
+import {
+  NearbyTraceEvent,
+  nearbyRenderGapMs,
+  traceNearby,
+} from '@/features/map/nearbyTrace';
 import { nearbyToMapMarkers } from '@/features/map/nearbyToMapMarkers';
 import { parseMapMessage } from '@/features/map/parseMapMessage';
 import { pinsToMapMarkers } from '@/features/map/pinsToMapMarkers';
@@ -115,6 +122,11 @@ export const MapTabScreen = () => {
   //   더 정밀한 좌표가 도착할 때만 1회 보정하므로(단조 승격) 별도의 "자동 센터링 1회" 플래그가 필요 없다 —
   //   폴백→warm, warm→fresh는 각각 1회 발화하고, 같은 정밀도의 좌표 갱신(사용자 이동)은 따라가지 않는다.
   const centeredSourceRef = useRef<LocationCoordsSource | null>(null);
+  // map-pin-loading: 선로딩은 마운트당 1회다. 좌표가 warm→fresh로 승격돼도(=effect 재실행) 재발사하지 않는다.
+  const preloadFiredRef = useRef(false);
+  // 계측 t0 — READY 수신 시각. 소스별 "첫 렌더까지의 갭"을 재는 기준선이다(__DEV__ 전용).
+  const readyAtRef = useRef<number | null>(null);
+  const firstRenderTracedRef = useRef<Set<MapPinKind>>(new Set());
 
   // 현재 핀 목록(ready일 때만, 아니면 빈 배열 — 지도/INIT는 항상 유효하게 유지).
   const pins: MuklogPin[] = state.status === 'ready' ? state.pins : [];
@@ -141,6 +153,34 @@ export const MapTabScreen = () => {
       }
     },
     [permission.status],
+  );
+
+  // map-pin-loading: 탭 진입 즉시 주변 조회를 WebView 부팅(≈1.2s)과 **병렬**로 태운다(선로딩).
+  //   센터는 initialRegion과 같은 우선순위(현재위치 → 핀 bbox)라 지도가 그려질 자리를 미리 받는다.
+  //   신호가 하나도 없으면(좌표·핀 0) 스킵한다 — 확실히 틀릴 조회를 미리 태우면 비용만 쓰고 화면은 못 채운다.
+  //   좌표·핀이 늦게 도착하면 그때 1회 발사되고(deps 재실행), 이후 정밀도 승격은 ref 가드가 흡수한다(A4-1).
+  const pinsCount = pins.length;
+  useEffect(
+    function preloadNearbyOnce() {
+      if (preloadFiredRef.current) return;
+      const bbox = nearbyPreloadBbox({
+        coords: permission.coords,
+        pins,
+        span: NEARBY_FALLBACK_SPAN,
+      });
+      if (!bbox) {
+        traceNearby({ event: NearbyTraceEvent.PreloadSkip, detail: { reason: 'no-signal' } });
+        return;
+      }
+      preloadFiredRef.current = true;
+      traceNearby({
+        event: NearbyTraceEvent.PreloadStart,
+        detail: { source: permission.coords ? 'coords' : 'pins' },
+      });
+      nearby.preload({ bbox });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 신호(좌표·핀 개수)가 생기는 순간에만 재평가. pins 배열은 매 렌더 새 참조라 원시값으로 대체(발사는 ref 가드로 1회).
+    [permission.coords, pinsCount],
   );
 
   // 지도 탭 포커스마다 위시 핀 + 먹로그(saved) 핀 재조회(로그에서 추가/삭제·방 나가기 후 복귀 반영). 폴링 아님 — 포커스 단위.
@@ -189,6 +229,10 @@ export const MapTabScreen = () => {
     if (message.type === MapInboundType.Ready) {
       setMapErrored(false);
       setMapReady(true);
+      // 계측 t0 — 이 시점부터 각 소스(saved·wish·nearby)의 첫 핀이 몇 ms 뒤에 실리는지 잰다.
+      //   nearby가 INIT에 함께 실리면 gapMs=0(= 목표 상태), 뒤늦게 오면 그 지연이 그대로 드러난다.
+      readyAtRef.current = Date.now();
+      traceNearby({ event: NearbyTraceEvent.MapReady });
       sendInit();
       return;
     }
@@ -198,7 +242,8 @@ export const MapTabScreen = () => {
       return;
     }
     if (message.type === MapInboundType.BoundsChanged) {
-      // idle viewport bbox → nearby 조회(디바운스/캐시/임계는 useNearbyPlaces가 전담).
+      // map-pin-loading: 이 신호는 더 이상 "조회하라"가 아니라 **"현재 뷰포트는 여기다"** 라는 통지다.
+      //   훅은 이걸로 네트워크를 태우지 않고 재검색 버튼 노출 판정·span 1회 기록만 한다(예외: 첫 조회 허용분·보정 1회).
       nearby.setBounds({ sw: message.sw, ne: message.ne });
       return;
     }
@@ -220,6 +265,27 @@ export const MapTabScreen = () => {
       if (!mapReady) return;
       webviewRef.current?.injectJavaScript(buildSetMarkersScript({ markers }));
     },
+    [markersKey, mapReady],
+  );
+
+  // map-pin-loading 계측: 소스별 "READY → 첫 핀 탑재" 갭을 1회씩만 기록한다(__DEV__ 전용, 프로덕션 no-op).
+  //   INIT에 이미 실려 있으면 gapMs=0으로 찍히므로, 로그만 보고 "지도와 함께 도착했는가"를 판정할 수 있다.
+  useEffect(
+    function traceFirstMarkerRender() {
+      if (!mapReady) return;
+      markers.forEach((marker) => {
+        if (firstRenderTracedRef.current.has(marker.kind)) return;
+        firstRenderTracedRef.current.add(marker.kind);
+        traceNearby({
+          event: NearbyTraceEvent.FirstRender,
+          detail: {
+            kind: marker.kind,
+            gapMs: nearbyRenderGapMs({ readyAt: readyAtRef.current, at: Date.now() }),
+          },
+        });
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- markersKey(마커 집합 요약)로 발화. markers 배열은 매 렌더 새 참조라 제외.
     [markersKey, mapReady],
   );
 
@@ -352,6 +418,22 @@ export const MapTabScreen = () => {
           <MapLegend />
         </View>
 
+        {/* 재검색 pill — 범례 아래 한 단(top 96 = 56 + 40), 가로 중앙(ui-spec §3.2).
+            범례(left:16, 3칩 ≈301pt)와 중앙 pill(≈155pt)이 모든 기기에서 가로로 겹쳐 같은 줄을 쓸 수 없다.
+            ⚠ pointerEvents="box-none" — 전폭 래퍼가 지도 팬/탭 제스처를 삼키지 않게. */}
+        {nearby.researchAvailable ? (
+          <View
+            testID="map-overlay-research"
+            pointerEvents="box-none"
+            style={[
+              styles.research,
+              { top: insets.top + theme.spacing[56] + theme.spacing[40] },
+            ]}
+          >
+            <MapResearchButton testID="map-research-button" onPress={nearby.research} />
+          </View>
+        ) : null}
+
         {/* 상태 오버레이 — 차단 아님(지도 위 배너). */}
         {overlay ? (
           <View pointerEvents="box-none" style={styles.overlay}>
@@ -429,6 +511,8 @@ const styles = StyleSheet.create({
   // 카테고리 필터 바 — 최상단 full-width 절대배치(top은 인라인 토큰). left/right 0으로 edge-bleed 가로 스크롤.
   filterBar: { position: 'absolute', left: 0, right: 0 },
   legend: { position: 'absolute' },
+  // 재검색 pill 래퍼 — 전폭 절대배치 + 가로 중앙(pill 자신은 alignSelf:'center'라 폭을 채우지 않는다).
+  research: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   // 현재위치 FAB — 우하단 절대배치(right/bottom은 인라인 토큰, ui-spec §4.2).
   locate: { position: 'absolute' },
