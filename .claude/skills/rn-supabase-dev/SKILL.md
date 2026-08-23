@@ -1,6 +1,6 @@
 ---
 name: rn-supabase-dev
-description: "muklog 구현 가이드. React Native(Expo Dev Client) + Supabase(Postgres·Auth·Storage·Realtime·Edge Functions) + Kakao(Map·Local API) 스택의 코드 컨벤션과 패턴. 원티드 디자인 토큰 사용. developer 에이전트가 사용. 구현/개발/코딩 작업 시 적용."
+description: "muklog 구현 가이드. React Native(Expo Dev Client) + Supabase(Postgres·Auth·Storage·Realtime·Edge Functions) + Kakao(Map·Local API) 스택의 코드 컨벤션과 패턴. 원티드 디자인 토큰 사용. developer 에이전트가 사용. 구현/개발/코딩 작업 시 적용. 후속 작업: 구현 수정·보완·리팩토링·버그 재수정 시에도 적용."
 ---
 
 # RN + Supabase + Kakao 구현 가이드

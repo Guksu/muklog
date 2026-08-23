@@ -19,13 +19,16 @@
 
 **목표:** planner→ui-publisher→developer→qa(qa-visual ∥ qa-logic) 에이전트 팀으로 한 스프린트에 한 기능을 기획·퍼블리싱·구현·검증한다. **역할 경계:** planner=무엇을(기획·계약) / **ui-publisher=어떻게 보이는가(킷 `templates/muklog`→RN 토큰·프리미티브·화면 골격)** / developer=어떻게 동작하는가(데이터·훅·배선) / **qa-logic=로직·통합 정합성(퍼블리싱 제외)** / **qa-visual=킷 시안 대비 비주얼 충실도**. 두 QA는 독립이라 **병렬**로 검증하고 리포트도 분리(`qa-report-logic.md`·`qa-report-visual.md`). **디자인 단일 출처는 킷 `templates/muklog`**(`.claude/skills/ui-design/templates/muklog/`) — ui-publisher가 RN으로 번역하고, developer는 비주얼을 임의 변경하지 않는다.
 
-**트리거:** 기능 개발/스프린트 관련 요청(예: "초대코드 방 기능 스프린트 시작", "먹로그 리스트 구현", "지도 탭 개발", "다음 스프린트", "○○만 다시 구현") 시 `sprint-orchestrator` 스킬을 사용하라. 단순 질문은 직접 응답 가능.
+**트리거:** 기능 개발/스프린트 관련 요청(예: "초대코드 방 기능 스프린트 시작", "먹로그 리스트 구현", "지도 탭 개발", "다음 스프린트", "○○만 다시 구현")과 **UX 개선 요청**(예: "UX 개선", "UX 감사", "백로그 다음 항목 진행") 시 `sprint-orchestrator` 스킬을 사용하라. 단순 질문은 직접 응답 가능.
+
+**UX 레퍼런스:** 토스·당근에서 추출한 UX 원칙은 `ux-principles` 스킬 — **킷 `templates/muklog`가 비주얼 단일 출처인 것은 불변**이고, 원칙은 킷이 침묵하는 영역(플로우·피드백·모션·카피·빈 상태)에만 적용한다. 충돌 시 킷 우선 + 사용자 확인. UX 개선 백로그는 `docs/ux/ux-backlog.md`.
 
 **산출물:** 각 스프린트는 `docs/sprint/sprint-{YYYYMMDD}-{name}/`에 plan.md / ui-spec.md / dev-notes.md / qa-report-logic.md / qa-report-visual.md를 남긴다.
 
 **변경 이력:**
 | 날짜 | 변경 내용 | 대상 | 사유 |
 |------|----------|------|------|
+| 2026-08-23 | **토스·당근 UX 원칙 레이어 도입** — `ux-principles` 스킬 신설(원칙 10종 + 7축 감사 체크리스트·백로그 형식). 킷 templates/muklog는 비주얼 단일 출처로 불변, 원칙은 킷이 침묵하는 영역(플로우·피드백·모션·카피·빈 상태)에만 적용(충돌 시 킷 우선+사용자 확인). 오케스트레이터에 UX 개선 플로우 추가(감사=서브 에이전트 팬아웃 읽기 전용 → `docs/ux/ux-backlog.md` → 사용자 우선순위 확정 → 항목별 기존 파이프라인). planner·ui-publisher에 원칙 인용 규칙 배선. 동반 정비: ui-publisher 구 경로 `ui_kits/muklog` 2곳 → `templates/muklog`(6/12 마이그레이션 누락), ui-design frontmatter name 디렉토리 정합, blockSecretAccess 훅 등록(Bash 경유 시크릿 읽기 차단 — 기존 deny는 Read 도구만 막았음), 3개 스킬 description 후속 키워드 보강 | .claude/skills/ux-principles/(신설), sprint-orchestrator·sprint-planning·ui-publishing·integration-qa·rn-supabase-dev·ui-design 스킬, sprint-planner·ui-publisher 에이전트, .claude/hooks/blockSecretAccess.mjs(신설)·settings.json, CLAUDE.md | 사용자 지시(2026-08-23) — 토스·당근 레퍼 UI/UX 개선, 전 화면 감사→백로그 진입 |
 | 2026-06-09 | 초기 구성 (에이전트 3 + 스킬 4 + 설계 문서) | 전체 | - |
 | 2026-06-09 | 원티드 토큰 실값 반영 (builbook→RN tokens.ts 변환) | rn-supabase-dev/references/wanted-tokens.md | 실제 토큰 소스 확보 |
 | 2026-06-09 | 코드 컨벤션 도입 + 전체 코드 정합화 (useCallback/useMemo 제거, 화살표 함수, named-args, useEffect 명명) + 하네스 연결 | docs/code-convention.md, src 전체, dev/qa 스킬·에이전트 | 사용자 컨벤션 적용 |

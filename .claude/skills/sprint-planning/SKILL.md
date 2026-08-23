@@ -1,6 +1,6 @@
 ---
 name: sprint-planning
-description: "muklog 스프린트 기획 가이드. 단일 기능을 검증 가능한 인수조건·데이터 계약·엣지케이스·작업 목록으로 분해해 plan.md를 작성한다. sprint-planner 에이전트가 사용. 스프린트 계획/기획 작성 시 적용."
+description: "muklog 스프린트 기획 가이드. 단일 기능을 검증 가능한 인수조건·데이터 계약·엣지케이스·작업 목록으로 분해해 plan.md를 작성한다. sprint-planner 에이전트가 사용. 스프린트 계획/기획 작성 시 적용. 후속 작업: 계획 수정·보완·재작성·범위 재조정 시에도 적용."
 ---
 
 # Sprint Planning — plan.md 작성 가이드
@@ -16,6 +16,7 @@ description: "muklog 스프린트 기획 가이드. 단일 기능을 검증 가�
 ## 시작 전
 1. `docs/design/architecture.md`를 읽는다 — 데이터 모델·화면·결정·비용 가드레일.
 2. `docs/sprint/`의 이전 스프린트를 훑어 의존성·중복을 파악한다.
+3. **UX 개선 스프린트면** `ux-principles` 스킬을 읽고, `docs/ux/ux-backlog.md` 해당 항목의 위반 원칙 번호를 인수조건에 인용한다(개선이 관찰 가능해진다).
 
 ## plan.md 필수 섹션
 
