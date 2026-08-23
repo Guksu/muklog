@@ -14,6 +14,8 @@ description: "muklog UI 퍼블리싱 가이드. 디자인 킷 templates/muklog(�
 
 **대원칙:** 킷은 웹(CSS/인라인 JSX)이다. RN에서는 **토큰·패턴을 `src/theme`/`src/components`로 번역**해 적용한다(CSS 직접 사용 금지). 비주얼은 킷과 픽셀 단위로 맞추되, 코드는 `docs/code-convention.md`를 100% 따른다.
 
+**UX 판단 보조:** 킷이 침묵하는 마이크로 결정(로딩 표현·pressed 피드백·모션 지속시간·카피 뉘앙스·빈 상태)은 `ux-principles` 스킬(토스·당근 레퍼)을 기준으로 하고, 적용한 원칙 번호를 ui-spec.md에 근거로 남긴다. **킷 시안과 충돌하면 킷 우선 + 사용자 확인.**
+
 ## 0. 시작 절차
 1. 작업 화면/컴포넌트에 대응하는 **킷 함수를 먼저 읽는다**(`mk-*.jsx`의 해당 함수 라인). 추측 금지.
 2. `index.html`에서 사용된 `--mk-*` 변수 실값을 확인하고 `src/theme/tokens.ts`와 대조한다.
