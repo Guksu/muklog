@@ -1,6 +1,6 @@
 ---
 name: integration-qa
-description: "muklog 로직·통합 정합성 QA 가이드(퍼블리싱 제외). 경계면(쿼리/Edge Function/RPC 응답↔훅, 컬럼↔화면, RLS↔쿼리, 네비게이션, 브리지 메시지) 교차검증으로 런타임 버그를 잡는다. qa-logic이 사용. 로직 QA·통합 정합성·기능 검증 시 적용(비주얼 충실도는 visual-qa 스킬)."
+description: "muklog 로직·통합 정합성 QA 가이드(퍼블리싱 제외). 경계면(쿼리/Edge Function/RPC 응답↔훅, 컬럼↔화면, RLS↔쿼리, 네비게이션, 브리지 메시지) 교차검증으로 런타임 버그를 잡는다. qa-logic이 사용. 로직 QA·통합 정합성·기능 검증 시 적용(비주얼 충실도는 visual-qa 스킬). 후속 작업: 로직 QA 다시·재검증·수정 후 보완 확인 시에도 적용."
 ---
 
 # Integration QA — 경계면 교차검증 가이드 (로직 전용)
