@@ -1,6 +1,9 @@
 // src/features/map/components/MapLegend.tsx
-// 지도 범례 — 킷 mk-home.jsx:281-284,306-312 Legend 재현 (map-tab 슬라이스 1).
-//   "우리 맛집"(primary dot) / "주변 음식점"(웜그레이 dot, 킷 #B6ABA0=mapNearbyPin) 칩 2개.
+// 지도 범례 — 킷 mk-home.jsx:358-361(오버레이 배치) · :394-399(Legend 함수) 재현 (map-tab 슬라이스 1).
+//   킷은 "우리 맛집"(primary dot) / "주변 음식점"(웜그레이 dot, 킷 #B6ABA0=mapNearbyPin) 칩 2개이고,
+//   여기에 킷 비종속인 "가고 싶은 곳"(mapWishPin) 1개를 더해 **칩 3개** 행이다(아래 LEGEND_ITEMS가 단일 출처).
+//   ⚠ 칩 3개 행은 가로 ≈301pt(left:16 기준 ~317pt까지)를 차지한다 — 같은 줄에 중앙 정렬 오버레이를 두면
+//     모든 지원 기기에서 겹친다(map-pin-loading ui-spec §3.1의 MapResearchButton 배치 근거).
 //   현 MapTabScreen 인라인 LegendChip을 이 컴포넌트로 추출·정합(인라인 중복 제거).
 //   킷 칩: rgba(255,255,255,.85)+backdrop-blur(6px) → RN blur 미지원, surface 불투명 근사(ui-spec 기록).
 //   킷 칩 텍스트 700/11 → caption(12/Medium) 근사. dot 9×9 full radius.
@@ -12,7 +15,7 @@ import { Text } from '@/components';
 import { useTheme } from '@/theme';
 import type { ColorToken } from '@/theme';
 
-// 범례 3종 — 킷 mk-home:282-283은 우리 맛집·주변 음식점 2종뿐(위시 핀은 킷에 없음, map-wish-pins 신설).
+// 범례 3종 — 킷 mk-home:359-360은 우리 맛집·주변 음식점 2종뿐(위시 핀은 킷에 없음, map-wish-pins 신설).
 //   위시 항목은 킷 위시 보이스("가보고 싶은 곳", mk-extra:195)를 주변/맛집과 평행한 짧은 명사구로 축약한 "가고 싶은 곳".
 //   dot 색은 mapWishPin(앰버 #FFB23E) — 핀 색과 단일 출처. enum-style 상수로 고정.
 const LEGEND_ITEMS: ReadonlyArray<{ dotColor: ColorToken; label: string }> = [

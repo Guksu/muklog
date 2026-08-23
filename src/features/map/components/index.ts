@@ -15,6 +15,7 @@ export {
 export { MapLegend } from './MapLegend';
 export { MuklogMiniMap, type MuklogMiniMapProps } from './MuklogMiniMap';
 export { MapLocateButton, type MapLocateButtonProps } from './MapLocateButton';
+export { MapResearchButton, type MapResearchButtonProps } from './MapResearchButton';
 export {
   MapStatusOverlay,
   MapStatusTone,

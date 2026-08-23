@@ -137,10 +137,21 @@ const wishPin = (over?: Record<string, unknown>) => ({
 });
 
 const setBoundsSpy = jest.fn();
-// nearby 훅 상태 주입(기본: idle·빈 마커·빈 items). 테스트에서 markers/items/status 오버라이드.
-const setNearby = (over?: { markers?: MapMarker[]; items?: unknown[]; status?: string }) => {
+// map-pin-loading: 선로딩·명시 재검색 배선 지점(호출 횟수·조건 렌더 검증). 상태 기계 자체는 훅 단위 테스트가 검증한다.
+const preloadSpy = jest.fn();
+const researchSpy = jest.fn();
+// nearby 훅 상태 주입(기본: idle·빈 마커·빈 items·버튼 미노출). 테스트에서 오버라이드.
+const setNearby = (over?: {
+  markers?: MapMarker[];
+  items?: unknown[];
+  status?: string;
+  researchAvailable?: boolean;
+}) => {
   useNearbyPlacesMock.mockReturnValue({
     setBounds: setBoundsSpy,
+    preload: preloadSpy,
+    research: researchSpy,
+    researchAvailable: over?.researchAvailable ?? false,
     markers: over?.markers ?? [],
     items: over?.items ?? [],
     status: over?.status ?? 'idle',
@@ -206,6 +217,8 @@ beforeEach(() => {
   muklogRefreshSpy.mockReset();
   mockFocus.cb = null;
   setBoundsSpy.mockReset();
+  preloadSpy.mockReset();
+  researchSpy.mockReset();
   requestSpy.mockReset();
   refreshCoordsSpy.mockReset();
   injectedScripts.length = 0;
@@ -1183,5 +1196,146 @@ describe('MapTabScreen — map-headerless 상단 오버레이 safe-area', () => 
     expect(flatStyle({ testID: 'map-overlay-locate' }).bottom).toBe(16);
     // 상단 오버레이만 inset을 흡수했는지 대조(같은 렌더에서 상단은 하강, 하단은 불변).
     expect(flatStyle({ testID: 'map-overlay-filterbar' }).top).toBe(12 + INSET);
+  });
+});
+
+// ── map-pin-loading (plan §6 W4 A4-1~A4-6) ──────────────────────────
+//   화면의 책임은 셋뿐이다: ① 마운트 1회 선로딩 발사 ② researchAvailable 조건 렌더 ③ 버튼 탭 → research.
+//   상태 기계(허용분·보정·캐시)는 useNearbyPlaces 단위 테스트가 검증하고, 여기선 **배선**만 잠근다.
+describe('MapTabScreen — nearby 선로딩·재검색 버튼 배선', () => {
+  const nearbyMarker = (over?: Partial<MapMarker>): MapMarker => ({
+    id: 'k1',
+    lat: 37.52,
+    lng: 127.02,
+    emoji: '🍜',
+    kind: MapPinKind.Nearby,
+    ...over,
+  });
+
+  it('A4-1 coords 보유 상태로 마운트 → preload가 정확히 1회 · bbox 중심이 현재위치다', () => {
+    setPermission({ coords: { lat: 37.5, lng: 127.0 } });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+
+    expect(preloadSpy).toHaveBeenCalledTimes(1);
+    const { bbox } = preloadSpy.mock.calls[0][0];
+    expect((bbox.sw.lat + bbox.ne.lat) / 2).toBeCloseTo(37.5, 6);
+    expect((bbox.sw.lng + bbox.ne.lng) / 2).toBeCloseTo(127.0, 6);
+  });
+
+  it('A4-1 coords가 warm→fresh로 승격돼도 preload 재호출 0(마운트당 1회)', () => {
+    setPermission({
+      coords: { lat: 37.5, lng: 127.0 },
+      coordsSource: LocationCoordsSource.Warm,
+    });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    expect(preloadSpy).toHaveBeenCalledTimes(1);
+
+    setPermission({
+      coords: { lat: 37.501, lng: 127.001 },
+      coordsSource: LocationCoordsSource.Fresh,
+    });
+    rerender(<MapTabScreen />);
+    expect(preloadSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('A4-2 coords·핀 모두 없으면 preload 0(스킵) — 첫 BOUNDS_CHANGED가 조회를 맡는다', () => {
+    setPermission({ status: LocationPermissionStatus.Denied, coords: null });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+
+    expect(preloadSpy).not.toHaveBeenCalled();
+    emitMessage({
+      raw: JSON.stringify({
+        type: 'BOUNDS_CHANGED',
+        sw: { lat: 37.49, lng: 126.99 },
+        ne: { lat: 37.51, lng: 127.01 },
+      }),
+    });
+    expect(setBoundsSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('A4-2 coords가 없어도 핀이 있으면 핀 bbox 중심으로 선로딩한다(폴백 신호)', () => {
+    setPermission({ status: LocationPermissionStatus.Denied, coords: null });
+    useMuklogPinsMock.mockReturnValue({
+      state: { status: 'ready', pins: [pin({ lat: 37.4, lng: 126.9 }), pin({ muklogId: 'm2', lat: 37.6, lng: 127.1 })] },
+      refresh: jest.fn(),
+    });
+    renderWithTheme(<MapTabScreen />);
+
+    expect(preloadSpy).toHaveBeenCalledTimes(1);
+    const { bbox } = preloadSpy.mock.calls[0][0];
+    expect((bbox.sw.lat + bbox.ne.lat) / 2).toBeCloseTo(37.5, 6);
+  });
+
+  it('A4-3 researchAvailable=true일 때만 map-research-button이 렌더된다', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setNearby({ researchAvailable: false });
+    const { unmount } = renderWithTheme(<MapTabScreen />);
+    expect(screen.queryByTestId('map-research-button')).toBeNull();
+    unmount();
+
+    setNearby({ researchAvailable: true });
+    renderWithTheme(<MapTabScreen />);
+    expect(screen.getByTestId('map-research-button')).toBeTruthy();
+    expect(screen.getByText('이 지역에서 검색')).toBeTruthy();
+  });
+
+  it('A4-4 버튼 탭 → nearby.research가 1회 호출된다', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setNearby({ researchAvailable: true });
+    renderWithTheme(<MapTabScreen />);
+
+    fireEvent.press(screen.getByTestId('map-research-button'));
+    expect(researchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('A4-5 READY 시점에 nearby가 있으면 INIT 페이로드에 kind:nearby가 함께 실린다(팝인 0)', () => {
+    useMuklogPinsMock.mockReturnValue({
+      state: { status: 'ready', pins: [pin({ lat: 37.5, lng: 127.0 })] },
+      refresh: jest.fn(),
+    });
+    // 지도 마커는 nearby.items에서 파생된다(훅의 markers가 아니라) — 좌표가 saved 핀과 겹치면
+    //   mergeMapMarkers의 근접 dedup에 흡수되므로 떨어진 좌표를 쓴다.
+    setNearby({
+      markers: [nearbyMarker()],
+      items: [nearbyItem({ lat: 37.52, lng: 127.02 })],
+      status: 'ready',
+    });
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    const initScript = injectedScripts.find((s) => s.includes('INIT'));
+    expect(initScript).toBeTruthy();
+    expect(initScript).toContain('"kind":"nearby"');
+    expect(initScript).toContain('"kind":"saved"');
+  });
+
+  it('A4-6 버튼 오버레이 top = insets.top + 96(범례 아래 한 단) · 하단은 불변', () => {
+    const flatStyle = ({ testID }: { testID: string }): { top?: number; bottom?: number } =>
+      StyleSheet.flatten(screen.getByTestId(testID).props.style);
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setNearby({ researchAvailable: true });
+
+    mockTopInset.current = 0;
+    const { unmount } = renderWithTheme(<MapTabScreen />);
+    expect(flatStyle({ testID: 'map-overlay-research' }).top).toBe(96);
+    // 범례(56)보다 아래 한 단이며 겹치지 않는다.
+    expect(flatStyle({ testID: 'map-overlay-legend' }).top).toBe(56);
+    unmount();
+
+    mockTopInset.current = 59;
+    renderWithTheme(<MapTabScreen />);
+    expect(flatStyle({ testID: 'map-overlay-research' }).top).toBe(96 + 59);
+    // inset이 하단으로 새지 않는다(map-headerless 규율).
+    expect(flatStyle({ testID: 'map-overlay-locate' }).bottom).toBe(16);
+  });
+
+  it('B10 래퍼가 지도 제스처를 삼키지 않는다(pointerEvents=box-none)', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setNearby({ researchAvailable: true });
+    renderWithTheme(<MapTabScreen />);
+    expect(screen.getByTestId('map-overlay-research').props.pointerEvents).toBe('box-none');
   });
 });
