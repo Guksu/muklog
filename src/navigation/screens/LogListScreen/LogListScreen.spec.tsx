@@ -270,13 +270,30 @@ describe('LogListScreen — 빈 상태(EmptyLogs 히어로 + 두 갈래, 킷 mk-
     expect(screen.getByText('초대코드로 입장')).toBeTruthy();
   });
 
-  it('"새 로그 만들기"를 누르면 createRoom→refresh를 호출한다(onCreate)', async () => {
+  it('"새 로그 만들기"를 누르면 createRoom→refresh→RoomCreated 축하화면으로 이동한다(U1)', async () => {
     createRoom.mockResolvedValueOnce({ roomId: 'r1', inviteCode: 'ABCDEF', mode: 'couple' });
     useMyLogsContextMock.mockReturnValue({ state: { status: 'ready', logs: [] }, refresh });
     renderWithTheme(<LogListScreen />);
     fireEvent.press(screen.getByText('새 로그 만들기'));
     await waitFor(() => expect(createRoom).toHaveBeenCalledWith());
     expect(refresh).toHaveBeenCalled();
+    // U1: 어느 경로로 만들어도 초대코드를 한 번 본다 — 제자리 유지가 아니라 축하화면 경유.
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(Routes.RoomCreated, {
+        roomId: 'r1',
+        code: 'ABCDEF',
+      }),
+    );
+  });
+
+  it('빈 상태 생성 실패 시 Alert만 뜨고 화면에 머문다(navigate 0)', async () => {
+    createRoom.mockRejectedValueOnce(new Error('CODE_GENERATION_FAILED'));
+    useMyLogsContextMock.mockReturnValue({ state: { status: 'ready', logs: [] }, refresh });
+    renderWithTheme(<LogListScreen />);
+    fireEvent.press(screen.getByText('새 로그 만들기'));
+    await waitFor(() => expect(Alert.alert).toHaveBeenCalledTimes(1));
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(screen.getByText('민지님,\n맛집 기록을 시작해요')).toBeTruthy();
   });
 
   it('"초대코드로 입장"을 누르면 JoinLog로 이동한다(onJoin)', () => {
@@ -379,15 +396,100 @@ describe('LogListScreen — 카드 헤더(아바타/배지/이름/날짜/chevron
     expect(screen.getByText('민지 · 짝꿍')).toBeTruthy();
   });
 
-  it('카드 하단에 "새 로그 시작하기" CTA가 있고, 누르면 createRoom→refresh를 호출한다', async () => {
-    createRoom.mockResolvedValueOnce({ roomId: 'r2', inviteCode: 'ZZZZZZ', mode: 'couple' });
+  it('카드 하단에 "새 로그 시작하기" CTA가 있다', () => {
     useMyLogsContextMock.mockReturnValue({
       state: { status: 'ready', logs: [log({ roomId: 'r1' })] },
       refresh,
     });
     renderWithTheme(<LogListScreen />);
+    expect(screen.getByText('새 로그 시작하기')).toBeTruthy();
+  });
+});
+
+// U1/결정 D2 — 하단 CTA는 "즉시 생성"이 아니라 "어떻게 시작할까요?" 시트 오픈이다(킷 mk-home:120·SPEC.md:36).
+//   즉시 생성이면 취소 수단 없는 파괴적 기본값이 되고, 헤더 +버튼과 결과가 갈린다.
+describe('LogListScreen — 하단 CTA → AddSheet(생성/입장 두 갈래)', () => {
+  const setupList = () => {
+    useMyLogsContextMock.mockReturnValue({
+      state: { status: 'ready', logs: [log({ roomId: 'r1' })] },
+      refresh,
+    });
+  };
+
+  const openSheet = () => {
     fireEvent.press(screen.getByText('새 로그 시작하기'));
+  };
+
+  it('CTA를 누르면 시트가 열리고 createRoom은 호출되지 않는다', () => {
+    setupList();
+    renderWithTheme(<LogListScreen />);
+    expect(screen.queryByText('어떻게 시작할까요?')).toBeNull();
+
+    openSheet();
+
+    expect(screen.getByText('어떻게 시작할까요?')).toBeTruthy();
+    expect(screen.getByText('새 로그 만들기')).toBeTruthy();
+    expect(screen.getByText('초대코드로 들어가기')).toBeTruthy();
+    expect(createRoom).not.toHaveBeenCalled();
+  });
+
+  it('시트 "새 로그 만들기" → 시트가 닫히고 RoomCreated로 이동한다', async () => {
+    createRoom.mockResolvedValueOnce({ roomId: 'r2', inviteCode: 'ZZZZZZ', mode: 'couple' });
+    setupList();
+    renderWithTheme(<LogListScreen />);
+
+    openSheet();
+    fireEvent.press(screen.getByText('새 로그 만들기'));
+
     await waitFor(() => expect(createRoom).toHaveBeenCalledWith());
     expect(refresh).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(Routes.RoomCreated, {
+        roomId: 'r2',
+        code: 'ZZZZZZ',
+      }),
+    );
+    expect(screen.queryByText('어떻게 시작할까요?')).toBeNull();
+  });
+
+  it('시트 "초대코드로 들어가기" → 시트가 닫히고 JoinLog로 이동한다', () => {
+    setupList();
+    renderWithTheme(<LogListScreen />);
+
+    openSheet();
+    fireEvent.press(screen.getByText('초대코드로 들어가기'));
+
+    expect(mockNavigate).toHaveBeenCalledWith(Routes.JoinLog);
+    expect(createRoom).not.toHaveBeenCalled();
+    expect(screen.queryByText('어떻게 시작할까요?')).toBeNull();
+  });
+
+  it('creating 중에는 CTA가 누를 수 없는 표면이 된다(중복 생성 방지)', () => {
+    setupList();
+    const { rerender } = renderWithTheme(<LogListScreen />);
+    // 평상시엔 누를 수 있는 버튼.
+    expect(screen.getByLabelText('새 로그 시작하기').props.accessibilityRole).toBe('button');
+
+    useCreateRoomMock.mockReturnValue({ createRoom, loading: true, error: null });
+    rerender(<LogListScreen />);
+
+    // 생성 중엔 Pressable 자체가 사라져 탭 표면이 없다(fireEvent가 합성 컴포넌트 prop을 타는 것과 무관한 실제 렌더).
+    const cta = screen.getByLabelText('새 로그 시작하기');
+    expect(cta.props.accessibilityRole).toBeUndefined();
+    expect(cta.props.onStartShouldSetResponder).toBeUndefined();
+    expect(createRoom).not.toHaveBeenCalled();
+  });
+
+  it('시트가 열린 채 생성이 시작되면 시트의 "새 로그 만들기" 행도 비활성이다(AddSheet creating 전달)', () => {
+    setupList();
+    const { rerender } = renderWithTheme(<LogListScreen />);
+    openSheet();
+
+    // 생성 진행 중으로 전환 — creating이 AddSheet까지 내려가야 행이 잠긴다.
+    useCreateRoomMock.mockReturnValue({ createRoom, loading: true, error: null });
+    rerender(<LogListScreen />);
+    fireEvent.press(screen.getByText('새 로그 만들기'));
+
+    expect(createRoom).not.toHaveBeenCalled();
   });
 });

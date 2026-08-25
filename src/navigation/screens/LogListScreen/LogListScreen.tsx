@@ -11,10 +11,12 @@
 //
 // 인사 헤드라인(116-122) = "{닉}님, 오늘은\n어디 다녀왔어요?" + "지금까지 함께 {Σ spotCount}곳을 기록했어요"(합계 accentStrong 강조).
 //
-// 생산자(소비): useMyLogsContext(state/refresh) + useCreateRoom(생성) + useProfileContext(공유 닉/아바타·#2) + useNavigation.
+// 생산자(소비): useMyLogsContext(state/refresh) + useStartLogFlow(생성/입장 배선, 헤더 +버튼과 공유) + useProfileContext(공유 닉/아바타·#2) + useNavigation.
+//   ⚠️ ux-entry-trust(U1·D2): 하단 CTA는 즉시 생성이 아니라 AddSheet 오픈. 빈 상태 카드만 킷대로 생성 직행.
+//     생성은 어느 경로든 축하화면(RoomCreated)을 경유해 초대코드를 반드시 한 번 노출한다.
 //   ⚠️ 실데이터: spotCount/lastMuklogAt/previewPaths는 MyLog(developer 소유, useMyLogs.ts)에서 직접 읽는다. 추가 페치 0(UI-only).
 import React from 'react';
-import { Alert, FlatList, Image, ScrollView, StyleSheet, View } from 'react-native';
+import { FlatList, Image, ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -31,18 +33,13 @@ import {
 } from '@/components';
 import { useAuth } from '@/features/auth';
 import { defaultNickname, useProfileContext } from '@/features/profile';
-import {
-  displayLogName,
-  mapRoomError,
-  useCreateRoom,
-  useLogPreviewUrls,
-  useMyLogsContext,
-  type MyLog,
-} from '@/features/room';
+import { displayLogName, useLogPreviewUrls, useMyLogsContext, type MyLog } from '@/features/room';
 import { heroGradient, useTheme } from '@/theme';
 
+import { AddSheet } from '../../AddSheet';
 import { Routes, type AppStackParamList } from '../../routes';
 import { useRefreshOnFocus } from '../../useRefreshOnFocus';
+import { useStartLogFlow } from '../../useStartLogFlow';
 import { formatLogDate } from '../formatLogDate';
 import { relativeTimeLabel } from '../relativeTimeLabel';
 
@@ -392,8 +389,11 @@ export const LogListScreen = () => {
   const theme = useTheme();
   const navigation = useNavigation<NavigationProp<AppStackParamList>>();
   const { state, refresh } = useMyLogsContext();
-  const { createRoom, loading: creating } = useCreateRoom();
+  // 생성/입장 배선은 헤더 +버튼과 공유(U1) — 경로에 따라 초대코드 노출이 갈리지 않게 단일 출처를 쓴다.
+  const { createLog, goToJoin, creating } = useStartLogFlow();
   const { state: authState } = useAuth();
+  // 하단 CTA가 여는 액션시트(킷 mk-home:120 onAdd) — 열림 상태만 이 화면의 로컬 관심사.
+  const [sheetOpen, setSheetOpen] = React.useState(false);
   // 인증 트리에서만 렌더되므로 authenticated가 정상. 비인증 시 안전한 폴백 표시.
   const userId = authState.status === 'authenticated' ? authState.userId : '';
   const self = useSelfDisplay({ userId });
@@ -407,18 +407,16 @@ export const LogListScreen = () => {
   const previewPaths = state.status === 'ready' ? state.logs.flatMap((item) => item.previewPaths) : [];
   const { urls: previewUrls } = useLogPreviewUrls({ paths: previewPaths });
 
-  // 생성 핸들러 — createRoom→refresh, 실패 시 Alert. 빈상태/하단 CTA 공용.
-  const handleCreate = async () => {
-    try {
-      await createRoom();
-      await refresh();
-    } catch (err) {
-      Alert.alert('로그를 만들지 못했어요', mapRoomError({ error: err }));
-    }
+  // 시트 두 행 — 먼저 시트를 닫고 훅에 위임(헤더 +버튼과 동일 순서).
+  const handleSheetCreate = () => {
+    setSheetOpen(false);
+    void createLog();
   };
 
-  // 초대코드 입장(킷 EmptyLogs onJoin) — JoinLog 풀스크린 라우트로 이동.
-  const handleJoin = () => navigation.navigate(Routes.JoinLog);
+  const handleSheetJoin = () => {
+    setSheetOpen(false);
+    goToJoin();
+  };
 
   if (state.status === 'loading') {
     return <LoadingView testID="loglist-loading" />;
@@ -433,8 +431,8 @@ export const LogListScreen = () => {
     return (
       <EmptyLogs
         self={self}
-        onCreate={() => void handleCreate()}
-        onJoin={handleJoin}
+        onCreate={() => void createLog()}
+        onJoin={goToJoin}
         creating={creating}
       />
     );
@@ -465,8 +463,17 @@ export const LogListScreen = () => {
           />
         )}
         ListFooterComponent={
-          <CreateLogCta onPress={() => void handleCreate()} disabled={creating} />
+          // 킷 mk-home:120 onAdd — 즉시 생성이 아니라 두 갈래 시트를 연다(취소 가능한 기본값).
+          <CreateLogCta onPress={() => setSheetOpen(true)} disabled={creating} />
         }
+      />
+
+      <AddSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onCreate={handleSheetCreate}
+        onJoin={handleSheetJoin}
+        creating={creating}
       />
     </Screen>
   );
