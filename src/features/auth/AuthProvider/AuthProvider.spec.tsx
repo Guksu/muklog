@@ -132,17 +132,89 @@ describe('AuthProvider — 부트스트랩', () => {
     expect(mockUpsert).not.toHaveBeenCalled();
   });
 
-  it('getSession throw → error(message) 전체화면, retry로 재부트스트랩', async () => {
+  it('getSession throw → error(매핑 문구) 전체화면, retry로 재부트스트랩', async () => {
     mockGetSession.mockRejectedValueOnce(new Error('연결 실패'));
     renderProvider();
     await waitFor(() => expect(screen.getByText('error')).toBeTruthy());
-    expect(captured?.state.status === 'error' && captured.state.message).toBe('연결 실패');
+    // ⚠️ ux-entry-trust(U3, 의도된 계약 변경): 원문 노출 → 매핑 문구. 원문은 console.warn에만 남는다.
+    expect(captured?.state.status === 'error' && captured.state.message).toBe(
+      '잠시 후 다시 시도해 주세요.',
+    );
 
     mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
     await act(async () => {
       captured?.retry();
     });
     await waitFor(() => expect(screen.getByText('unauthenticated')).toBeTruthy());
+  });
+});
+
+// U3 — 부트스트랩·프로필 보장 실패가 영어 SDK 원문을 화면에 흘리지 않는다(원칙 5·10).
+describe('AuthProvider — 인증 실패 카피 한국어화(U3)', () => {
+  let warnSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it('네트워크 실패면 "네트워크 연결을 확인해 주세요."', async () => {
+    mockGetSession.mockRejectedValueOnce(new TypeError('Network request failed'));
+    renderProvider();
+    await waitFor(() => expect(screen.getByText('error')).toBeTruthy());
+    expect(captured?.state.status === 'error' && captured.state.message).toBe(
+      '네트워크 연결을 확인해 주세요.',
+    );
+  });
+
+  it('그 외 실패면 "잠시 후 다시 시도해 주세요."이고 영어 원문은 화면에 없다', async () => {
+    mockGetSession.mockRejectedValueOnce(new Error('invalid claim: missing sub claim'));
+    renderProvider();
+    await waitFor(() => expect(screen.getByText('error')).toBeTruthy());
+    expect(captured?.state.status === 'error' && captured.state.message).toBe(
+      '잠시 후 다시 시도해 주세요.',
+    );
+    expect(screen.queryByText(/invalid claim/)).toBeNull();
+  });
+
+  it('부트스트랩 실패의 원본 에러는 console.warn으로만 남긴다(디버깅 단서 보존)', async () => {
+    const original = new Error('invalid claim: missing sub claim');
+    mockGetSession.mockRejectedValueOnce(original);
+    renderProvider();
+    await waitFor(() => expect(screen.getByText('error')).toBeTruthy());
+    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), original);
+  });
+
+  it('리스너 경로 프로필 보장 실패 → unauthenticated + 매핑 문구(원문 아님)', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    renderProvider();
+    await waitFor(() => expect(screen.getByText('unauthenticated')).toBeTruthy());
+
+    const upsertError = new Error('permission denied for table profiles');
+    mockUpsert.mockResolvedValue({ error: upsertError });
+    await act(async () => {
+      authChangeCb?.('SIGNED_IN', { user: { id: 'u1' } });
+    });
+
+    await waitFor(() => expect(captured?.loginError).toBe('잠시 후 다시 시도해 주세요.'));
+    expect(captured?.state.status).toBe('unauthenticated');
+    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), upsertError);
+  });
+
+  it('리스너 경로 네트워크 실패는 네트워크 문구를 쓴다', async () => {
+    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    renderProvider();
+    await waitFor(() => expect(screen.getByText('unauthenticated')).toBeTruthy());
+
+    mockUpsert.mockResolvedValue({ error: { name: 'AuthRetryableFetchError', message: 'Failed to fetch' } });
+    await act(async () => {
+      authChangeCb?.('SIGNED_IN', { user: { id: 'u1' } });
+    });
+
+    await waitFor(() => expect(captured?.loginError).toBe('네트워크 연결을 확인해 주세요.'));
   });
 });
 

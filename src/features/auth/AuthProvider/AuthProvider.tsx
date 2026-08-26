@@ -29,7 +29,7 @@ import { supabase } from '@/lib/supabase';
 
 import { unregisterDeviceToken, useRegisterPushToken } from '@/features/notif/useRegisterPushToken';
 
-import { AuthErrorToken, messageForAuthError } from '../errors';
+import { AuthErrorToken, messageForAuthError, messageForAuthFailure } from '../errors';
 import { recoverOAuthSessionFromInitialUrl, subscribeOAuthCallback } from '../oauthCallback';
 import { signInWithGoogleOAuth } from '../oauthSignIn';
 import { signInWithAppleNative, type NativeSignInResult } from '../socialSignIn';
@@ -211,8 +211,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           await ensureProfileAndAuth({ userId });
         } catch (err) {
           // 부트스트랩 자체 실패만 error(전체화면). 로그인 시도 실패와 구분.
-          const message = err instanceof Error ? err.message : '알 수 없는 인증 오류';
-          if (mountedRef.current) setState({ status: 'error', message });
+          //   화면에는 매핑된 한국어 문구만 — SDK 원문(영어)은 사용자에게 의미가 없다(U3). 원문은 로그로만 남긴다.
+          console.warn('[auth] 부트스트랩 실패', err);
+          if (mountedRef.current) {
+            setState({ status: 'error', message: messageForAuthFailure({ error: err }) });
+          }
         }
       }
 
@@ -226,10 +229,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // 소셜 로그인 성공/토큰 갱신 → profiles 보장 후 authenticated(가드로 중복 upsert 없음).
           ensureProfileAndAuth({ userId }).catch((err) => {
             // 리스너 경로의 프로필 보장 실패는 로그인 시도 실패로 취급(전체 error 화면 금지).
-            const message = err instanceof Error ? err.message : '프로필 초기화에 실패했습니다.';
+            //   부트스트랩과 같은 매핑을 써 원문 노출을 막는다(U3).
+            console.warn('[auth] 프로필 보장 실패', err);
             if (mountedRef.current && !authenticatedRef.current) {
               setState({ status: 'unauthenticated' });
-              setLoginError(message);
+              setLoginError(messageForAuthFailure({ error: err }));
             }
           });
         }
