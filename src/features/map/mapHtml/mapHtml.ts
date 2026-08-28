@@ -21,9 +21,13 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
   <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
-    /* WKWebView(loadHTMLString)에서 body height:100%가 0으로 붕괴 → #map은 뷰포트를 절대배치로 직접 채운다(빈 타일 방지). */
-    #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+    /* map-feedback U5: 지도 부팅(WebView + SDK ≈1.2s) 동안 흰 여백 대신 킷 지도 톤을 깐다
+       (킷 mk-home.jsx:336 지도 영역 background — RN theme.color.mapSurface와 같은 값. WebView는 격리
+       HTML이라 hex 직박음, .mk-pin 선례 동일). RN 컨테이너도 같은 톤이라 첫 프레임부터 전환이 매끈하다. */
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #EFEAE3; }
+    /* WKWebView(loadHTMLString)에서 body height:100%가 0으로 붕괴 → #map은 뷰포트를 절대배치로 직접 채운다(빈 타일 방지).
+       ⚠️ #map이 body를 통째로 덮으므로 body 배경만으로는 타일 도착 전 이 레이어가 그 위를 기본색으로 덮는다 → 여기도 명시한다. */
+    #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #EFEAE3; }
     /* saved(내 맛집)=primary border. nearby(주변 음식점)=.mk-pin--nearby 웜그레이 border.
        map-wish-pins: wish(위시 장소)=.mk-pin--wish (border-color·강조는 ui-publisher가 킷 기준 Phase 2 확정). */
     .mk-pin {
@@ -85,7 +89,14 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
       gridSize: 60,          // px, Kakao 기본.
       minLevel: 2,           // 레벨 1(최대 확대)에서는 핀 34px가 실제로 겹치지 않아 클러스터하지 않는다.
       calculator: [10, 100], // 개수 경계 → 스타일 3단계(S0 2~9 / S1 10~99 / S2 100+).
+      // map-feedback U55: 기본 클릭줌은 무애니메이션 즉시 전환이라 클러스터 해체 재렌더와 겹쳐 "깜박임"이 된다.
+      //   끄고 clusterclick에서 우리가 애니메이션 줌인을 건다. ⚠️ 되돌리는 setter가 SDK에 없어 생성자에서 1회 확정이다.
+      disableClickZoom: true,
     };
+    // 클러스터 탭 줌인 실값(§3.1 A) — 스모크 튜닝은 이 세 줄에서만 만진다.
+    var MK_CLUSTER_ZOOM_STEP = 1;          // 탭당 확대 단계. Kakao 공식 샘플(getLevel()-1) 동일. animate 가능 상한이 2라 1~2만 허용.
+    var MK_CLUSTER_ZOOM_DURATION_MS = 300; // 원칙 4(150~300ms) 상단 + Kakao animate 기본값과 일치.
+    var MK_MAP_MIN_LEVEL = 1;              // ROADMAP 최소 레벨(1~14). 하한 클램프.
     // MarkerClusterer의 styles는 클러스터 DOM에 인라인 CSS로 적용되는 JS 객체다(<style> 클래스가 아님).
     //   WebView 격리 HTML이라 킷 hex를 직박는 기존 선례(.mk-pin)를 그대로 따른다.
     //   ⚠️ zIndex는 넣지 않는다 — 오버레이마다 컨테이너가 달라 element z-index는 stacking에 무효(L69-71).
@@ -128,6 +139,22 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
       mkClusterMode = typeof mkClusterer.removeMarkers === 'function' ? 'partial' : 'full';
     }
 
+    // map-feedback U55: 클러스터 탭 → 클러스터 중심을 기준점으로 한 단계 부드럽게 확대한다.
+    //   ⚠️ mkMap을 인자로 받거나 클로저에 가두지 않는다 — 재-INIT이 mkMap을 새 인스턴스로 교체하므로
+    //      반드시 모듈 변수를 매번 읽어야 옛 지도에 대고 setLevel 하는 조용한 실패를 피한다.
+    function mkClusterZoomIn(cluster) {
+      if (!mkMap || !cluster || typeof cluster.getCenter !== 'function') return;
+      var level = mkMap.getLevel();
+      if (typeof level !== 'number') return;
+      var next = level - MK_CLUSTER_ZOOM_STEP;
+      if (next < MK_MAP_MIN_LEVEL) next = MK_MAP_MIN_LEVEL;
+      if (next === level) return; // 더 확대할 수 없다 — 같은 레벨 재설정도 하지 않는다(불필요한 재렌더 = 깜박임).
+      mkMap.setLevel(next, {
+        anchor: cluster.getCenter(),
+        animate: { duration: MK_CLUSTER_ZOOM_DURATION_MS },
+      });
+    }
+
     function ensureClusterer() {
       if (mkClusterer) {
         try {
@@ -142,7 +169,7 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
       if (mkClusterer) return;
       try {
         if (!kakao.maps.MarkerClusterer) return;
-        mkClusterer = new kakao.maps.MarkerClusterer({
+        var created = new kakao.maps.MarkerClusterer({
           map: mkMap,
           averageCenter: MK_CLUSTER_OPTIONS.averageCenter,
           minClusterSize: MK_CLUSTER_OPTIONS.minClusterSize,
@@ -150,8 +177,18 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
           minLevel: MK_CLUSTER_OPTIONS.minLevel,
           calculator: MK_CLUSTER_OPTIONS.calculator,
           styles: MK_CLUSTER_STYLES,
-          // disableClickZoom 미설정(기본 false) → 클러스터 탭 = Kakao 기본 줌인. 신규 inbound 메시지 0(§3.3).
+          // 기본 클릭줌(무애니메이션 즉시 전환)을 끄고 아래 clusterclick으로 우리가 애니메이션 확대한다(U55).
+          disableClickZoom: MK_CLUSTER_OPTIONS.disableClickZoom,
         });
+        // ⚠️ 등록을 mkClusterer 대입보다 **먼저** 한다. 던지면 mkClusterer는 null로 남아 기존 강등 경로
+        //   (개별 핀 setMap)를 그대로 타고, created는 마커를 한 번도 못 받아 버블을 그리지 않는다 →
+        //   "클러스터는 보이는데 탭이 죽은" 상태가 구조적으로 불가능하다(disableClickZoom을 되돌릴 setter가 없으므로).
+        //   ※ 강등 자체는 아래 catch(mkClusterer = null)가 이미 보장한다 — 대입을 먼저 해도 되돌려진다
+        //     (qa-report-logic F2, 뮤턴트 N5에서 U55-6 green 확인). 이 순서는 그 catch가 사라질 미래
+        //     리팩터에 대한 이중 안전망이며, 계약을 잠그는 것은 spec의 순서 문자열 단언이다.
+        //   재사용 분기(재-INIT)에서는 등록하지 않는다 — INIT 회수만큼 쌓이면 탭 1회가 여러 단계를 건너뛴다.
+        kakao.maps.event.addListener(created, 'clusterclick', mkClusterZoomIn);
+        mkClusterer = created;
       } catch (e) {
         mkClusterer = null; // 강등.
       } finally {

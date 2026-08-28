@@ -12,6 +12,8 @@ import { StyleSheet, View } from 'react-native';
 // eslint-disable-next-line import/no-unresolved -- developer가 설치(plan §5). 미설치 시 일시 빨간줄 무방.
 import { WebView } from 'react-native-webview';
 
+import { useTheme } from '@/theme';
+
 import type { StyleProp, ViewStyle } from 'react-native';
 
 // onMessage 이벤트의 최소 형태(webview 타입 의존 없이 forward 시그니처 고정).
@@ -40,24 +42,33 @@ export type MapWebViewProps = {
   children?: React.ReactNode;
 };
 
-export const MapWebView = ({ html, onMessage, webviewRef, style, children }: MapWebViewProps) => (
-  <View style={[styles.container, style]}>
-    <WebView
-      testID="map-webview"
-      ref={webviewRef as React.Ref<WebView>}
-      style={styles.webview}
-      originWhitelist={['*']}
-      source={{ html, baseUrl: MAP_WEBVIEW_BASE_URL }}
-      onMessage={onMessage}
-    />
-    {/* 오버레이 — 지도 위 absolute 레이어. pointerEvents box-none으로 지도 제스처는 통과시키고 칩/카드만 입력 받음. */}
-    {children ? (
-      <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-        {children}
-      </View>
-    ) : null}
-  </View>
-);
+export const MapWebView = ({ html, onMessage, webviewRef, style, children }: MapWebViewProps) => {
+  const theme = useTheme();
+  return (
+    <View
+      testID="map-webview-container"
+      // 지도 캔버스 소유자가 자기 배경을 갖는다 — WebView가 HTML을 페인트하기 전 첫 프레임은 이 뷰 배경이라
+      //   미지정(흰색)이면 mapHtml의 배경만으로는 흰 점멸이 한 프레임 남는다(map-feedback U5).
+      //   MapPrewarm의 숨은 WebView에도 자동 적용된다.
+      style={[styles.container, { backgroundColor: theme.color.mapSurface }, style]}
+    >
+      <WebView
+        testID="map-webview"
+        ref={webviewRef as React.Ref<WebView>}
+        style={styles.webview}
+        originWhitelist={['*']}
+        source={{ html, baseUrl: MAP_WEBVIEW_BASE_URL }}
+        onMessage={onMessage}
+      />
+      {/* 오버레이 — 지도 위 absolute 레이어. pointerEvents box-none으로 지도 제스처는 통과시키고 칩/카드만 입력 받음. */}
+      {children ? (
+        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          {children}
+        </View>
+      ) : null}
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   container: { flex: 1, overflow: 'hidden' },

@@ -242,13 +242,17 @@ describe('MapTabScreen', () => {
     expect(screen.getByText('주변 음식점')).toBeTruthy();
   });
 
+  // B3(map-feedback): READY를 발화한 뒤에도 로딩 배너가 뜨는지로 본다. READY 전이면 신규 `!mapReady`가
+  //   대신 조건을 충족시켜 "핀 loading" conjunct가 하중을 잃는다(단언이 죽는다).
   it('핀 loading이면 로딩 오버레이를 띄운다 (지도는 함께 렌더)', () => {
     useMuklogPinsMock.mockReturnValue({ state: { status: 'loading' }, refresh: jest.fn() });
     renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) }); // 지도 부팅은 끝났고 핀만 로딩인 상태
     expect(screen.getByTestId('map-status-spinner')).toBeTruthy();
     expect(screen.getByTestId('map-webview-mock')).toBeTruthy();
   });
 
+  // B1(map-feedback): 권한 안내는 로딩보다 **아래** 우선순위다 → 지도 부팅이 끝난(READY) 뒤의 상태를 본다.
   it('권한 거부면 현재위치 안내를 노출하되 지도는 계속 렌더한다(차단 아님)', () => {
     setPermission({ status: LocationPermissionStatus.Denied, coords: null });
     useMuklogPinsMock.mockReturnValue({
@@ -256,6 +260,7 @@ describe('MapTabScreen', () => {
       refresh: jest.fn(),
     });
     renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
     expect(screen.getByText('위치 권한을 허용하면 현재 위치를 볼 수 있어요')).toBeTruthy();
     expect(screen.getByTestId('map-webview-mock')).toBeTruthy();
   });
@@ -389,6 +394,7 @@ describe('MapTabScreen', () => {
     });
     setNearby({ status: 'error', markers: [] });
     renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) }); // B2: 권한 안내는 지도 부팅 이후의 상태다
     // slice1 권한 안내는 그대로(nearby 에러가 덮지 않음).
     expect(screen.getByText('위치 권한을 허용하면 현재 위치를 볼 수 있어요')).toBeTruthy();
     expect(screen.getByTestId('map-webview-mock')).toBeTruthy();
@@ -1330,6 +1336,101 @@ describe('MapTabScreen — nearby 선로딩·재검색 버튼 배선', () => {
     expect(flatStyle({ testID: 'map-overlay-research' }).top).toBe(96 + 59);
     // inset이 하단으로 새지 않는다(map-headerless 규율).
     expect(flatStyle({ testID: 'map-overlay-locate' }).bottom).toBe(16);
+  });
+
+  // ── map-feedback U5: 지도 부팅 구간 통지 (plan §3.3 ②) ────────────────────────
+  //   핀은 캐시로 즉시 ready라 핀 상태만 보면 부팅 ≈1.2s가 통째로 무통지 흰 화면이 된다(원칙 3).
+  it('U5-2 READY 전에는 핀이 ready여도 로딩 배너를 띄운다(지도 부팅도 로딩이다)', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setNearby({ status: 'ready' });
+    renderWithTheme(<MapTabScreen />);
+
+    expect(screen.getByTestId('map-status-spinner')).toBeTruthy();
+    expect(screen.getByText('지도를 불러오는 중이에요')).toBeTruthy(); // 신규 카피 0 — 기존 MAP_COPY.loading 재사용
+  });
+
+  it('U5-3 READY가 오면 로딩 배너가 사라진다(영구 잔류 0)', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setNearby({ status: 'ready' });
+    renderWithTheme(<MapTabScreen />);
+    expect(screen.getByTestId('map-status-overlay')).toBeTruthy();
+
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    // 권한 granted 전제라 다음 순위(권한 안내)도 걸리지 않는다 → 오버레이 자체가 사라진다.
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+  });
+
+  it('U5-3b READY 후 권한 거부면 권한 안내가 뜬다(로딩이 영구히 가로채지 않는다)', () => {
+    setPermission({ status: LocationPermissionStatus.Denied, coords: null });
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    renderWithTheme(<MapTabScreen />);
+    // 부팅 중엔 로딩이 위다 — 지도가 아직 없는데 권한 안내를 먼저 띄우는 건 순서가 뒤집힌 것이다.
+    expect(screen.getByTestId('map-status-spinner')).toBeTruthy();
+
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    expect(screen.queryByTestId('map-status-spinner')).toBeNull();
+    expect(screen.getByText('위치 권한을 허용하면 현재 위치를 볼 수 있어요')).toBeTruthy();
+  });
+
+  // ── qa-logic F1: SDK 로드 실패 후 "다시 시도"가 영구 로딩 dead-end로 끝나지 않는다 ────────────
+  //   SDK가 죽은 페이지에는 __muklogInit이 없어 READY도 ERROR도 다시 오지 않는다. 그 상태에서
+  //   mapErrored를 미리 내리면 로딩 분기(!mapReady)가 배너를 대체해 스피너가 영구 잔류하고
+  //   재시도 버튼이 사라진다(바텀탭은 언마운트되지 않아 세션 내내 갇힌다).
+  //   ⚠️ 타임아웃 배너 본안은 U10 소유 — 여기선 신규 타이머 0으로 어포던스만 지킨다.
+  it('F1-1 READY 전 SDK 에러에서 "다시 시도"를 눌러도 에러 배너·재시도 버튼이 유지된다', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setNearby({ status: 'ready' });
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'ERROR', reason: 'SDK_LOAD_FAILED' }) });
+    expect(screen.getByText('지도를 불러오지 못했어요')).toBeTruthy();
+
+    fireEvent.press(screen.getByText('다시 시도'));
+
+    expect(screen.getByText('지도를 불러오지 못했어요')).toBeTruthy();
+    expect(screen.getByTestId('map-status-action')).toBeTruthy();
+    // 로딩 스피너가 배너를 대체하면 재시도 수단이 사라진 dead-end다.
+    expect(screen.queryByTestId('map-status-spinner')).toBeNull();
+  });
+
+  it('F1-2 "다시 시도"는 배너 유지와 무관하게 INIT을 재주입한다(SDK가 살아있으면 즉시 복구)', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setNearby({ status: 'ready' });
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'ERROR', reason: 'SDK_LOAD_FAILED' }) });
+    expect(injectedScripts.filter((s) => s.includes('INIT'))).toHaveLength(0);
+
+    fireEvent.press(screen.getByText('다시 시도'));
+
+    expect(injectedScripts.filter((s) => s.includes('INIT'))).toHaveLength(1);
+  });
+
+  it('F1-3 재시도 후 실제로 READY가 오면 배너가 사라지고 지도만 남는다(정상 복구 경로 회귀 0)', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setNearby({ status: 'ready' });
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'ERROR', reason: 'SDK_LOAD_FAILED' }) });
+    fireEvent.press(screen.getByText('다시 시도'));
+
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+    expect(screen.getByTestId('map-webview-mock')).toBeTruthy();
+  });
+
+  it('F1-4 READY 후 늦게 온 SDK 에러는 재시도로 배너가 즉시 걷힌다(SDK 생존 경로)', () => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
+    setNearby({ status: 'ready' });
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    emitMessage({ raw: JSON.stringify({ type: 'ERROR', reason: 'SDK_LOAD_FAILED' }) });
+    expect(screen.getByText('지도를 불러오지 못했어요')).toBeTruthy();
+
+    fireEvent.press(screen.getByText('다시 시도'));
+
+    // 이미 READY를 받은 페이지는 __muklogInit이 살아 있다 → 배너를 내려도 갇히지 않는다.
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
   });
 
   it('B10 래퍼가 지도 제스처를 삼키지 않는다(pointerEvents=box-none)', () => {

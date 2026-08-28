@@ -15,7 +15,9 @@
 //   - 양자화 bbox 캐시: 소수 4자리 키 → 동일 영역 재방문 시 invoke 0(인메모리 + AsyncStorage 영속).
 //   - 0틱 leading-edge 타이머: idle 다발(INIT 직후 0ms/60ms 이중 emit)을 마지막 1건으로 수렴 + cleanup 회수.
 //   - 레이스 가드: requestSeqRef 증가 → 늦게 온 stale 응답 폐기.
-//   - 에러: status='error'만(누적 유지). lastQueried를 갱신하지 않으므로 버튼이 남는다 = 재시도 어포던스.
+//   - 에러: status='error'만(누적 유지). 재시도 어포던스는 재검색 버튼이다 —
+//     이미 조회한 뒤의 실패는 lastQueried를 갱신하지 않아 드리프트가 살아 버튼이 남고,
+//     **첫 조회 실패는 lastQueried 자체가 없으므로** status==='error'가 노출을 책임진다(map-feedback U4).
 import { useEffect, useRef, useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
@@ -277,6 +279,7 @@ export const useNearbyPlaces = (): UseNearbyPlacesResult => {
             detail: { key, ms: Date.now() - startedAt, count: 0, ok: false },
           });
           // 누적 유지(items 미변경) + lastQueried 미갱신 → 버튼이 남아 재시도 어포던스가 된다(E12).
+          //   첫 조회 실패라 lastQueried가 아예 없는 경우는 status='error' 자체가 노출을 연다(map-feedback U4).
           setStatus('error');
         });
     };
@@ -408,13 +411,20 @@ export const useNearbyPlaces = (): UseNearbyPlacesResult => {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 1회 하이드레이션(폴링 방지). 내부 헬퍼는 최신 ref만 읽는다.
   }, []);
 
-  // 버튼 노출 4조건 AND(§4.4): 조회 중 아님 · 이 마운트에서 최소 1회 적용됨 · 뷰포트 수신함 · 임계 초과.
-  //   성공/캐시히트가 lastQueried를 현재 뷰포트로 올리면 drift가 0이 되어 버튼이 스스로 숨는다(별도 상태 없음).
+  // 버튼 노출(map-feedback U4로 갱신): 공통 전제 2 + 택 1.
+  //   공통 전제 — 조회 중 아님 · 뷰포트 수신함. currentBounds를 AND 밖에 두는 이유: research()가
+  //     currentBoundsRef null이면 no-op이라, 빠지면 "눌러도 아무 일도 안 하는 버튼"이 된다.
+  //   택 1 — ① status==='error'(실패 복구 경로: 이 마운트에서 적용된 area가 아직 없을 수도 있으므로
+  //     lastQueried를 요구하지 않는다. 첫 조회가 실패하면 lastQueried가 영원히 null이라 기존 식으로는
+  //     그 세션에서 주변 핀을 볼 방법이 사라졌다) ② 기준선 대비 임계 초과(정상 드리프트 경로).
+  //   자기치유는 그대로다: research() 성공 → status='ready' + lastQueried=현재 bbox → drift 0 → 버튼이 스스로 숨는다.
+  //   실패 후에는 미세 이동에도 버튼이 남는다(에러 경로는 임계를 보지 않는다) — 그게 복구 어포던스다.
   const researchAvailable =
     status !== 'loading' &&
-    lastQueried !== null &&
     currentBounds !== null &&
-    exceedsResearchThreshold({ prev: lastQueried.bounds, next: currentBounds });
+    (status === 'error' ||
+      (lastQueried !== null &&
+        exceedsResearchThreshold({ prev: lastQueried.bounds, next: currentBounds })));
 
   // 마커는 items에서 파생(지도 핀용 kind:'nearby'). 직접 계산(useMemo 지양, 컨벤션).
   const markers = nearbyToMapMarkers({ items });
