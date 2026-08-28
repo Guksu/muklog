@@ -255,6 +255,41 @@ describe('mapHtml', () => {
     expect(options).toContain('gridSize: 60');
     expect(options).toContain('minLevel: 2'); // 레벨 1(최대 확대)에서는 클러스터 안 함
     expect(options).toContain('calculator: [10, 100]');
+    // map-feedback U55: 기본 클릭줌(무애니메이션 즉시 전환) 차단은 **옵션 블록 한 곳**에서만 튜닝한다(§3.1 A).
+    //   실효 여부는 실행 단언(U55-2)이 따로 잠근다 — 여기선 튜닝 지점이 흩어지지 않는지만 본다.
+    expect(options).toContain('disableClickZoom: true');
+  });
+
+  // map-feedback U55: 줌인 상수는 클러스터 옵션과 같은 블록 이웃에 모은다(스모크 튜닝 단일 지점).
+  //   실값 계약: STEP 1(= Kakao 공식 샘플 getLevel()-1) / DURATION 300ms(원칙 4 상단·SDK 기본값) / MIN_LEVEL 1(ROADMAP 하한).
+  it('클러스터 줌인 상수 실값이 §3.1 계약과 일치한다(STEP 1 · DURATION 300 · MIN_LEVEL 1)', () => {
+    expect(html).toContain('var MK_CLUSTER_ZOOM_STEP = 1;');
+    expect(html).toContain('var MK_CLUSTER_ZOOM_DURATION_MS = 300;');
+    expect(html).toContain('var MK_MAP_MIN_LEVEL = 1;');
+  });
+
+  // ⚠️ mkMap을 인자·클로저로 받으면 재-INIT이 교체한 새 지도 대신 옛 지도에 setLevel 하는 조용한 실패가 된다.
+  //   실행 단언(U55-4)이 결과를 잠그지만, 여기선 그 결과를 만드는 **구조**(무인자 모듈 변수 참조)를 직접 잠근다.
+  it('mkClusterZoomIn은 cluster만 받고 mkMap을 모듈 변수로 매번 읽는다(옛 지도 참조 금지)', () => {
+    expect(html).toContain('function mkClusterZoomIn(cluster)');
+    const zoom = fnBody({ fnName: 'mkClusterZoomIn' });
+    expect(zoom).not.toBe('');
+    expect(zoom).toContain('if (!mkMap'); // 모듈 변수 가드 — 인자로 받았다면 이 이름이 나올 수 없다
+    expect(zoom).toContain('mkMap.getLevel()');
+    expect(zoom).toContain('mkMap.setLevel(');
+    expect(zoom).toContain('cluster.getCenter()');
+  });
+
+  // 등록 실패가 "클러스터는 보이는데 탭이 죽은" 상태를 만들지 않으려면 대입 **전에** 등록해야 한다(§3.1 C).
+  //   실행 단언(U55-6)은 강등 결과를 보고, 이 단언은 그 결과를 보장하는 순서 자체를 본다.
+  it("clusterclick 리스너를 신규 생성 분기에서 mkClusterer 대입 **전에** 등록한다(§3.1 C)", () => {
+    const ensure = fnBody({ fnName: 'ensureClusterer' });
+    expect(ensure).toContain("addListener(created, 'clusterclick', mkClusterZoomIn)");
+    expect(ensure.indexOf("addListener(created, 'clusterclick'")).toBeLessThan(
+      ensure.indexOf('mkClusterer = created;'),
+    );
+    // 재사용(재-INIT) 분기에는 등록이 없다 — 등록 지점이 하나뿐임을 개수로 잠근다(중복 등록 = 탭 1회에 여러 단계 점프).
+    expect(html.match(/'clusterclick'/g)).toHaveLength(1);
   });
 
   it('클러스터 버블 스타일 공통 실값이 §3.4 계약과 일치한다(브랜드 파랑·흰 테두리·킷 Pin 그림자)', () => {
@@ -414,6 +449,17 @@ describe('mapHtml', () => {
   it('변화가 0이면 클러스터러를 건드리지 않는다(E1 — redraw조차 돌지 않는다)', () => {
     const apply = fnBody({ fnName: 'applyOverlayDelta' });
     expect(apply).toContain('if (added.length === 0 && removed.length === 0) return;');
+  });
+
+  // ── map-feedback U5: 부팅 여백 톤 (plan §3.3 ①) ──────────────────────────────
+  //   CSS 실값은 실행으로 관측할 수 없어 문자열 단언이 유일한 수단이다 → 블록 추출 + **개수**로 잠근다
+  //   (한 곳만 지워도 red. 주석·다른 분기가 대신 충족시키지 못하게 — 메모리 "문자열 단언은 쉽게 죽는다").
+  it('U5-1 지도 캔버스 배경을 킷 지도 톤(#EFEAE3)으로 칠한다 — html/body와 #map 둘 다', () => {
+    // body만 칠하면 뷰포트를 절대배치로 덮는 #map이 타일 도착 전 그 위를 기본색으로 덮는다 → 두 곳 모두 필요.
+    expect(cssBlock({ selector: 'html, body' })).toContain('background: #EFEAE3');
+    expect(cssBlock({ selector: '#map' })).toContain('background: #EFEAE3');
+    // 실측 3 = html/body 1 + #map 1 + 클러스터 버블 테두리 주석 1. 한 곳이라도 빠지면 red.
+    expect(html.match(/#EFEAE3/g)).toHaveLength(3);
   });
 });
 
@@ -919,6 +965,127 @@ describe('mapHtml 실행(createMapSandbox)', () => {
     expect(sandbox.pinIds).toEqual(['p0', 'p1']);
     // removed는 renderMarkers 2단계에서 이미 mkPins에서 빠졌다 → 여기서 못 떼면 회수 수단이 없다.
     droppedOverlays.forEach((overlay) => expect(overlay.setMapCalls.at(-1)).toBeNull());
+  });
+
+  // ── map-feedback U55: 클러스터 탭 → 중심 anchor 애니메이션 줌인 (plan §3.1·§5-1) ──────────
+  //   ⚠️ 샌드박스는 문서화된 SDK 표면(setLevel(level,{anchor,animate})·clusterclick·Cluster.getCenter)만
+  //      모사한다. "실제로 부드럽게 보이는가"의 단독 권위는 디바이스 스모크(§7 S1~S3)다.
+  const CLUSTER_CENTER = { lat: 37.55, lng: 126.98 };
+
+  it('U55-1 클러스터 탭 1회 → 중심 anchor로 한 단계(300ms) 확대한다', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 3 }) });
+    expect(sandbox.map?.setLevelCalls).toHaveLength(0); // 탭 전엔 줌 조작 0
+
+    sandbox.fireClusterEvent({ type: 'clusterclick', center: CLUSTER_CENTER });
+
+    const calls = sandbox.map?.setLevelCalls ?? [];
+    expect(calls).toHaveLength(1);
+    expect(calls[0].level).toBe(CENTER.zoom - 1); // STEP 1 — 한 번에 한 단계만
+    const options = calls[0].options as { anchor: { lat: number; lng: number }; animate: { duration: number } };
+    expect(options.anchor.lat).toBe(CLUSTER_CENTER.lat); // 화면 중앙이 아니라 **클러스터 중심**을 파고든다
+    expect(options.anchor.lng).toBe(CLUSTER_CENTER.lng);
+    expect(options.animate.duration).toBe(300); // 무애니메이션 즉시 전환(=깜박임)이 아니다
+  });
+
+  it('U55-2 클러스터러는 disableClickZoom:true로 생성된다(기존 옵션 실값 회귀 0)', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 3 }) });
+    const options = sandbox.clusterer?.options ?? {};
+    expect(options.disableClickZoom).toBe(true); // 기본 클릭줌을 끄지 않으면 우리 애니메이션과 겹쳐 이중 전환된다
+    expect(options.averageCenter).toBe(true);
+    expect(options.minClusterSize).toBe(2);
+    expect(options.gridSize).toBe(60);
+    expect(options.minLevel).toBe(2);
+    expect(options.calculator).toEqual([10, 100]);
+  });
+
+  it('U55-3 재-INIT 후에도 clusterclick 리스너는 1개다(탭 1회 = 확대 1회)', () => {
+    const markers = makeMarkers({ count: 3 });
+    const sandbox = boot({ markers });
+    sandbox.init({ center: CENTER, markers, me: null }); // 지도 에러 → "다시 시도" 경로
+
+    expect(sandbox.listenerCount({ type: 'clusterclick' })).toBe(1);
+    sandbox.fireClusterEvent({ type: 'clusterclick', center: CLUSTER_CENTER });
+    // 리스너가 쌓였다면 한 번의 탭이 여러 단계를 건너뛴다 — 전 Map 인스턴스의 합으로 잠근다.
+    const total = sandbox.maps.reduce((sum, map) => sum + map.setLevelCalls.length, 0);
+    expect(total).toBe(1);
+  });
+
+  it('U55-4 재-INIT 후 탭은 **새** Map에 적용된다(옛 Map은 0건 — 조용한 실패 방지)', () => {
+    const markers = makeMarkers({ count: 3 });
+    const sandbox = boot({ markers });
+    sandbox.init({ center: CENTER, markers, me: null });
+    expect(sandbox.maps).toHaveLength(2);
+
+    sandbox.fireClusterEvent({ type: 'clusterclick', center: CLUSTER_CENTER });
+
+    expect(sandbox.maps[0].setLevelCalls).toHaveLength(0);
+    expect(sandbox.maps[1].setLevelCalls).toHaveLength(1);
+  });
+
+  it('U55-5 최대 확대(레벨 1)에서 탭하면 setLevel 자체를 호출하지 않는다(하한 클램프)', () => {
+    const sandbox = createMapSandbox();
+    sandbox.loadSdk();
+    sandbox.init({ center: { ...CENTER, zoom: 1 }, markers: makeMarkers({ count: 3 }), me: null });
+
+    sandbox.fireClusterEvent({ type: 'clusterclick', center: CLUSTER_CENTER });
+
+    // 같은 레벨 재설정도 하지 않는다 — 불필요한 재렌더가 곧 깜박임이다.
+    expect(sandbox.map?.setLevelCalls).toHaveLength(0);
+  });
+
+  it('U55-6 clusterclick 등록이 실패하면 클러스터러를 폐기하고 개별 핀으로 강등한다(탭 죽은 클러스터 0)', () => {
+    const sandbox = boot({
+      clusterer: { throwOnClusterListener: true },
+      markers: makeMarkers({ count: 3 }),
+    });
+
+    // disableClickZoom을 끄는 setter가 SDK에 없으므로, 등록에 실패한 클러스터러는 되살릴 수 없다 → 폐기가 유일한 안전 상태.
+    expect(sandbox.clusterer).toBeNull();
+    expect(sandbox.clusterMode).toBe('none');
+    expect(sandbox.pinIds).toHaveLength(3);
+    sandbox.pinIds.forEach((id) => {
+      expect(sandbox.pins[id].overlay.setMapCalls.at(-1)).toBe(sandbox.map);
+    });
+    // 지도 자체는 멀쩡하므로 에러 배너를 띄우지 않는다(기존 강등 정책 계승).
+    expect(errorsOf({ posted: sandbox.posted })).toHaveLength(0);
+  });
+
+  it('U55 E1 강등 상태에서 클러스터 이벤트를 강제 발화해도 throw 0 · setLevel 0', () => {
+    const unavailable = boot({ clusterer: { available: false }, markers: makeMarkers({ count: 3 }) });
+    expect(() =>
+      unavailable.fireClusterEvent({ type: 'clusterclick', center: CLUSTER_CENTER }),
+    ).not.toThrow();
+    expect(unavailable.map?.setLevelCalls).toHaveLength(0);
+
+    const broken = boot({ clusterer: { constructThrows: true }, markers: makeMarkers({ count: 3 }) });
+    expect(() =>
+      broken.fireClusterEvent({ type: 'clusterclick', center: CLUSTER_CENTER }),
+    ).not.toThrow();
+    expect(broken.map?.setLevelCalls).toHaveLength(0);
+  });
+
+  it('U55 E2 런타임 강등 후 폐기된 클러스터러는 이벤트를 못 받는다(setLevel 0 · 고아 리스너만 잔존)', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 4 }) });
+    const orphan = sandbox.clusterer;
+    if (orphan) orphan.throwOnAddMarkers = true;
+
+    sandbox.setMarkers({ markers: makeMarkers({ count: 5 }) }); // addMarkers throw → 강등
+    expect(sandbox.clusterer).toBeNull();
+
+    // 실 SDK는 타깃별 디스패치이고, demoteClusterer의 clear()로 버블이 0이라 클릭 자체가 도달 불가다.
+    //   → 폐기 후 남은 고아 리스너는 미세 누수일 뿐 확대를 일으키지 않는다.
+    sandbox.fireClusterEvent({ type: 'clusterclick', center: CLUSTER_CENTER });
+    expect(sandbox.map?.setLevelCalls).toHaveLength(0);
+    expect(sandbox.listenerCount({ type: 'clusterclick' })).toBe(0);
+    expect(sandbox.listenerCount({ target: orphan, type: 'clusterclick' })).toBe(1);
+  });
+
+  it('U55 E3 Cluster 인자 없이 발화돼도 throw 0 · setLevel 0(SDK 표면 변동 방어)', () => {
+    const sandbox = boot({ markers: makeMarkers({ count: 3 }) });
+
+    // center 생략 = 리스너가 cluster 없이 호출된 경우. 가드가 없으면 getCenter 접근에서 던진다.
+    expect(() => sandbox.fireClusterEvent({ type: 'clusterclick' })).not.toThrow();
+    expect(sandbox.map?.setLevelCalls).toHaveLength(0);
   });
 
   // ── 성능 회귀 방지: 100건 규모에서도 조정 비용은 delta에 비례한다(E11) ──────

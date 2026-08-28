@@ -58,10 +58,16 @@ export type FakeMap = {
   relayoutCalls: number;
   setCenterCalls: unknown[];
   panToCalls: unknown[];
+  /** 현재 줌 레벨(options.level에서 초기화, setLevel로 갱신) — map-feedback U55 클러스터 줌인 검증용. */
+  level: number;
+  /** setLevel 호출 이력 — 어느 Map 인스턴스에 몇 번, 어떤 옵션으로 걸렸는지 잠근다(재-INIT 회귀). */
+  setLevelCalls: Array<{ level: number; options: unknown }>;
   relayout: () => void;
   setCenter: (center: unknown) => void;
   panTo: (position: unknown) => void;
   getBounds: () => unknown;
+  getLevel: () => number;
+  setLevel: (level: number, options?: unknown) => void;
 };
 
 /** 가짜 MarkerClusterer — 메서드 실존/throw를 주입해 partial·full·강등 3경로를 전부 돌린다. */
@@ -97,6 +103,8 @@ export type ClustererConfig = {
   hasSetMap?: boolean;
   throwOnAddMarkers?: boolean;
   throwOnRemoveMarkers?: boolean;
+  /** true면 'clusterclick' 리스너 등록에서만 던진다 — 등록 실패 시 강등되는지 검증한다(map-feedback E2). */
+  throwOnClusterListener?: boolean;
 };
 
 /** WebView 레지스트리(mkPins) 1건. */
@@ -118,8 +126,16 @@ export type MapSandbox = {
   recenter: (payload: { me: Coords }) => void;
   /** setTimeout 큐를 비운다(INIT의 relayout/emitBounds 지연 경로). */
   runTimers: () => void;
-  /** kakao.maps.event.addListener로 등록된 지도 이벤트를 발화한다. */
-  fireMapEvent: (payload: { type: string }) => void;
+  /**
+   * 클러스터러 대상 이벤트를 가짜 Cluster(문서화 표면 getCenter만)와 함께 발화한다. 리스너가 없으면 no-op.
+   *   실 SDK는 `addListener(target, …)` 기준 **타깃별 디스패치**이므로 target으로 거른다 —
+   *   미지정 시 **현재** mkClusterer가 타깃이라 폐기·강등된 클러스터러의 고아 리스너는 발화되지 않는다
+   *   (qa-report-logic F4). 폐기분에 강제로 발화해 보려면 폐기 전에 잡아둔 인스턴스를 target으로 넘긴다.
+   *   center를 생략하면 Cluster 인자 없이 호출한다(SDK 표면 변동 방어 경로 — mkClusterZoomIn의 cluster 가드).
+   */
+  fireClusterEvent: (payload: { target?: unknown; type: string; center?: Coords }) => void;
+  /** 해당 target(미지정 시 현재 mkClusterer)·type으로 등록된 리스너 수 — 재-INIT 중복 등록 회귀를 개수로 잠근다. */
+  listenerCount: (payload: { target?: unknown; type: string }) => number;
   /** 이후 생성/조작되는 모든 오버레이의 setMap이 던지게 한다(부착 실패 경로 — qa-logic L1). */
   setOverlayFault: (payload: { throwOnSetMap: boolean }) => void;
   posted: Array<Record<string, unknown>>;
@@ -210,6 +226,7 @@ export const createMapSandbox = ({
     hasSetMap: true,
     throwOnAddMarkers: false,
     throwOnRemoveMarkers: false,
+    throwOnClusterListener: false,
     ...(clusterer ?? {}),
   };
 
@@ -220,7 +237,9 @@ export const createMapSandbox = ({
   const maps: FakeMap[] = [];
   const clusterers: FakeClusterer[] = [];
   const scripts: FakeElement[] = [];
-  const mapListeners: Array<{ target: unknown; type: string; handler: () => void }> = [];
+  // 이벤트 인자를 받는 리스너(clusterclick의 Cluster)도 있으므로 handler 시그니처를 넓게 잡는다.
+  const mapListeners: Array<{ target: unknown; type: string; handler: (arg?: unknown) => void }> =
+    [];
   const timers: Array<() => void> = [];
   const mapContainer = createFakeElement({ tagName: 'div' });
 
@@ -241,6 +260,13 @@ export const createMapSandbox = ({
       relayoutCalls: 0,
       setCenterCalls: [],
       panToCalls: [],
+      level: typeof options.level === 'number' ? (options.level as number) : 0,
+      setLevelCalls: [],
+      getLevel: () => instance.level,
+      setLevel: (level: number, levelOptions?: unknown) => {
+        instance.setLevelCalls.push({ level, options: levelOptions });
+        instance.level = level; // 실 SDK처럼 상태를 반영해 "연속 탭"도 모사할 수 있게 한다.
+      },
       relayout: () => {
         instance.relayoutCalls += 1;
       },
@@ -332,7 +358,11 @@ export const createMapSandbox = ({
       CustomOverlay: CustomOverlayCtor,
       ...(config.available ? { MarkerClusterer: MarkerClustererCtor } : {}),
       event: {
-        addListener: (target: unknown, type: string, handler: () => void) => {
+        addListener: (target: unknown, type: string, handler: (arg?: unknown) => void) => {
+          // 클러스터 리스너 등록만 선택적으로 실패시킨다 — 등록 실패가 "탭이 죽은 클러스터"를 만들지 않는지 본다.
+          if (config.throwOnClusterListener && type === 'clusterclick') {
+            throw new Error('addListener(clusterclick) 거부(sandbox)');
+          }
           mapListeners.push({ target, type, handler });
         },
       },
@@ -379,6 +409,11 @@ export const createMapSandbox = ({
     (handler as (value: unknown) => void)(payload);
   };
 
+  // 클러스터 이벤트의 디스패치 타깃 — 미지정이면 **현재** mkClusterer(강등 후엔 null이라 매칭 0).
+  //   null을 명시로 넘기는 경우와 구분해야 하므로 undefined만 기본값으로 대체한다.
+  const clusterTarget = ({ target }: { target?: unknown }): unknown =>
+    target === undefined ? (context.mkClusterer as unknown) ?? null : target;
+
   const sdkScript = (): FakeElement => {
     const script = scripts[scripts.length - 1];
     if (!script) throw new Error('SDK <script>가 생성되지 않았다');
@@ -406,8 +441,20 @@ export const createMapSandbox = ({
         if (handler) handler();
       }
     },
-    fireMapEvent: ({ type }) => {
-      mapListeners.filter((entry) => entry.type === type).forEach((entry) => entry.handler());
+    fireClusterEvent: ({ target, type, center }) => {
+      // 문서화된 Cluster 표면 중 mapHtml이 실제로 쓰는 getCenter만 모사한다(없는 API를 지어내지 않는다).
+      const cluster = center ? { getCenter: () => LatLngCtor(center.lat, center.lng) } : undefined;
+      // 타깃은 발화 **전에** 확정한다 — 핸들러가 강등을 일으켜도 남은 리스너의 디스패치 대상이 흔들리지 않게.
+      const dispatchTarget = clusterTarget({ target });
+      mapListeners
+        .filter((entry) => entry.type === type && entry.target === dispatchTarget)
+        .forEach((entry) => entry.handler(cluster));
+    },
+    listenerCount: ({ target, type }) => {
+      const dispatchTarget = clusterTarget({ target });
+      return mapListeners.filter(
+        (entry) => entry.type === type && entry.target === dispatchTarget,
+      ).length;
     },
     setOverlayFault: ({ throwOnSetMap }) => {
       overlayFault.throwOnSetMap = throwOnSetMap;

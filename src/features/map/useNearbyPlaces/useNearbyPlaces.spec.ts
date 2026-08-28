@@ -717,17 +717,72 @@ describe('명시 재검색 (A3-6·A3-7·A3-8)', () => {
     expect(result.current.items.map((it) => it.kakaoPlaceId).sort()).toEqual(['a', 'b']);
   });
 
-  // qa-logic L2 — researchAvailable 4조건 AND의 나머지 두 conjunct에 하중을 싣는다.
-  //   M3와 같은 실패 양식(다른 조건이 대신 false를 만들어 검증 대상 조건이 놀고 있는 것)이 남아 있었다.
-  it('조회 전에는 뷰포트를 받아도 researchAvailable=false(lastQueried 조건 하중)', async () => {
-    // 첫 조회가 끝내 실패해 "적용된 area 0건"인 상태 — 기준선이 없으니 재검색을 제안할 수 없다.
+  // ── map-feedback U4: 첫 조회 실패의 복구 경로 (plan §3.2·§5-1) ──────────────────────
+  //   첫 조회가 실패하면 lastQueried가 영원히 null이고 팬·줌 자동 조회도 없어, 그 세션에서 주변 핀을
+  //   볼 방법이 사라졌다(원칙 10·3 위반). status==='error'를 노출 경로로 추가해 복구 어포던스를 연다.
+  it('U4-1 첫 조회가 실패하고 뷰포트를 받으면 재검색 버튼이 뜬다(복구 경로 — 기존엔 영영 안 떴다)', async () => {
     searchMock.mockRejectedValue(new Error('net'));
     const { result } = renderHook(() => useNearbyPlaces());
     await settle();
     act(() => result.current.setBounds(bounds({ lat: 37.5 })));
     await settle();
+
     expect(result.current.status).toBe('error');
-    act(() => result.current.setBounds(bounds({ lat: 40.0 })));
+    // 적용된 area가 0건이라 임계 비교 기준선이 없다 — 그래도(그렇기 때문에) 버튼은 떠야 한다.
+    expect(result.current.researchAvailable).toBe(true);
+  });
+
+  it('U4-2 그 버튼 탭 → 1회 재조회 · 성공하면 핀이 채워지고 버튼은 스스로 숨는다(자기치유)', async () => {
+    searchMock.mockRejectedValueOnce(new Error('net'));
+    const { result } = renderHook(() => useNearbyPlaces());
+    await settle();
+    act(() => result.current.setBounds(bounds({ lat: 37.5 })));
+    await settle();
+    expect(result.current.researchAvailable).toBe(true);
+
+    searchMock.mockResolvedValueOnce([item('b')]);
+    await act(async () => {
+      result.current.research();
+    });
+
+    expect(searchMock).toHaveBeenCalledTimes(2); // 자동 재시도 0 — 사용자 탭 경로만 열린다
+    expect(result.current.items.map((it) => it.kakaoPlaceId)).toEqual(['b']);
+    expect(result.current.status).toBe('ready');
+    // 성공이 lastQueried를 현재 뷰포트로 올려 drift 0 → 별도 상태 없이 버튼이 사라진다.
+    expect(result.current.researchAvailable).toBe(false);
+  });
+
+  it('U4-3 실패했어도 뷰포트 미수신이면 버튼은 뜨지 않는다(눌러도 no-op인 버튼 0)', async () => {
+    // currentBounds는 두 경로(에러 복구·드리프트)의 **공통 전제**다 — research()가 currentBoundsRef null이면
+    //   no-op이라, 에러 절 안으로 옮기면 여기서 "눌러도 아무 일도 안 하는 버튼"이 뜬다(뮤턴트 → red).
+    searchMock.mockRejectedValue(new Error('net'));
+    const { result } = renderHook(() => useNearbyPlaces());
+    await settle();
+    act(() => result.current.preload({ bbox: bounds({ lat: 37.5 }) }));
+    await settle();
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.researchAvailable).toBe(false);
+  });
+
+  // qa-logic L2 재작성(map-feedback §3.2) — 원 케이스(첫 조회 실패 + 뷰포트 수신)는 U4-1이 정반대 결과를
+  //   요구하므로 그대로 둘 수 없다. 같은 conjunct(lastQueried !== null)에 **다른 방식으로** 하중을 옮긴다.
+  //   ⚠️ 타이머를 흘리면 status가 'loading'이 되어 다른 conjunct가 대신 false를 만든다(하중 소실) →
+  //      0틱 flush 전 구간을 보기 위해 수동 제어한다. 뮤턴트: lastQueried 절을 지우면 null 참조로 red.
+  it('A2 적용된 area가 없으면 뷰포트를 받아도 false — 0틱 발사 전 구간(lastQueried 조건 하중)', async () => {
+    // 하이드레이션으로 status는 'ready'지만 lastQueried는 아직 null인 구간(에러도 로딩도 아니다).
+    const hydrated = bounds({ lat: 37.5 });
+    loadCacheMock.mockResolvedValue(
+      cachePayload({ areas: [{ bounds: hydrated, items: [item('a')] }] }),
+    );
+    const { result } = renderHook(() => useNearbyPlaces());
+    await settle();
+    expect(result.current.status).toBe('ready');
+
+    // 하이드레이션 area와 키가 다른 뷰포트 → 캐시 히트 없이 0틱 조회만 예약된다(아직 loading 아님).
+    act(() => result.current.setBounds(bounds({ lat: 37.51 })));
+
+    expect(result.current.status).toBe('ready');
     expect(result.current.researchAvailable).toBe(false);
   });
 

@@ -332,8 +332,14 @@ export const MapTabScreen = () => {
   );
 
   // 재시도: 핀 에러는 refresh, 지도 SDK 에러는 INIT 재주입(SDK가 살아있으면 즉시 복구) + 핀 재조회.
+  //   ⚠️ 배너 해제는 **READY를 한 번이라도 받은** 경우에만 한다(qa-logic F1). SDK 로드 자체가 실패한
+  //   페이지에는 `__muklogInit`이 없어 재주입해도 READY도 ERROR도 다시 오지 않는데, 여기서 미리
+  //   mapErrored를 내리면 `!mapReady` 로딩 분기가 배너를 대체해 스피너가 영구 잔류하고 재시도
+  //   버튼까지 사라진다(바텀탭은 언마운트되지 않아 세션 내내 갇힌다). 배너를 남겨 어포던스를 지킨다.
+  //   실제로 복구되면 READY 수신부가 mapErrored를 false로 되돌리므로 정상 경로는 그대로다.
+  //   타임아웃 배너로의 톤 전환(본안)은 U10 소유 — 여기선 신규 타이머를 만들지 않는다(비용 가드 §8).
   const handleRetry = () => {
-    setMapErrored(false);
+    if (mapReady) setMapErrored(false);
     void refresh();
     sendInit();
   };
@@ -361,7 +367,8 @@ export const MapTabScreen = () => {
   }));
   // 하단 스팟 카드 도킹 여부 — FAB가 카드에 가려지지 않게 위로 띄우는 데 사용(ui-spec §4).
 
-  // 상태 → 오버레이(tone/message) 판단(ui-spec §3 매핑). 우선순위: 지도 SDK 에러 → 핀 에러 → 로딩 → 빈/권한안내.
+  // 상태 → 오버레이(tone/message) 판단(ui-spec §3 매핑).
+  //   우선순위: 지도 SDK 에러 → 핀 에러 → 로딩(핀 loading **또는** 지도 부팅 중) → 빈/권한안내.
   const overlay = ((): {
     tone: MapStatusTone;
     message: string;
@@ -384,7 +391,11 @@ export const MapTabScreen = () => {
         onAction: handleRetry,
       };
     }
-    if (state.status === 'loading') {
+    // 지도 부팅(WebView + Kakao SDK, 실측 ≈1.2s) 동안에도 로딩을 알린다 — 핀은 캐시로 즉시 ready라
+    //   핀 상태만 보면 부팅 구간이 통째로 무통지 흰 화면이 된다(map-feedback U5).
+    //   권한 안내보다 위인 이유: 지도가 아직 없는데 권한 얘기부터 하는 건 순서가 뒤집힌 것이다.
+    //   SDK 실패는 ERROR → mapErrored가 맨 위에서 가로채므로 여기서 영구 잔류하지 않는다.
+    if (state.status === 'loading' || !mapReady) {
       return { tone: MapStatusTone.Loading, message: MAP_COPY.loading };
     }
     // ready: 권한 거부 안내만(빈 상태 안내는 제거 — 사용자 요청. 핀 0개여도 지도만 깔끔히 표시).

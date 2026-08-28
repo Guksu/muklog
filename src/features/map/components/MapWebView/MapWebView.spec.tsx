@@ -3,7 +3,7 @@
 //   비즈니스 로직(HTML 생성·메시지 파싱·INIT 직렬화)은 developer 몫 → 여기선 forward만 검증.
 //   react-native-webview는 developer가 설치(미설치 시 일시 빨간줄 무방) → 테스트는 모듈을 모킹한다.
 import React from 'react';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { screen } from '@testing-library/react-native';
 
 // react-native-webview 모킹 — props(source.html/onMessage/style)를 노출하는 더미.
@@ -53,6 +53,15 @@ describe('MapWebView', () => {
     renderWithTheme(<MapWebView html="<html></html>" onMessage={onMessage} />);
     const webview = screen.getByTestId('mock-webview');
     expect(webview.props.onMessage).toBe(onMessage);
+  });
+
+  // map-feedback U5: WebView가 HTML을 페인트하기 전 첫 프레임은 RN 뷰 배경이다 — 미지정(흰색)이면
+  //   mapHtml의 배경만으로는 그 한 프레임이 흰 여백으로 남는다. 지도 캔버스 소유자가 자기 배경을 갖는다
+  //   (MapPrewarm의 숨은 WebView에도 자동 적용).
+  it('컨테이너 배경이 지도 톤(mapSurface #EFEAE3)이다 — 부팅 첫 프레임 흰 점멸 제거', () => {
+    renderWithTheme(<MapWebView html="<html></html>" onMessage={() => {}} />);
+    const container = screen.getByTestId('map-webview-container');
+    expect(StyleSheet.flatten(container.props.style).backgroundColor).toBe('#EFEAE3');
   });
 
   it('자식 오버레이(범례·카드)를 WebView 위에 렌더한다', () => {

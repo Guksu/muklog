@@ -126,6 +126,18 @@ describe('tokens — mapLocate (지도 현재위치 FAB 아이콘 블루, map-lo
   });
 });
 
+describe('tokens — mapSurface (지도 캔버스 배경, map-feedback U5)', () => {
+  it('지도 캔버스 배경이 킷 지도 영역 톤 #EFEAE3다(부팅 중 흰 여백 대신)', () => {
+    expect(themes.light.color.mapSurface).toBe('#EFEAE3');
+    // 흰색 근사(bg)로 되돌아가면 부팅 구간이 다시 흰 여백이 된다 — 그게 이 토큰의 존재 이유다.
+    expect(themes.light.color.mapSurface).not.toBe(themes.light.color.bg);
+  });
+
+  it('라이트/다크 공통(지도 캔버스라 톤 고정 — mapNearbyPin 선례)', () => {
+    expect(themes.dark.color.mapSurface).toBe('#EFEAE3');
+  });
+});
+
 describe('tokens — splashBg (브랜드 스플래시 배경, brand-coral §1)', () => {
   it('스플래시 배경 토큰이 킷 splash 상단 웜 톤 #FFF1EC다(구 블루 #EBF1FF 폐기, mk-auth:45)', () => {
     expect(themes.light.color.splashBg).toBe('#FFF1EC');

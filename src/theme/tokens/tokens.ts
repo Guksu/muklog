@@ -71,6 +71,10 @@ const palette = {
   //   ("가보고 싶은 곳"=따뜻한 지향, 킷 위시 톤 정합). 값은 starFill과 같으나 의미가 달라 전용 토큰으로 분리(calendarSun 선례).
   //   WebView(mapHtml)는 격리 HTML이라 이 hex(#FFB23E)를 .mk-pin--wish에 직박음 — RN 범례 dot와 값 일치.
   mapWishPin:'#FFB23E',
+  // 지도 캔버스 배경 — 킷 mk-home.jsx:336 지도 영역 background #EFEAE3(SSOT, --mk-* 변수 아닌 인라인 실값).
+  //   WebView(mapHtml)는 격리 HTML이라 이 hex를 html/body·#map에 직박음 — RN 컨테이너 값과 일치시켜
+  //   부팅 첫 프레임(RN 뷰)→HTML 페인트 사이 흰 점멸을 없앤다(mapNearbyPin·mapWishPin과 동일 패턴).
+  mapSurface:'#EFEAE3',
   // 지도 현재위치 FAB 아이콘색 — 킷 mk-home.jsx:270·298 locate 전용 블루 #3B82F6(SSOT, --mk-* 변수 아닌 인라인 실값).
   //   브랜드 primary(#3366FF)와 미세 차이지만 킷이 verbatim으로 #3B82F6를 쓰므로(킷=디자인 기준) 전용 토큰으로 정합.
   //   me 마커(파란 점)도 킷에서 같은 계열이나 그 비주얼은 WebView 격리 영역(mapHtml, developer)이라 별도.
@@ -134,6 +138,8 @@ const lightColor = {
   mapNearbyPin: palette.mapNearbyPin,
   // 지도 "가고 싶은 곳"(위시) 핀/범례 dot 앰버(#FFB23E). 라이트/다크 공통(지도 위 마커라 톤 고정, mapNearbyPin 동일 패턴).
   mapWishPin: palette.mapWishPin,
+  // 지도 캔버스 배경(킷 #EFEAE3). 라이트/다크 공통(지도 캔버스라 톤 고정 — darkColor 스프레드로 자동 미러).
+  mapSurface: palette.mapSurface,
   // 지도 현재위치 FAB 아이콘 블루(킷 #3B82F6). 라이트/다크 공통(흰 surface FAB 위 고정 톤).
   mapLocate: palette.mapLocate,
   // 캘린더 시트 요일 헤더 색(킷 mk-extra:100). 일=빨강·토=파랑. 지도 위 마커처럼 톤 고정이 아니라
