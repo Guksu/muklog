@@ -20,7 +20,7 @@
 | 미디어 | **사진(최대 5장) + 2초 영상 1개(옵션)** | 셋로그(Setlog)식 짧은 영상 기록. 카메라 권한 필요, 영상은 용량 가드레일(길이·해상도·압축) 필수 |
 | 실시간 동기화 | **Supabase Realtime** | 커플 두 명이 같은 방의 먹로그를 실시간으로 공유 |
 | 디자인 시스템 | **원티드 디자인 시스템 토큰 참조** | git import 없이 토큰 값만 `theme/`로 매핑. 값은 builbook 프로젝트(`wanted-design-system`)의 실측 토큰을 RN용으로 변환해 사용 |
-| 앱 업데이트 | **2축 — 스토어 바이너리(`app-version-gate`) + EAS Update OTA(`expo-updates-ota`, 2026-07-27)** | 네이티브가 바뀌면 스토어 심사가 불가피하지만, JS/카피/스타일 수정까지 심사를 기다릴 이유가 없다. **`runtimeVersion` 정책 = `{"policy":"appVersion"}`** — 해석값이 `app.json`의 `version`(현재 `1.2.0`)이라 **스토어 게이트가 쓰는 문자열과 동일**해져 운영 규칙이 한 문장으로 줄어든다(`nativeVersion`은 `appVersionSource:"remote"` 때문에 빌드번호가 항상 하드코딩 `1`로 굳어 기각, `fingerprint`는 커스텀 네이티브 패치 2종·`ios:sim` 우회 경로에서 검증 수단이 없어 후속). 대가로 **"네이티브를 건드리면 반드시 `version`을 올린다"는 사람 규율**에 의존한다(§7 OTA 운영 절차) |
+| 앱 업데이트 | **2축 — 스토어 바이너리(`app-version-gate`) + EAS Update OTA(`expo-updates-ota`, 2026-07-27)** | 네이티브가 바뀌면 스토어 심사가 불가피하지만, JS/카피/스타일 수정까지 심사를 기다릴 이유가 없다. **`runtimeVersion` 정책 = `{"policy":"appVersion"}`** — 해석값이 `app.json`의 `version`(현재 `1.3.0`)이라 **스토어 게이트가 쓰는 문자열과 동일**해져 운영 규칙이 한 문장으로 줄어든다(`nativeVersion`은 `appVersionSource:"remote"` 때문에 빌드번호가 항상 하드코딩 `1`로 굳어 기각, `fingerprint`는 커스텀 네이티브 패치 2종·`ios:sim` 우회 경로에서 검증 수단이 없어 후속). 대가로 **"네이티브를 건드리면 반드시 `version`을 올린다"는 사람 규율**에 의존한다(§7 OTA 운영 절차) |
 
 ---
 
@@ -330,7 +330,7 @@ Profile (헤더 진입)
   > **네이티브 표면(위 표의 "스토어" 행 전부)이 바뀌면 `app.json`의 `version`을 반드시 올린다.** 올리지 않으면 네이티브가 다른 두 바이너리가 같은 런타임(`1.2.0`)을 공유해, **구 바이너리에 신 JS가 도달하고 없는 네이티브 함수를 호출해 크래시**한다. 이 규율은 추가 부담이 아니라 스토어 제출 시 이미 하던 일의 재확인이다(스토어 게이트도 같은 `version`을 읽는다). 규율에 의존하는 게 불안해지면 `fingerprint` 정책으로 이전한다(후속 — 커스텀 플러그인 2종·`ios:sim` 경로 검증 필요).
 
   **(C) 최초 활성화(딱 한 번, 순서 엄수)**
-  1. **다음 릴리스에서 `app.json` `version`을 `1.3.0`으로 올리며 `expo-updates`를 함께 심는다**(리더 결정 2026-07-27). 현재 스토어의 1.2.0 빌드에는 `expo-updates`가 없어, 1.2.0을 유지한 채 재빌드하면 "같은 1.2.0인데 OTA 가능/불가능한 두 바이너리"가 공존해 운영 추적이 헷갈린다. **⚠️ `version` bump는 릴리스 행위이므로 `expo-updates-ota` 스프린트 산출물에는 포함하지 않았다 — app.json은 `1.2.0` 그대로다.**
+  1. **다음 릴리스에서 `app.json` `version`을 `1.3.0`으로 올리며 `expo-updates`를 함께 심는다**(리더 결정 2026-07-27). 현재 스토어의 1.2.0 빌드에는 `expo-updates`가 없어, 1.2.0을 유지한 채 재빌드하면 "같은 1.2.0인데 OTA 가능/불가능한 두 바이너리"가 공존해 운영 추적이 헷갈린다. **✅ 2026-08-30 실행 — `app.json` `version` = `1.3.0`.** bump 없이 제출을 시도했다가 App Store Connect가 `90062`(CFBundleShortVersionString이 승인본 1.2.0보다 높아야 함)·`90186`(1.2.0 트레인 닫힘)으로 거절했다 — 이 순서는 권고가 아니라 스토어가 강제하는 제약이다. 계약 가드는 `otaConfig.spec.ts`의 version 단언.
   2. `npx expo prebuild --clean`(또는 EAS 빌드) — `ios/`·`android/`는 gitignore된 CNG 산출물이라 `expo-updates` 플러그인 반영에 재생성이 필요하다.
   3. `eas build --profile production` — **로그에서 `Resolved runtime version` = 올린 `version` 값인지 확인(L2)**.
   4. 스토어 심사·배포 → **`expo-updates`가 포함된 빌드가 기기에 깔린 뒤에야** OTA가 가능해진다.
