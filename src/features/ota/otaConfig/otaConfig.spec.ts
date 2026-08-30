@@ -34,8 +34,11 @@ describe('app.json OTA 설정 계약 (T1)', () => {
     expect(expo.runtimeVersion).toEqual({ policy: 'appVersion' });
   });
 
-  it('version은 1.2.0 그대로다(버전 bump는 릴리스 행위 — 이 스프린트 산출물 아님)', () => {
-    expect(expo.version).toBe('1.2.0');
+  // 2026-08-30: 1.2.0 → 1.3.0. expo-updates를 심은 첫 릴리스라 §7 (C)가 요구한 bump이며,
+  //   ASC가 1.2.0 트레인을 닫아(90062·90186) 재제출 자체가 불가능했다.
+  //   runtimeVersion 정책이 appVersion이므로 이 값이 곧 OTA 런타임 문자열이다.
+  it('version은 1.3.0이다(expo-updates 최초 탑재 릴리스 — architecture §7 (C))', () => {
+    expect(expo.version).toBe('1.3.0');
   });
 
   // expo-updates 플러그인은 app.json에 추가하지 않는다 — @expo/prebuild-config의 versionedExpoSDKPackages에
