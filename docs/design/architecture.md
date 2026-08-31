@@ -230,7 +230,7 @@ Profile (헤더 진입)
 | `rename-dialog` | 로그명·닉네임 변경을 하단 시트(`LogNameSheet`)→**킷 중앙 `RenameDialog` 공용 프리미티브**로 통일(LogNameSheet 폐기), 초대코드 extra는 솔로(memberCount<2)만. DB 변경 없음(기존 mutation 재사용). `docs/sprint/sprint-20260616-rename-dialog/`. **(후속 폴리시: 이름변경 진입을 LogScreen ⋯메뉴로 이전·타이틀 display-only)** | 킷 델타 #4·#9 | ✅ 완료 |
 | `date-picker` | MuklogEditor 방문일 수동 `TextInput`→**킷 `DatePickerSheet` 캘린더**(월이동·미래 disable·오늘 dot)+탭형 행. `calendarGrid` 순수유틸·`formatVisitedDate` withDow. 저장 계약(`YYYY-MM-DD`) 불변. `docs/sprint/sprint-20260616-date-picker/`. **(핫픽스: 그리드 주단위 행 flex로 토요일 열 wrap 수정)** | 킷 델타 #6 | ✅ 완료 |
 | `notif-settings` | `NotifSettingsScreen`(마스터+로그별 토글)+`MkSwitch` 공용 프리미티브. **로컬 AsyncStorage 영속**(당시) → **이후 `push-send`(S3 흡수, 2026-06-22)에서 서버 `notification_prefs`+`notification_pref_rooms`로 이전**(`useNotifPrefs` 인터페이스 보존, 소비처 무변경). ProfileScreen "알림 설정" 행→화면 진입. `docs/sprint/sprint-20260616-notif-settings/`. | 킷 델타 #2·#7 | ✅ 완료 |
-| `muklog-video` | 2초 영상 캡처/업로드 (카메라 권한 + `muklogs.video_*` + 용량 가드레일). muklog-editor 이후 의존 | #4 확장 | **예정 — 출시 후 후속 패치(사용자 결정 2026-06-17)** |
+| `muklog-video` | 2초 영상 캡처/업로드 (카메라 권한 + `muklogs.video_*` + 용량 가드레일). muklog-editor 이후 의존. **⚠️ 착수 시 `app.json`의 `expo-image-picker` `cameraPermission: false`를 한국어 실문구로 되살릴 것** — 2026-08-31 심사 리젝으로 미사용 권한을 제거해 둔 상태다 | #4 확장 | **예정 — 출시 후 후속 패치(사용자 결정 2026-06-17)** |
 | ~~`room-tabs`~~ | (대체됨) 멀티 로그 전환으로 HomeTabs/LogScreen 구조가 됨 → `multi-log-home`로 흡수 | #2 | ~~폐기~~ |
 | `muklog-list` | LogScreen 내 먹로그 카드 리스트 | #3 | ✅ 완료 |
 | ~~`muklog-editor`~~ → **슬라이스 분해** | 먹로그 작성/편집이 한 스프린트에 과대 → **`muklog-photos`(사진) / `muklog-place`(Kakao 장소·좌표) / `muklog-edit`(수정 모드)** 3슬라이스로 분해. (1 스프린트=1 기능 원칙) | #4 데이터 입력 | ~~분해~~ |
