@@ -67,7 +67,7 @@
 | U20 | 위시리스트 | "다녀왔어요"(≈27pt)·✕(≈23pt)가 최소 터치 타깃 미만 + 간격 8 + hitSlop 없음(`WishlistView.tsx:228-235`) — 파괴 액션이 오탭 거리 | 8·2 | 두 Pressable에 hitSlop(상하10/좌우8) — 비주얼 불변 | 중 | 하 | 없음 | 대기 |
 | U21 | 위시리스트 | 삭제(✕)가 확인·되돌리기·토스트 없이 즉시 실행, 실패도 무음(`LogScreen.tsx:317-325`) | 3 | 낙관적 제거 + "위시에서 뺐어요 · 되돌리기" 토스트(기존 `useToastController`), 실패 시 자동 복원 | 중 | 중 | 없음(SPEC §4-2 침묵) | 대기 |
 | U22 | LogScreen | 진입 직후 세그먼트 "기록 0 · 위시리스트 0" 표시 후 값 튐(`LogScreen.tsx:218-219`) + 참여자 블록 후삽입으로 콘텐츠 밀림(`:513-522`) | 3·6 | ready 전 `count: undefined`(SegmentControl이 라벨만 렌더, `SegmentControl.tsx:47`) + 참여자 자리표시 | 중 | 하 | 없음 | 대기 |
-| U23 | RoomCreated·LogScreen | 초대코드 복사 피드백 이원화 — 카드는 라벨 토글(`InviteCodeCard.tsx:44-47,73-80`), 참여자 "초대"는 토스트(`LogScreen.tsx:420-423`). 킷은 둘 다 토스트(`mk-home.jsx:279`, `SPEC.md:53`) | 3 | `onCopied` 콜백 → 전역 토스트 "초대코드를 복사했어요"로 통일 | 중 | 하 | 없음(킷 정합) | 대기 |
+| U23 | RoomCreated·LogScreen | 초대코드 복사 피드백 이원화 — 카드는 라벨 토글(`InviteCodeCard.tsx:44-47,73-80`), 참여자 "초대"는 토스트(`LogScreen.tsx:420-423`). 킷은 둘 다 토스트(`mk-home.jsx:279`, `SPEC.md:53`) | 3 | `onCopied` 콜백 → 전역 토스트 "초대코드를 복사했어요"로 통일 | 중 | 하 | 없음(킷 정합) | 완료(motion-pass-1, docs/history/2026-09-01-motion-pass-1.md — 킷 실값 대조 2건 이월) |
 | U24 | JoinLogScreen | 실패 에러가 다음 제출까지 잔존(`useJoinRoom.ts:24-25,42`), 6칸 지우기는 백스페이스 6번뿐(`CodeInput.tsx:31-44`) | 3·7 | 입력 변경 시 `clearError` + 실패 시 코드 비우고 첫 칸 포커스(또는 "다시 입력" 버튼) | 중 | 하 | 없음 | 대기 |
 | U25 | LogScreen | 막다른 화면 — roomId 없으면 텍스트만(`LogScreen.tsx:199-207`), 에러도 헤더 없는 전체화면(`:213-215`). 네이티브 헤더 꺼져 있어(`AppNavigator.tsx:35-38`) 뒤로 갈 UI 0 | 10·5 | 두 분기에 SubBar 선렌더 + "목록으로" 버튼 | 중 | 하 | 없음 | 대기 |
 | U26 | LogListScreen | 당겨서 새로고침 없음(`LogListScreen.tsx:448-470`) — 갱신은 재포커스뿐, 파트너 추가 기록을 가져올 수단 없음 | 3·7 | `RefreshControl`(onRefresh=refresh). 폴링 아님 — 비용 가드레일 무관 | 중 | 하 | 없음 | 대기 |
@@ -108,7 +108,7 @@
 | U51 | 알림 설정 | 빈 상태에 다음 행동 없음(`NotifSettingsView.tsx:128-133`) | 10 | "로그를 만들면 알림을 받을 수 있어요" + 홈 이동 | 하 | 하 | 없음 | 대기 |
 | U52 | 지도 탭 | 상태 변화 무전이 — pill·카드 즉시 mount(`MapTabScreen.tsx:424-435`), 카드 도킹 시 뷰포트가 밀려 탭한 핀 이동(`:398-458`) | 4 | ① pill·카드 150~200ms 전이(없음) ② 오버레이/panTo 보정 — **② 킷 mk-home:375-388 도킹 정의와 충돌, 사용자 확인** | 하 | 중~상 | ①없음 ②⚠️ | 대기 |
 | U53 | 지도 탭 | 상단 오버레이 3겹(필터+범례+pill)이 상단 ≈100pt 점유(`:402-435`), 필터 Chip hitSlop 없음(`Chip.tsx:58`) | 2 | 범례 자동 축소/통합 — **킷 mk-home:358-361 상시 노출 정의와 충돌, 사용자 확인**. Chip hitSlop은 무충돌 | 하 | 중 | ⚠️(범례) | 대기 |
-| U54 | 에디터·장소검색 | 폼↔검색 전환 무전이 — 조건부 렌더 즉시 교체(`MuklogEditor.tsx:431-446`) | 4 | 150~250ms 슬라이드/페이드(또는 라우트 push) | 하 | 중 | 없음 | 대기 |
+| U54 | 에디터·장소검색 | 폼↔검색 전환 무전이 — 조건부 렌더 즉시 교체(`MuklogEditor.tsx:431-446`) | 4 | 150~250ms 슬라이드/페이드(또는 라우트 push) | 하 | 중 | 없음 | 완료(motion-pass-1, docs/history/2026-09-01-motion-pass-1.md) |
 
 ## 킷이 이미 정해 위반으로 잡지 않은 것 (감사 추적)
 

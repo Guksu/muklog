@@ -7,18 +7,16 @@
 //   AppleLogo/GoogleLogo도 react-native-svg(킷 mk-auth:142-158 path 그대로). 로고 색은 브랜드 고정값
 //   (Apple 흰 글리프 / Google 멀티컬러)이라 토큰화 대상 아님 — 출처 = 킷.
 import React from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  View,
-  type ViewStyle,
-} from 'react-native';
+import { ActivityIndicator, StyleSheet, View, type ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { useTheme } from '@/theme';
 
+import { MotionPressable } from '../MotionPressable';
 import { Text } from '../Text';
+
+// 눌렀을 때 도달할 불투명도 — 기존 눌림 스타일(opacity) 값 승계(비주얼 회귀 0).
+const PRESSED_OPACITY = 0.85;
 
 export type SocialButtonVariant = 'apple' | 'google';
 
@@ -95,12 +93,14 @@ export const SocialButton = ({
   const fgToken = isApple ? 'socialAppleFg' : 'socialGoogleFg';
 
   return (
-    <Pressable
+    <MotionPressable
       accessibilityRole="button"
       accessibilityState={{ disabled: isInactive, busy: loading }}
       disabled={isInactive}
       onPress={onPress}
-      style={({ pressed }) => [container, pressed && !isInactive ? styles.pressed : null, style]}
+      pressSize="md"
+      pressedOpacity={PRESSED_OPACITY}
+      style={[container, style]}
     >
       {loading ? (
         <ActivityIndicator
@@ -118,11 +118,10 @@ export const SocialButton = ({
           </Text>
         </>
       )}
-    </Pressable>
+    </MotionPressable>
   );
 };
 
 const styles = StyleSheet.create({
-  pressed: { opacity: 0.85 },
   logo: { position: 'absolute', justifyContent: 'center' },
 });

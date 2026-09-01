@@ -9,7 +9,6 @@
 import React from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,7 +21,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Avatar, Button, FoodCover, Icon, IconButton, IconName, Sheet, Stars, Text } from '@/components';
+import { Avatar, Button, FadeInImage, FoodCover, Icon, IconButton, IconName, Sheet, Stars, Text } from '@/components';
 // 직접 경로 import — 배럴(@/features/map/components)은 다른 지도 컴포넌트(expo-location 등) 의존을 함께 끌어옴.
 import { MuklogMiniMap } from '@/features/map/components/MuklogMiniMap';
 import { AuthorKind, resolveAuthor } from '@/features/muklog/author';
@@ -278,7 +277,8 @@ export const MuklogDetailScreen = ({
               scrollEventThrottle={16}
             >
               {muklog.photos.map((p) => (
-                <Image
+                // motion-pass-1 D2: 로드되면 페이드로 자리를 잡는다(FadeInImage는 Image 드롭인 — props 불변).
+                <FadeInImage
                   key={`${p.orderIndex}-${p.uri}`}
                   testID="muklog-detail-photo"
                   accessibilityLabel={`${muklog.placeName} 사진 ${p.orderIndex + 1}`}

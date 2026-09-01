@@ -8,6 +8,8 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
+import { useTheme } from '@/theme';
+
 import { HomeTabs } from '../HomeTabs';
 import { Routes, type AppStackParamList } from '../routes';
 import { JoinLogScreen } from '../screens/JoinLogScreen';
@@ -21,9 +23,17 @@ import { RoomCreatedRoute } from '../screens/RoomCreatedRoute';
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
 export const AppNavigator = () => {
+  const theme = useTheme();
   // 모든 스택 화면이 자체 헤더(SubBar/HomeHeader/LogScreen 헤더)를 그린다 → 네이티브 헤더 전역 숨김.
+  //   contentStyle 배경(motion-pass-1 qa-visual F4 ①): 화면이 잠시 투명해지는 순간(에디터↔검색 SwapTransition
+  //   전환 200ms)에는 화면 뒤 네비게이터 배경이 그대로 보인다. react-navigation 기본값은 rgb(242,242,242)라
+  //   앱 배경(토큰 bg)과 달라 회색이 비친다 → 전 화면 공통으로 앱 배경 토큰을 깔아 어떤 전환에서도 재발하지 않게 한다.
+  //   (raw hex 금지 — useTheme 경유. 기존 화면 배경도 같은 토큰이라 정지 상태 시각 회귀는 0이다.)
   return (
-    <Stack.Navigator initialRouteName={Routes.HomeTabs} screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      initialRouteName={Routes.HomeTabs}
+      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.color.bg } }}
+    >
       <Stack.Screen name={Routes.HomeTabs} component={HomeTabs} />
       {/* Profile·JoinLog은 화면 자체 SubBar(킷 mk-log:428 / mk-home:150)를 그린다 → 네이티브 헤더 숨김(이중 헤더 방지, FLAG-4). */}
       <Stack.Screen

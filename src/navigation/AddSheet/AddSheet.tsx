@@ -3,12 +3,14 @@
 //   공용 Sheet 위 2개 행: "새 로그 만들기"(🥢) / "초대코드로 들어가기"(💌). 이모지 허용(킷 정책).
 //   순수 프리젠테이션 — createRoom/navigate 등 부수효과는 부모(PlusHeaderButton)가 주입(onCreate/onJoin).
 import React from 'react';
-import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type ViewStyle } from 'react-native';
 
-import { Icon, IconName, Sheet, Text } from '@/components';
+import { Icon, IconName, MotionPressable, Sheet, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 const ICON_BADGE_SIZE = 46;
+// 눌렀을 때 도달할 불투명도 — 기존 눌림 스타일(opacity) 값 승계(비주얼 회귀 0).
+const PRESSED_OPACITY = 0.6;
 
 export type AddSheetProps = {
   visible: boolean;
@@ -50,12 +52,14 @@ const SheetAction = ({
     backgroundColor: theme.color.primaryWeak,
   };
   return (
-    <Pressable
+    <MotionPressable
       accessibilityRole="button"
       accessibilityLabel={title}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, row, pressed && !disabled ? styles.pressed : null]}
+      pressSize="lg"
+      pressedOpacity={PRESSED_OPACITY}
+      style={[styles.row, row]}
     >
       <View style={[styles.badge, badge]}>
         {/* 킷 mk-home:134 이모지 배지 fontSize 24. */}
@@ -70,7 +74,7 @@ const SheetAction = ({
         </Text>
       </View>
       <Icon name={IconName.ChevronRight} size={18} color="fgAssistive" />
-    </Pressable>
+    </MotionPressable>
   );
 };
 
@@ -103,5 +107,4 @@ const styles = StyleSheet.create({
   badge: { alignItems: 'center', justifyContent: 'center' },
   badgeEmoji: { fontSize: 24 },
   body: { flex: 1 },
-  pressed: { opacity: 0.6 },
 });
