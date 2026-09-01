@@ -12,11 +12,15 @@ muklog 개발을 **스프린트 단위**로 조율하는 통합 스킬. 한 스�
 설계→퍼블리싱→구현→검증의 피드백 루프가 핵심이므로 에이전트 팀으로 운영한다. **역할 경계가 핵심:** planner=무엇을(기획·계약), **ui-publisher=어떻게 보이는가(킷→RN 토큰·프리미티브·화면 골격)**, developer=어떻게 동작하는가(데이터·훅·배선), **qa-logic=로직·통합 정합성(퍼블리싱 제외)** / **qa-visual=킷 시안 대비 비주얼 충실도**. ui-publisher가 "비주얼이 맞는 껍데기"를 먼저 만들고 developer가 데이터·로직을 붙인다(둘은 일부 병렬 가능 — developer가 백엔드·훅을 준비하는 동안 ui-publisher가 토큰·프리미티브·골격을 만든다). **두 QA는 서로 독립이라 병렬 실행**하며(qa-visual은 ui-publisher 산출물↔킷, qa-logic은 developer 산출물↔계약), 모듈 완성 직후 점진적으로 개입한다(incremental QA).
 
 ## 절대 규칙
-0. **TDD가 기본.** 모든 기능은 테스트 우선(Red→Green→Refactor). planner가 인수조건을 테스트 케이스로 정의 → developer가 실패 테스트 먼저 작성 후 구현 → qa가 테스트 존재·의미·통과를 검증. **스프린트 종료 기준에 `npm test` 전체 통과 + `tsc --noEmit` 포함.** 상세: `docs/testing-strategy.md`.
+
+**정본은 `docs/harness-rules.md`** — 리더와 모든 에이전트는 작업 전 이 파일을 읽는다(규칙 전문을 여기 복제하지 않는다: 복제본은 드리프트한다). 아래는 오케스트레이션에 직결되는 요약이다.
+
+0. **TDD가 기본**(정본 규칙 2). planner가 인수조건을 테스트 케이스로 정의하고 **테스트를 걸 공개 경계(seam)를 plan에 합의·기록** → developer가 실패 테스트 먼저 작성 후 구현 → qa가 테스트 존재·의미·통과를 검증. **스프린트 종료 기준에 `npm test` 전체 통과 + `tsc --noEmit` 포함.** 상세: `docs/testing-strategy.md`.
 1. **1 스프린트 = 1 기능.** 여러 기능을 한 스프린트로 묶지 않는다. 사용자가 여러 기능을 요청하면 첫 기능만 진행하고 나머지는 다음 스프린트로 안내한다.
 2. **git 작업 절대 금지.** commit·push·branch·merge 등 모든 git 명령을 수행하지 않는다. 커밋과 푸시는 **사용자가 직접** 한다. 스프린트 종료 시 "이제 커밋하셔도 됩니다"로 안내만 한다.
 3. **모든 에이전트 호출에 `model: "opus"`.**
 4. **설계 문서가 단일 출처.** `docs/design/architecture.md`와 어긋나면 먼저 사용자에게 확인한다.
+5. **작업 산출물과 기록을 구분한다**(정본 규칙 3, v2.0 기록 체계). 역할 간 인계물(plan.md·ui-spec.md·dev-notes.md·qa-report 2종)은 `_workspace/{slug}/`에 쓴다 — gitignore되어 커밋되지 않고 스프린트가 끝나면 버려진다. **보존 기록은 리더가 종합하는 `docs/history/{YYYY-MM-DD}-{slug}.md` 하나뿐이다(PR 하나 = 문서 하나, 템플릿 `docs/templates/history.md`).** 기록 없는 push는 blockGitMutation 기록 게이트가 차단한다. 2026-09-01 이전의 `docs/sprint/` 폴더들은 감사 추적으로 보존하며 참조만 한다.
 
 ## 에이전트 구성
 
@@ -29,12 +33,13 @@ muklog 개발을 **스프린트 단위**로 조율하는 통합 스킬. 한 스�
 | qa-visual | general-purpose | 킷 시안 대비 비주얼 충실도 교차검증 | visual-qa | `qa-report-visual.md` |
 
 > qa-logic·qa-visual은 검증 스크립트 실행·Grep이 필요하므로 `general-purpose` 타입으로 스폰한다(각 에이전트 정의 `.claude/agents/qa-logic.md`·`.claude/agents/qa-visual.md`를 프롬프트에 포함). 둘은 **병렬 실행**하고 리포트 파일도 분리한다(로직↔비주얼 독립). 비주얼 이슈→ui-publisher, 로직·경계면 이슈→developer로 라우팅.
+> **fe-skills 라이브러리(모션·UI 패턴 정본)** — ui-publisher·developer는 이름 있는 UI 패턴(바텀시트·핀치줌·프레스 피드백 등)을 구현하기 전에 `node .claude/scripts/feSkills.mjs find "<요청 문장>"`을 먼저 실행한다(요청 여부와 무관). 웹 정본이므로 코드 복사가 아니라 **판단값·순수 TS 층을 RN으로 번역**해 적용하고, 모션 품질 기준은 `fe-craft` 스킬(references/animation.md)을 따른다. 완료 기준: 패턴 구현 시작 전에 `find`를 실행했고, 후보가 있었다면 그 SKILL.md를 읽었다. 후보 0건·조회 실패(exit 3)면 직접 구현하고 history 기록에 남긴다.
 > **디자인 단일 출처는 킷 `templates/muklog`**(`.claude/skills/ui-design/templates/muklog/`). ui-publisher가 이를 RN으로 번역한다. developer는 ui-publisher의 컴포넌트/골격 위에 데이터를 바인딩하고, 비주얼을 임의로 바꾸지 않는다(누락 토큰/프리미티브는 ui-publisher에 요청).
 
 ## 워크플로우
 
 ### Phase 0: 컨텍스트 확인
-1. `docs/sprint/` 존재 및 기존 스프린트 폴더 목록 확인.
+1. `docs/history/` 최근 기록과 (과거 참조용) `docs/sprint/` 폴더 목록 확인.
 2. 실행 모드 결정:
    - **신규 스프린트** → Phase 1로.
    - **기존 스프린트 폴더 존재 + 사용자가 수정/보완/QA만 다시 요청** → 부분 재실행. 해당 스프린트 폴더의 plan/dev-notes/qa-report를 읽고, 필요한 에이전트만 재호출.
@@ -54,7 +59,7 @@ UX 판단 기준은 `ux-principles` 스킬(킷은 비주얼 단일 출처로 유
 ### Phase 1: 스프린트 정의
 1. 이번 스프린트의 **단일 기능**을 확정한다 (백로그: architecture.md §5).
 2. 스프린트 슬러그 생성: `sprint-{YYYYMMDD}-{name}` (예: `sprint-20260609-invite-room`). 날짜는 사용자에게 확인하거나 시스템 컨텍스트의 현재 날짜를 사용.
-3. 스프린트 폴더 생성: `docs/sprint/sprint-{YYYYMMDD}-{name}/`.
+3. 워크스페이스 폴더 생성: `_workspace/sprint-{YYYYMMDD}-{name}/` (gitignore 확인 — 커밋되지 않는 인계물 전용).
 4. 기능이 한 스프린트보다 크면 분할을 제안하고 첫 조각만 진행.
 
 ### Phase 2: 팀 구성
@@ -64,15 +69,15 @@ UX 판단 기준은 `ux-principles` 스킬(킷은 비주얼 단일 출처로 유
      team_name: "muklog-sprint",
      members: [
        { name: "sprint-planner", agent_type: "sprint-planner", model: "opus",
-         prompt: "이번 스프린트 기능: {기능명}. docs/design/architecture.md와 sprint-planning 스킬을 따라 docs/sprint/{slug}/plan.md를 작성하라." },
+         prompt: "이번 스프린트 기능: {기능명}. docs/design/architecture.md와 sprint-planning 스킬을 따라 _workspace/{slug}/plan.md를 작성하라." },
        { name: "ui-publisher", agent_type: "ui-publisher", model: "opus",
-         prompt: "docs/sprint/{slug}/plan.md의 화면·컴포넌트를 디자인 킷 templates/muklog(.claude/skills/ui-design/templates/muklog/)을 단일 출처로 RN에 정합시켜라. ui-publishing 스킬을 따라 docs/sprint/{slug}/ui-spec.md(킷 라인↔RN 매핑·props 계약)를 쓰고, src/theme 토큰·src/components 프리미티브·화면 비주얼 골격을 킷대로 만들되 데이터 바인딩은 props로 노출하라. TDD. git 작업 금지." },
+         prompt: "_workspace/{slug}/plan.md의 화면·컴포넌트를 디자인 킷 templates/muklog(.claude/skills/ui-design/templates/muklog/)을 단일 출처로 RN에 정합시켜라. ui-publishing 스킬을 따라 _workspace/{slug}/ui-spec.md(킷 라인↔RN 매핑·props 계약)를 쓰고, src/theme 토큰·src/components 프리미티브·화면 비주얼 골격을 킷대로 만들되 데이터 바인딩은 props로 노출하라. TDD. git 작업 금지." },
        { name: "developer", agent_type: "developer", model: "opus",
-         prompt: "docs/sprint/{slug}/plan.md + ui-spec.md를 따라 데이터·훅·쿼리·Edge Function·네비게이션을 ui-publisher의 컴포넌트/골격에 배선하라(비주얼 임의 변경 금지, 누락 토큰/프리미티브는 ui-publisher에 요청). rn-supabase-dev 스킬. git 작업 금지. dev-notes.md에 생산자↔소비자 매핑을 남겨라." },
+         prompt: "_workspace/{slug}/plan.md + ui-spec.md를 따라 데이터·훅·쿼리·Edge Function·네비게이션을 ui-publisher의 컴포넌트/골격에 배선하라(비주얼 임의 변경 금지, 누락 토큰/프리미티브는 ui-publisher에 요청). rn-supabase-dev 스킬. git 작업 금지. dev-notes.md에 생산자↔소비자 매핑을 남겨라." },
        { name: "qa-logic", agent_type: "general-purpose", model: "opus",
-         prompt: "{.claude/agents/qa-logic.md 전문 + integration-qa 스킬}. 각 모듈 완성 직후 경계면 통합 정합성·기능 스펙·보안/비용 가드레일·TDD·컨벤션을 생산자↔소비자 양쪽을 같이 읽어 교차검증하고 docs/sprint/{slug}/qa-report-logic.md를 작성하라. 비주얼 충실도는 qa-visual 담당이니 다루지 말 것. git 작업 금지." },
+         prompt: "{.claude/agents/qa-logic.md 전문 + integration-qa 스킬}. 각 모듈 완성 직후 경계면 통합 정합성·기능 스펙·보안/비용 가드레일·TDD·컨벤션을 생산자↔소비자 양쪽을 같이 읽어 교차검증하고 _workspace/{slug}/qa-report-logic.md를 작성하라. 비주얼 충실도는 qa-visual 담당이니 다루지 말 것. git 작업 금지." },
        { name: "qa-visual", agent_type: "general-purpose", model: "opus",
-         prompt: "{.claude/agents/qa-visual.md 전문 + visual-qa 스킬}. 각 화면/컴포넌트 완성 직후 킷 templates/muklog 시안 대비 비주얼 충실도(레이아웃·safe-area / 토큰·radius·폰트·간격 / 카피)를 ui-spec.md 매핑 기준 킷 라인↔RN 파일:라인으로 교차검증하고 docs/sprint/{slug}/qa-report-visual.md를 작성하라. 로직/경계면은 qa-logic 담당. git 작업 금지." }
+         prompt: "{.claude/agents/qa-visual.md 전문 + visual-qa 스킬}. 각 화면/컴포넌트 완성 직후 킷 templates/muklog 시안 대비 비주얼 충실도(레이아웃·safe-area / 토큰·radius·폰트·간격 / 카피)를 ui-spec.md 매핑 기준 킷 라인↔RN 파일:라인으로 교차검증하고 _workspace/{slug}/qa-report-visual.md를 작성하라. 로직/경계면은 qa-logic 담당. git 작업 금지." }
      ]
    )
    ```
@@ -100,21 +105,22 @@ UX 판단 기준은 `ux-principles` 스킬(킷은 비주얼 단일 출처로 유
 
 | 팀원 | 출력 경로 |
 |------|----------|
-| sprint-planner | `docs/sprint/{slug}/plan.md` |
-| ui-publisher | `docs/sprint/{slug}/ui-spec.md` + 토큰/컴포넌트/화면 골격 소스 |
-| developer | 소스 코드 + `docs/sprint/{slug}/dev-notes.md` |
-| qa-logic | `docs/sprint/{slug}/qa-report-logic.md` |
-| qa-visual | `docs/sprint/{slug}/qa-report-visual.md` |
+| sprint-planner | `_workspace/{slug}/plan.md` |
+| ui-publisher | `_workspace/{slug}/ui-spec.md` + 토큰/컴포넌트/화면 골격 소스 |
+| developer | 소스 코드 + `_workspace/{slug}/dev-notes.md` |
+| qa-logic | `_workspace/{slug}/qa-report-logic.md` |
+| qa-visual | `_workspace/{slug}/qa-report-visual.md` |
 
 ### Phase 4: 종료 판정
 1. **qa-report-logic.md**(인수조건·정합성·TDD·가드레일)와 **qa-report-visual.md**(킷 비주얼 충실도, 체크리스트: visual-qa 스킬 / ui-publishing §5)가 **모두 통과**인지 + **`npm test` 전체 통과 + `tsc --noEmit`** 확인(TDD 종료 기준). 미통과면 담당자(비주얼→ui-publisher / 데이터·로직→developer) 재작업 → 해당 qa 재검증(최대 2~3회).
-2. 잔여 이슈는 `docs/sprint/{slug}/qa-report.md`에 "미해결"로 명시.
-3. 스프린트 요약을 사용자에게 보고.
+2. 잔여 이슈는 두 qa-report에 "미해결"로 명시(최종적으로 history 문서 §4로 옮긴다).
+3. **기록 종합(리더 몫):** `_workspace/{slug}/`의 plan·ui-spec·dev-notes·qa-report 2종을 근거로 `docs/history/{YYYY-MM-DD}-{slug}.md` **하나**를 작성한다(템플릿 `docs/templates/history.md` — 역할별 섹션으로 나누지 않고 종합, 검증 결과는 실제 실행 결과 그대로, 실패도 숨기지 않는다). fe-skills에서 가져온 패턴이 있으면 §2에 출처(slug·MIT)를 적는다. **이 문서 없이는 push가 게이트에 막힌다.**
+4. 스프린트 요약을 사용자에게 보고.
 
 ### Phase 5: 정리
 1. 팀원 종료(SendMessage) 후 `TeamDelete`.
-2. 스프린트 폴더 산출물 보존.
-3. 사용자에게: 변경 파일 요약 + 통과/미해결 + **"git 커밋/푸시는 직접 진행하세요"** 안내 + 다음 스프린트 후보 제시.
+2. `docs/history/` 기록이 완성됐는지 확인(보존 산출물은 이것 하나 — `_workspace/{slug}/`는 폐기 대상이므로 커밋하지 않는다).
+3. 사용자에게: 변경 파일 요약 + 통과/미해결 + **"git 커밋/푸시는 직접 진행하세요"** 안내(PR 옵트인 시 pr 절차) + 다음 스프린트 후보 제시.
 
 ## 데이터 흐름
 ```

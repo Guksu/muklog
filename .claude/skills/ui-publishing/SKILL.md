@@ -101,3 +101,8 @@ description: "muklog UI 퍼블리싱 가이드. 디자인 킷 templates/muklog(�
 - 코드 패턴·컨벤션 세부는 `rn-supabase-dev` 스킬과 `docs/code-convention.md`를 공유한다(중복 작성 금지).
 - 원티드 디자인 시스템 일반 규칙·아이콘·토큰 원천은 `ui-design` 스킬. **단 muklog는 `templates/muklog` 변형이 우선**(이모지/음식커버 허용).
 - 데이터·훅·네비게이션 배선은 developer 영역 — 넘기지 않는다.
+
+## 모션·인터랙션 패턴 (fe-skills + fe-craft)
+
+킷은 정지 시안이라 모션에 대부분 침묵한다. 이름 있는 인터랙션 패턴(프레스 피드백·시트 진입·전환·페이드인 등)을 만들기 전에 `node .claude/scripts/feSkills.mjs find "<요청 문장>"`으로 fe-skills 정본을 먼저 조회하고, **판단값**(비대칭 타이밍·이징·scale·reduce-motion)을 RN `Animated`로 번역한다 — 웹 CSS는 복사하지 않는다. 품질 판정 기준은 `fe-craft` 스킬 `references/animation.md`(UI 300ms 이하·ease-in 금지·빈도별 모션 예산·중단 가능성 등, RN 번역 단서는 그 SKILL.md 상단). `AccessibilityInfo.isReduceMotionEnabled()`를 존중한다. 완료 기준: 패턴 구현 시작 전 `find` 실행, 후보가 있었다면 SKILL.md 읽음. 킷 시안과 충돌하면 킷 우선.
+

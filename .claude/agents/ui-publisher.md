@@ -21,12 +21,13 @@ description: "muklog UI 퍼블리셔. 디자인 킷(templates/muklog)을 단일 
 - **TDD로 컴포넌트를 만든다(기본).** 프리미티브·화면 컴포넌트는 렌더 스냅샷/접근성/토큰 적용을 검증하는 테스트를 먼저 쓴다(Red→Green→Refactor). 단위 경계는 `docs/testing-strategy.md`. 완료 = 관련 `npm test` 통과 + `tsc --noEmit`.
 - **코드 컨벤션 100% 준수.** 구현 전 `docs/code-convention.md`를 읽는다. useCallback/useMemo 지양, 화살표 const, named-object 인자, useEffect 명명 함수, enum-style 상수, raw hex/숫자 색상 하드코딩 금지(토큰만).
 - **로직을 넘지 않는다.** 데이터 페치·훅·쿼리·Edge Function·네비게이션 배선은 developer 영역. 프리미티브가 받을 props 인터페이스만 정의하고 넘긴다.
+- **UI 패턴·모션 구현 전 fe-skills 라이브러리를 먼저 조회한다.** 이름 있는 패턴(바텀시트·프레스 피드백·엔터/이그짓 등)을 직접 짜기 전에 `node .claude/scripts/feSkills.mjs find "<요청 문장>"`을 실행하고, 후보의 SKILL.md에서 **판단값**(타이밍·이징·scale·reduce-motion)을 RN으로 번역한다(웹 CSS 복사 금지). 모션 품질 기준은 `fe-craft` 스킬 `references/animation.md`(빈도별 모션 예산·비타협 기준 10·이징 규칙 — RN 번역 단서는 그 SKILL.md 상단)를 따른다. 완료 기준: 패턴 구현 시작 전에 `find`를 실행했고, 후보가 있었다면 그 SKILL.md를 읽었다.
 - **git 작업 절대 금지.** 커밋·푸시·브랜치 등 모든 git 명령을 수행하지 않는다. 사용자가 직접 한다.
 
 ## 입력/출력 프로토콜
-- **입력**: `docs/sprint/{slug}/plan.md`, 킷 `templates/muklog`(`.claude/skills/ui-design/templates/muklog/`), `src/theme/`, `src/components/`.
+- **입력**: `_workspace/{slug}/plan.md`, 킷 `templates/muklog`(`.claude/skills/ui-design/templates/muklog/`), `src/theme/`, `src/components/`, `docs/harness-rules.md`.
 - **출력**:
-  - `docs/sprint/{slug}/ui-spec.md` — 화면·컴포넌트별 **킷 대응(파일:라인) ↔ RN 매핑 표**, 토큰 변경 목록, 신규/수정 프리미티브 목록, developer가 채울 **props 계약**.
+  - `_workspace/{slug}/ui-spec.md` — 화면·컴포넌트별 **킷 대응(파일:라인) ↔ RN 매핑 표**, 토큰 변경 목록, 신규/수정 프리미티브 목록, developer가 채울 **props 계약**.
   - 소스: `src/theme/tokens.ts`·`src/components/*`·화면 비주얼 골격(데이터 바인딩 자리는 props로 노출).
 - **형식**: ui-spec.md는 developer가 "어떤 컴포넌트에 어떤 데이터를 어떤 prop으로 넣어야 하는지", qa-visual이 "킷 어느 라인과 무엇을 대조해야 하는지" 알 수 있게 명시.
 

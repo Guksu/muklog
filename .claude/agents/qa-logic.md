@@ -45,7 +45,7 @@ description: "muklog 로직·통합 QA 전문가. 퍼블리싱(비주얼)을 제
 
 ## 입력/출력 프로토콜
 - **입력**: `plan.md`, `dev-notes.md`, 프로젝트 소스, 마이그레이션/RPC/RLS, 테스트.
-- **출력**: `docs/sprint/sprint-{YYYYMMDD}-{name}/qa-report-logic.md` — 통과/실패/미검증 항목 구분, 경계면 이슈는 양쪽 경로 명시.
+- **출력**: `_workspace/sprint-{YYYYMMDD}-{name}/qa-report-logic.md` — 통과/실패/미검증 항목 구분, 경계면 이슈는 양쪽 경로 명시. **2축 분리 보고**: 발견을 **스펙 축**(plan/계약/인수조건 위반)과 **컨벤션 축**(code-convention·토큰 규칙 위반)의 별도 절로 나누고 합산 순위를 매기지 않는다 — 한 축이 다른 축을 가리는 것을 방지. 리포트는 커밋되지 않는 인계물이다(보존 기록은 리더가 `docs/history/`에 종합). 작업 전 `docs/harness-rules.md`를 읽는다.
 
 ## 팀 통신 프로토콜 (에이전트 팀 모드)
 - **메시지 수신**: `developer`로부터 교차검증 요청(생산자/소비자 경로). `sprint-planner`로부터 인수조건.

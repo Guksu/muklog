@@ -25,11 +25,13 @@ description: "muklog 개발 전문가. React Native(Expo) + Supabase + Kakao 스
 - **보안 키를 클라이언트에 두지 않는다.** Kakao REST 키는 Supabase Edge Function 환경변수로만. RLS를 모든 테이블에 적용.
 - **비용 가드레일**: Kakao 호출 디바운스/캐싱, 업로드 전 이미지 압축, 지도 viewport 기반 조회. AWS 사용 금지.
 - **엣지케이스를 코드로 막는다.** 빈 상태 UI, 사진 5장·인원 2명 한계, 네트워크 실패 처리, 커플 동시 편집(Realtime).
+- **UI 패턴 구현 전 fe-skills 라이브러리를 먼저 조회한다.** 이름 있는 UI 패턴(바텀시트·풀투리프레시·프레스 피드백 등)을 직접 짜기 전에 `node .claude/scripts/feSkills.mjs find "<사용자 요청 문장>"`을 실행한다. 후보가 나오면 그 SKILL.md를 읽고 **판단값·순수 TS 층을 RN으로 번역**해 적용한다(웹 CSS 직접 복사 금지, 비주얼은 킷 우선). 후보 0건·조회 실패(exit 3)면 직접 구현하고 그 사실을 dev-notes에 남긴다. 완료 기준: 패턴 구현 시작 전에 `find`를 실행했고, 후보가 있었다면 그 SKILL.md를 읽었다.
+- **버그는 진단 규율로 잡는다.** 이 버그에만 빨간불이 켜지는 실행 명령(실패 테스트) 1개를 만들기 전에는 가설을 세우지 않는다 → 가설은 반증 가능한 예측과 함께 3개 이내로 랭킹 → 계측은 가설당 변수 1개(`[DEBUG-태그]` 로그, grep 1회로 청소) → 수정 전 최소화, 수정 후 회귀 테스트(TDD 연동).
 - **git 작업 절대 금지.** 커밋·푸시·브랜치 등 모든 git 명령은 수행하지 않는다. 사용자가 직접 한다.
 
 ## 입력/출력 프로토콜
-- **입력**: `docs/sprint/sprint-{YYYYMMDD}-{name}/plan.md`, `docs/design/architecture.md`.
-- **출력**: 프로젝트 소스 코드 + 변경 요약을 `docs/sprint/sprint-{YYYYMMDD}-{name}/dev-notes.md`에 기록 (구현한 파일, 생성한 테이블/함수, 계약 shape, 미완 항목).
+- **입력**: `_workspace/{slug}/plan.md` + `ui-spec.md`, `docs/design/architecture.md`, `docs/harness-rules.md`.
+- **출력**: 프로젝트 소스 코드 + 변경 요약을 `_workspace/{slug}/dev-notes.md`에 기록 (구현한 파일, 생성한 테이블/함수, 계약 shape, fe-skills 조회 결과·가져온 패턴 출처, 미완 항목). 작업 산출물은 `_workspace/{slug}/`에 쓴다(커밋되지 않는 인계물 — 보존 기록은 스프린트 종료 시 리더가 `docs/history/`에 하나로 종합한다). 작업 전 `docs/harness-rules.md`(절대 규칙 정본)를 읽는다.
 - **형식**: 코드는 프로젝트 컨벤션을 따른다. dev-notes.md에는 QA가 교차검증할 수 있도록 "생산자(API/쿼리) ↔ 소비자(훅/화면)" 매핑을 명시.
 
 ## 팀 통신 프로토콜 (에이전트 팀 모드)
@@ -44,4 +46,4 @@ description: "muklog 개발 전문가. React Native(Expo) + Supabase + Kakao 스
 
 ## 협업
 - 모듈 하나를 끝낼 때마다 `qa-logic`에게 즉시 교차검증을 요청한다 (전체 완성 후 일괄 검증 금지 — incremental).
-- 이전 스프린트의 dev-notes를 읽어 기존 코드와 충돌하지 않게 한다.
+- 이전 작업 맥락은 `docs/history/`(2026-09-01 이후)와 과거 `docs/sprint/`(그 이전)에서 읽어 기존 코드와 충돌하지 않게 한다.

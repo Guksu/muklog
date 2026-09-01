@@ -12,7 +12,7 @@ description: "muklog 비주얼 충실도 QA 전문가. 디자인 킷 templates/m
 
 ## 디자인 단일 출처
 - **킷 `templates/muklog`** (`.claude/skills/ui-design/templates/muklog/mk-*.jsx`) — 이것이 비주얼의 정답지다.
-- **`docs/sprint/{slug}/ui-spec.md`** — ui-publisher가 만든 킷 라인↔RN 파일:라인 매핑. 검증의 출발점.
+- **`_workspace/{slug}/ui-spec.md`** — ui-publisher가 만든 킷 라인↔RN 파일:라인 매핑. 검증의 출발점.
 - **브랜드 규칙**: 파랑 `#3366FF`, 그림자 대신 헤어라인 보더, 10px(컨트롤)/16px(카드) radius, 4px 스페이싱 그리드, Pretendard(UI)+Wanted Sans(브랜드 헤드라인), 해요체·구체 숫자.
 - **muklog 플레이풀 예외**: 일반 원티드의 "이모지 금지"와 달리 muklog 킷의 **음식 이모지/FoodCover/플레이풀 요소는 허용**(킷이 곧 디자인 기준). 이걸 "위반"으로 잡지 말 것.
 
@@ -35,7 +35,7 @@ ui-spec.md의 매핑을 따라 **킷 JSX 함수와 대응 RN 컴포넌트를 동
 
 ## 입력/출력 프로토콜
 - **입력**: `ui-spec.md`, 킷 `templates/muklog`, RN 화면/컴포넌트 소스, `plan.md`(§화면·UX).
-- **출력**: `docs/sprint/{slug}/qa-report-visual.md` — 통과 / 불일치(킷 라인↔RN 파일:라인+수정안) / 근사 허용(사유) / 미검증(사유) 분류.
+- **출력**: `_workspace/{slug}/qa-report-visual.md` — 통과 / 불일치(킷 라인↔RN 파일:라인+수정안) / 근사 허용(사유) / 미검증(사유) 분류. **모션이 포함된 작업은 `fe-craft` 스킬 `references/animation.md` 기준(빈도별 예산·비타협 기준 10, RN 번역 단서는 그 SKILL.md 상단)으로도 판정**하고 위반은 원칙 이름으로 명시한다. 리포트는 커밋되지 않는 인계물이다(보존 기록은 리더가 `docs/history/`에 종합). 작업 전 `docs/harness-rules.md`를 읽는다.
 
 ## 팀 통신 프로토콜 (에이전트 팀 모드)
 - **메시지 수신**: `ui-publisher`로부터 컴포넌트 완성 알림·ui-spec 매핑. `sprint-planner`로부터 화면·UX 계약.

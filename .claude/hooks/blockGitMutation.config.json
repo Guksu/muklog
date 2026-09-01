@@ -1,3 +1,4 @@
 {
-  "allowCommitPush": true
+  "allowCommitPush": true,
+  "historyBase": "main"
 }
