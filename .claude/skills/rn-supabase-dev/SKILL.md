@@ -44,4 +44,8 @@ supabase/
 - 원티드 토큰 매핑(theme/tokens.ts): `references/wanted-tokens.md`
 
 ## 출력
-구현 코드 + `docs/sprint/{slug}/dev-notes.md`(구현 파일, 생성 테이블/함수, 계약 shape, 생산자↔소비자 매핑, 미완 항목). 모듈 완성마다 qa-logic에게 교차검증 요청(비주얼 충실도는 qa-visual 담당).
+구현 코드 + `_workspace/{slug}/dev-notes.md`(구현 파일, 생성 테이블/함수, 계약 shape, 생산자↔소비자 매핑, fe-skills 조회 결과, 미완 항목 — 커밋되지 않는 인계물, 보존 기록은 리더가 `docs/history/`에 종합). 모듈 완성마다 qa-logic에게 교차검증 요청(비주얼 충실도는 qa-visual 담당).
+
+## fe-skills 라이브러리 (UI 패턴 정본)
+
+이름 있는 UI 패턴(바텀시트·풀투리프레시·프레스 피드백·핀치줌 등)을 구현하기 전에 **요청 여부와 무관하게** `node .claude/scripts/feSkills.mjs find "<사용자 요청 문장>"`을 먼저 실행한다. 후보가 나오면 `get <slug> --into <대상>`으로 SKILL.md를 받아 읽는다. **웹(CSS/DOM) 정본이므로 코드 복사가 아니라 판단값(타이밍·이징·scale·reduce-motion·엣지케이스)과 순수 TS 층을 RN으로 번역**해 적용한다(비주얼은 킷 우선). 후보 0건·조회 실패(exit 3)면 직접 구현하고 dev-notes에 그 사실을 남긴다. 완료 기준: 패턴 구현 시작 전 `find` 실행, 후보가 있었다면 SKILL.md 읽음. 모션 품질 기준은 `fe-craft` 스킬 `references/animation.md`(RN 번역 단서는 그 SKILL.md 상단). 버그 진단은 규율대로: 재현 명령(실패 테스트) 1개 → 가설 랭킹(반증 가능한 예측) → 가설당 변수 1개 계측 → 최소 수정+회귀 테스트.

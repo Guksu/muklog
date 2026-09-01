@@ -41,3 +41,4 @@ yarn-error.*
 
 # claude
 .claude/skills/ui-design/*
+_workspace/

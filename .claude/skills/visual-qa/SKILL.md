@@ -9,7 +9,7 @@ description: "muklog 비주얼 충실도 QA 가이드. 디자인 킷 templates/m
 
 ## 디자인 단일 출처
 - **킷 `templates/muklog`** (`.claude/skills/ui-design/templates/muklog/mk-*.jsx`) = 정답지.
-- **`docs/sprint/{slug}/ui-spec.md`** = ui-publisher의 킷 라인↔RN 파일:라인 매핑. 검증 출발점.
+- **`_workspace/{slug}/ui-spec.md`** = ui-publisher의 킷 라인↔RN 파일:라인 매핑. 검증 출발점.
 - **생산자 self-check 체크리스트**: `.claude/skills/ui-publishing/SKILL.md` §5(비주얼 충실도 체크리스트). ui-publisher가 모듈 완성마다 self-check한 항목을 **검증자 입장에서 재확인**한다(단일 출처 — 여기에 중복 정의하지 않는다).
 
 ## 왜 코드 리뷰/타입체크로 못 잡나
@@ -52,4 +52,4 @@ RN이 킷을 100% 재현 못 하는 항목(컬러 그림자·backdrop blur·웹 
 - 발견은 **킷 라인 ↔ RN 파일:라인 + 수정 방법**과 함께 보고. 비주얼 이슈는 `ui-publisher`에게 라우팅.
 
 ## 출력
-`docs/sprint/{slug}/qa-report-visual.md` — 통과 / 불일치(킷 라인↔RN 파일:라인+수정안) / 근사 허용(사유) / 미검증(사유) 4분류. 모든 화면 비주얼 충실도 통과 전에는 "비주얼 완료"로 표시하지 않는다.
+`_workspace/{slug}/qa-report-visual.md` — 통과 / 불일치(킷 라인↔RN 파일:라인+수정안) / 근사 허용(사유) / 미검증(사유) 4분류(커밋되지 않는 인계물 — 보존 기록은 리더가 `docs/history/`에 종합). 모션이 포함된 작업은 `fe-craft` 스킬 `references/animation.md`의 기준(빈도별 모션 예산·비타협 기준 10·이징 규칙)으로도 판정하고 위반은 원칙 이름으로 명시한다(RN 번역 단서는 그 SKILL.md 상단). 모든 화면 비주얼 충실도 통과 전에는 "비주얼 완료"로 표시하지 않는다.

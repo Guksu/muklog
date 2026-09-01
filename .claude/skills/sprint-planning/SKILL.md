@@ -15,7 +15,7 @@ description: "muklog 스프린트 기획 가이드. 단일 기능을 검증 가�
 
 ## 시작 전
 1. `docs/design/architecture.md`를 읽는다 — 데이터 모델·화면·결정·비용 가드레일.
-2. `docs/sprint/`의 이전 스프린트를 훑어 의존성·중복을 파악한다.
+2. `docs/history/`(2026-09-01 이후)와 `docs/sprint/`(그 이전)의 이전 작업 기록을 훑어 의존성·중복을 파악한다.
 3. **UX 개선 스프린트면** `ux-principles` 스킬을 읽고, `docs/ux/ux-backlog.md` 해당 항목의 위반 원칙 번호를 인수조건에 인용한다(개선이 관찰 가능해진다).
 
 ## plan.md 필수 섹션
@@ -64,4 +64,4 @@ description: "muklog 스프린트 기획 가이드. 단일 기능을 검증 가�
 - git 관련 작업은 plan에 넣지 않는다.
 
 ## 출력
-`docs/sprint/{slug}/plan.md`. 완료 후 developer에게 계약 핵심을 SendMessage로 전달.
+`_workspace/{slug}/plan.md`(커밋되지 않는 인계물 — 보존 기록은 스프린트 종료 시 리더가 `docs/history/`에 종합). 인수조건마다 **테스트를 걸 공개 경계(seam)** 를 명시한다. 완료 후 developer에게 계약 핵심을 SendMessage로 전달.
