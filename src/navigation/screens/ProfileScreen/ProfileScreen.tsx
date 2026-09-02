@@ -8,7 +8,7 @@
 // 생산자: useProfileContext(공유 조회·#2)/useUpdateProfile(저장·업로드)/useMyLogs(통계). 소비자: 상태별 UX. 스타일=토큰만(raw hex 0).
 //   ⚠️ #2: 조회는 공유 ProfileProvider(useProfileContext) — 저장/업로드 성공 후 공유 refresh()로 HomeHeader·LogList까지 전파.
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -22,6 +22,7 @@ import {
   Icon,
   IconName,
   LoadingView,
+  MotionPressable,
   RenameDialog,
   Screen,
   SubBar,
@@ -72,6 +73,13 @@ const SETTINGS_ROWS: readonly SettingsRow[] = [
 const AVATAR_SIZE = 96;
 const CAMERA_BADGE_SIZE = 32;
 const EDIT_BTN_SIZE = 30;
+
+// 눌림 불투명도(motion-coverage B5~B9, ui-spec §1-2) — 새 값 발명 없이 기존 소비처 실값을 승계한다.
+const AVATAR_PRESSED_OPACITY = 0.6; // HomeHeader 아바타 승계
+const EDIT_BTN_PRESSED_OPACITY = 0.6; // IconButton 승계
+const SETTINGS_ROW_PRESSED_OPACITY = 0.6; // AddSheet 행 승계
+const SIGN_OUT_PRESSED_OPACITY = 0.6; // B7(설정 행)과 같은 리듬
+const DELETE_ROW_PRESSED_OPACITY = 0.5; // 기존 함수형 style 실값 승계(ui-spec §3)
 
 export const ProfileScreen = () => {
   const { state } = useAuth();
@@ -227,12 +235,14 @@ const ProfileContent = ({ userId }: { userId: string }) => {
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: 28 + insets.bottom }]}>
         {/* 아바타 + 카메라 배지 + 닉네임 */}
         <View style={styles.avatarSection}>
-          <Pressable
+          <MotionPressable
             accessibilityRole="button"
             accessibilityLabel="프로필 사진 변경"
             accessibilityState={{ busy: uploadingAvatar }}
             onPress={handleChangeAvatar}
             disabled={uploadingAvatar}
+            pressSize="sm"
+            pressedOpacity={AVATAR_PRESSED_OPACITY}
             style={styles.avatarPress}
           >
             <Avatar url={profile.avatarUrl} userId={userId} size={AVATAR_SIZE} />
@@ -248,7 +258,7 @@ const ProfileContent = ({ userId }: { userId: string }) => {
                 <Icon name={IconName.Camera} size={16} color="primaryFg" />
               )}
             </View>
-          </Pressable>
+          </MotionPressable>
 
           <View style={[styles.nicknameRow, { marginTop: theme.spacing[12] }]}>
             <Text variant="profileName" color="fg">
@@ -257,17 +267,19 @@ const ProfileContent = ({ userId }: { userId: string }) => {
                 ? profile.nickname
                 : defaultNickname({ userId })}
             </Text>
-            <Pressable
+            <MotionPressable
               accessibilityRole="button"
               accessibilityLabel="닉네임 편집"
               onPress={() => setNickDialogOpen(true)}
+              pressSize="sm"
+              pressedOpacity={EDIT_BTN_PRESSED_OPACITY}
               style={[
                 styles.editBtn,
                 { backgroundColor: theme.color.surfaceAlt, borderRadius: theme.radius.full },
               ]}
             >
               <Icon name={IconName.Pencil} size={15} color="fgWeak" />
-            </Pressable>
+            </MotionPressable>
           </View>
         </View>
 
@@ -306,12 +318,14 @@ const ProfileContent = ({ userId }: { userId: string }) => {
           ]}
         >
           {SETTINGS_ROWS.map((row, index) => (
-            <Pressable
+            <MotionPressable
               key={row.label}
               testID={`settings-row-${row.label}`}
               accessibilityRole="button"
               accessibilityLabel={row.label}
               onPress={() => handleRowPress({ row })}
+              pressSize="lg"
+              pressedOpacity={SETTINGS_ROW_PRESSED_OPACITY}
               style={[
                 styles.settingsRow,
                 index < SETTINGS_ROWS.length - 1
@@ -324,15 +338,17 @@ const ProfileContent = ({ userId }: { userId: string }) => {
                 {row.label}
               </Text>
               <Icon name={IconName.ChevronRight} size={17} color="fgAssistive" />
-            </Pressable>
+            </MotionPressable>
           ))}
         </View>
 
         {/* 로그아웃(파괴적 액션) — 설정 리스트 하단 별도 행. 탭→확인→signOut(social-auth ⑥/§4.3). */}
-        <Pressable
+        <MotionPressable
           accessibilityRole="button"
           accessibilityLabel="로그아웃"
           onPress={handleSignOut}
+          pressSize="lg"
+          pressedOpacity={SIGN_OUT_PRESSED_OPACITY}
           style={[
             styles.signOutRow,
             {
@@ -346,7 +362,7 @@ const ProfileContent = ({ userId }: { userId: string }) => {
           <Text variant="spotCount" color="error" style={styles.signOutLabel}>
             로그아웃
           </Text>
-        </Pressable>
+        </MotionPressable>
 
         {error ? (
           <Text variant="bodySm" color="error" style={[styles.center, { marginTop: theme.spacing[16] }]}>
@@ -356,16 +372,18 @@ const ProfileContent = ({ userId }: { userId: string }) => {
 
         {/* 회원 탈퇴(AC5) — 로그아웃보다 약하게(앱 정책 UI, 킷 비종속). 카드 없이 텍스트 행만,
             error 색이되 작은 폰트·언더라인 톤으로 덜 강조 → 탭 시 파괴 확인 시트. Apple 5.1.1(v) 인앱 계정 삭제. */}
-        <Pressable
+        <MotionPressable
           accessibilityRole="button"
           accessibilityLabel="회원 탈퇴"
           onPress={() => setDeleteSheetOpen(true)}
-          style={({ pressed }) => [styles.deleteRow, { opacity: pressed ? 0.5 : 1 }]}
+          pressSize="lg"
+          pressedOpacity={DELETE_ROW_PRESSED_OPACITY}
+          style={styles.deleteRow}
         >
           <Text variant="caption" color="fgMuted" style={styles.deleteLabel}>
             회원 탈퇴
           </Text>
-        </Pressable>
+        </MotionPressable>
 
         {/* 앱 버전 행(app-version-gate T10 + app-update-actions T4) — 회원탈퇴 아래 약톤 표시.
             미확보(expo-constants null)면 미렌더. available면 업데이트 액션(탭→스토어), latest면 최신 라벨. */}

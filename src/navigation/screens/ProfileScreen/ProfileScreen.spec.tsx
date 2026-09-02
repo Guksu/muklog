@@ -51,7 +51,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 // Alert.alert: 즉시 로그아웃 전환 후엔 호출되지 않아야 함(회귀 가드).
-import { Alert } from 'react-native';
+import { AccessibilityInfo, Alert, StyleSheet } from 'react-native';
 jest.spyOn(Alert, 'alert');
 
 import { defaultNickname, useDeleteAccount, useProfileContext, useUpdateProfile } from '@/features/profile';
@@ -471,5 +471,58 @@ describe('ProfileScreen — 앱 업데이트 액션(T4)', () => {
     getCurrentAppVersionMock.mockReturnValue(null);
     renderWithTheme(<ProfileScreen />);
     expect(screen.queryByTestId('app-version-row')).toBeNull();
+  });
+});
+
+// ── 프레스 치환 B5~B9(motion-coverage D3 / plan §5-1 B) ────────────────────────────────
+//   seam = 라벨·testID로 조회한 노드의 (a) onPress 효과 (b) flatten style의 transform 존재 (c) 정지 시각값.
+//   pressedOpacity 실값·Animated 궤적은 검증하지 않는다(네이티브 드라이버 구간, plan §5-2).
+describe('ProfileScreen — 눌림 피드백 부착(motion-coverage B5~B9, U30)', () => {
+  // 감소 모션 OFF 고정 — transform 존재 단언은 OS 설정에 의존하면 안 된다(MotionPressable.spec 선례).
+  //   ⚠️ 원복은 이 스파이만 개별로 한다 — jest.restoreAllMocks()는 파일 최상위 Alert 스파이(:55)까지 되돌려
+  //      뒤에 describe가 추가되면 "즉시 로그아웃 후 Alert 미호출" 회귀 가드가 조용히 무력화된다(qa-logic C1).
+  let reduceMotionSpy: jest.SpyInstance;
+  beforeEach(() => {
+    reduceMotionSpy = jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(false));
+  });
+  afterEach(() => reduceMotionSpy.mockRestore());
+
+  const flattenStyle = ({ node }: { node: { props: { style?: unknown } } }) =>
+    StyleSheet.flatten(node.props.style) as Record<string, unknown>;
+
+  it.each([
+    ['아바타', () => screen.getByLabelText('프로필 사진 변경')],
+    ['닉네임 펜슬', () => screen.getByLabelText('닉네임 편집')],
+    ['설정 행(알림 설정)', () => screen.getByTestId('settings-row-알림 설정')],
+    ['로그아웃 행', () => screen.getByLabelText('로그아웃')],
+    ['회원 탈퇴 행', () => screen.getByLabelText('회원 탈퇴')],
+  ])('B-4: "%s" 지점에 눌림 모션이 부착된다', async (_name, findNode) => {
+    renderWithTheme(<ProfileScreen />);
+    await waitFor(() => expect(flattenStyle({ node: findNode() }).transform).toBeDefined());
+  });
+
+  it('B-5: 아바타 업로드 중이면 changeAvatar 미발화 + 눌림 모션 미부착 + 스피너 표시 (E3)', () => {
+    setupUpdate({ uploadingAvatar: true });
+    renderWithTheme(<ProfileScreen />);
+    const avatar = screen.getByLabelText('프로필 사진 변경');
+    fireEvent.press(avatar);
+    expect(changeAvatar).not.toHaveBeenCalled();
+    expect(flattenStyle({ node: avatar }).transform).toBeUndefined();
+    expect(screen.getByTestId('avatar-uploading')).toBeTruthy();
+  });
+
+  it('B-6: 회원 탈퇴 행은 함수형 style 없이 정지 스타일(밑줄·paddingVertical)을 유지하고 탭 시 확인 시트를 연다 (E12)', () => {
+    renderWithTheme(<ProfileScreen />);
+    const row = screen.getByLabelText('회원 탈퇴');
+    // 함수형 style이 남아 있으면 MotionPressable이 합성하지 못한다(계약 §3-3-1).
+    expect(typeof row.props.style).not.toBe('function');
+    expect(flattenStyle({ node: row }).paddingVertical).toBe(16);
+    expect(
+      StyleSheet.flatten(screen.getByText('회원 탈퇴').props.style).textDecorationLine,
+    ).toBe('underline');
+    fireEvent.press(row);
+    expect(screen.getByText('정말 탈퇴할까요?')).toBeTruthy();
   });
 });

@@ -3,12 +3,12 @@
 //   저장→createMuklog→onSaved (plan §6.3 / §5 T9, AC2·AC3·AC12). useCreateMuklog 모킹으로 폼 동작만 검증.
 //   ⚠️ 시트(MuklogEntrySheet)→풀스크린 전환: visible 제거, onClose→onBack. 폼/저장/사진/장소 로직은 불변.
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { SWAP_TRANSITION_TEST_ID } from '@/components/SwapTransition';
 import { renderWithTheme } from '@/test/renderWithTheme';
-import { spacing, typography } from '@/theme';
+import { spacing, themes, typography } from '@/theme';
 
 const mockUseCreateMuklog = jest.fn();
 jest.mock('../useCreateMuklog', () => ({ useCreateMuklog: () => mockUseCreateMuklog() }));
@@ -929,5 +929,83 @@ describe('MuklogEditor — 폼↔검색 전환 배선 (motion-pass-1 D1, 백로�
     expect(screen.getByTestId(SWAP_TRANSITION_TEST_ID)).toBeTruthy();
     expect(screen.getByLabelText('장소 이름')).toBeTruthy();
     expect(screen.queryByLabelText('장소 검색')).toBeNull();
+  });
+});
+
+// ── 프레스 치환 B1~B4(motion-coverage D2 / plan §5-1 B) ────────────────────────────────
+//   seam = 라벨로 조회한 노드의 (a) onPress 효과 (b) flatten style의 transform 존재 (c) 정지 시각값.
+//   pressedOpacity 실값·Animated 궤적은 검증하지 않는다(네이티브 드라이버 구간, plan §5-2 → qa-visual/스모크).
+describe('MuklogEditor — 눌림 피드백 부착(motion-coverage B1~B4, U30)', () => {
+  const ctrl = (over?: Partial<MuklogPlaceSearchControl>): MuklogPlaceSearchControl => ({
+    query: '',
+    onChangeQuery: jest.fn(),
+    status: 'idle',
+    results: [],
+    ...over,
+  });
+
+  // 감소 모션 OFF 고정 — transform 존재 단언은 OS 설정에 의존하면 안 된다(MotionPressable.spec 선례).
+  beforeEach(() => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(false));
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  const flattenByLabel = ({ label }: { label: string }) =>
+    StyleSheet.flatten(screen.getByLabelText(label).props.style) as Record<string, unknown>;
+
+  // 검색 배선(placeSearch 주입) 에디터 — 입력 없음 = 저장 비활성 기본 상태(B-3이 이 상태를 단언한다).
+  const renderReadyEditor = () => {
+    renderWithTheme(
+      <MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} placeSearch={ctrl()} />,
+    );
+  };
+
+  it.each([
+    [
+      '저장(활성)',
+      // 저장은 활성일 때만 모션이 붙는다(비활성 계약은 B-3) → 장소명 입력이 있는 uncontrolled 폼으로 채운다.
+      () => {
+        renderWithTheme(<MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} />);
+        fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+        fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요');
+        return '저장';
+      },
+    ],
+    ['장소 검색 진입', () => {
+      renderReadyEditor();
+      return '장소 검색하기';
+    }],
+    ['카테고리 칩', () => {
+      renderReadyEditor();
+      return '카테고리 파스타·양식';
+    }],
+    ['방문일 행', () => {
+      renderReadyEditor();
+      return `방문일 ${formatVisitedDate({ visitedAt: todayLocalDate(), withDow: true })}, 선택`;
+    }],
+  ])('B-1: "%s" 지점에 눌림 모션이 부착된다', async (_name, renderAndFindLabel) => {
+    const label = renderAndFindLabel();
+    await waitFor(() => expect(flattenByLabel({ label }).transform).toBeDefined());
+  });
+
+  it('B-2: 선택된 카테고리 칩은 정지 비주얼(선택 색·selected)을 유지한 채 눌림 모션을 갖는다 (E1)', async () => {
+    renderReadyEditor();
+    fireEvent.press(screen.getByLabelText('카테고리 파스타·양식'));
+    const chip = screen.getByLabelText('카테고리 파스타·양식');
+    expect(chip.props.accessibilityState.selected).toBe(true);
+    const style = flattenByLabel({ label: '카테고리 파스타·양식' });
+    expect(style.backgroundColor).toBe(themes.light.color.primary);
+    await waitFor(() => expect(flattenByLabel({ label: '카테고리 파스타·양식' }).transform).toBeDefined());
+  });
+
+  it('B-3: 저장 비활성이면 onPress 미발화 + 눌림 모션 미부착(정지 스타일 그대로) (E2)', () => {
+    renderReadyEditor();
+    const save = screen.getByLabelText('저장');
+    expect(save.props.accessibilityState?.disabled).toBe(true);
+    fireEvent.press(save);
+    expect(createMuklog).not.toHaveBeenCalled();
+    expect(flattenByLabel({ label: '저장' }).transform).toBeUndefined();
   });
 });

@@ -15,13 +15,14 @@
 //   ⚠️ 비주얼 폴리시 대기(ui-publisher): searchBtn(mk-log:312)·placeChosen "변경"(mk-log:309). 검색뷰=PlaceSearchView(완료),
 //     저장버튼(mk-log:296, 적용완료). 본 패스는 구조/배선(상태머신)만 — accessibilityLabel/계약은 테스트 의존.
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   DatePickerSheet,
   Icon,
   IconName,
+  MotionPressable,
   Screen,
   Stars,
   SubBar,
@@ -54,6 +55,12 @@ import { MEMO_MIN_LENGTH, todayLocalDate } from '../validate';
 
 // 한 화면 안에서 교체되는 두 뷰의 식별자(SwapTransition swapKey) — motion-pass-1 D1.
 const EditorView = { Form: 'form', Search: 'search' } as const;
+
+// 눌림 불투명도(motion-coverage B1~B4, ui-spec §1-2) — 새 값 발명 없이 기존 소비처 실값을 승계한다.
+const SAVE_PRESSED_OPACITY = 0.6; // 헤더 액션 — PlusHeaderButton 승계
+const SEARCH_BTN_PRESSED_OPACITY = 0.6; // 전폭 진입 행 — AddSheet 행 승계
+const CHIP_PRESSED_OPACITY = 0.85; // 공용 Chip과 동일 값
+const DATE_ROW_PRESSED_OPACITY = 0.6; // B2와 같은 행 클래스
 
 // 결과 항목 → 매핑 카테고리(커버/라벨) 기본 해석. 컨테이너가 resolveCategory 미주입 시 에디터가 자체 제공.
 const defaultResolveCategory = ({ item }: { item: PlaceSearchItem }): MuklogCategoryKey | null =>
@@ -421,13 +428,15 @@ export const MuklogEditor = ({
   const saveLabel = isEdit ? '수정' : '저장';
   // SubBar 우측 저장 액션 — 킷 mk-log:296: font 800/16(=button), 활성 accent-strong / 비활성 text-disable(fgDisabled).
   const saveAction = (
-    <Pressable
+    <MotionPressable
       accessibilityRole="button"
       accessibilityLabel={saveLabel}
       accessibilityState={{ disabled: !canSave, busy: loading }}
       disabled={!canSave}
       onPress={() => void handleSave()}
       hitSlop={theme.spacing[8]}
+      pressSize="sm"
+      pressedOpacity={SAVE_PRESSED_OPACITY}
       style={styles.saveAction}
     >
       {loading ? (
@@ -437,7 +446,7 @@ export const MuklogEditor = ({
           {saveLabel}
         </Text>
       )}
-    </Pressable>
+    </MotionPressable>
   );
 
   // ── 장소검색 풀스크린뷰(FLAG-1b) — searching일 때 폼 대신 PlaceSearchView(ui-publisher 비주얼, 킷 mk-log:383-414)로 스왑 ──
@@ -504,10 +513,12 @@ export const MuklogEditor = ({
                 />
               ) : (
                 // 미선택 — 킷 searchBtn(돋보기 + "맛집 이름을 검색해요", mk-log:418) → 풀스크린 검색뷰 진입.
-                <Pressable
+                <MotionPressable
                   accessibilityRole="button"
                   accessibilityLabel="장소 검색하기"
                   onPress={openSearch}
+                  pressSize="lg"
+                  pressedOpacity={SEARCH_BTN_PRESSED_OPACITY}
                   style={[
                     styles.searchBtn,
                     {
@@ -526,7 +537,7 @@ export const MuklogEditor = ({
                   <Text variant="memoBody" color="fgMuted">
                     맛집 이름을 검색해요
                   </Text>
-                </Pressable>
+                </MotionPressable>
               )
             ) : (
               // placeSearch 미주입(방어/회귀 안전) — 수동 입력만.
@@ -549,12 +560,14 @@ export const MuklogEditor = ({
               {MUKLOG_CATEGORY_KEYS.map((key) => {
                 const selected = category === key;
                 return (
-                  <Pressable
+                  <MotionPressable
                     key={key}
                     accessibilityRole="button"
                     accessibilityLabel={`카테고리 ${MUKLOG_CATEGORIES[key].label}`}
                     accessibilityState={{ selected }}
                     onPress={() => setCategory(selected ? null : key)}
+                    pressSize="md"
+                    pressedOpacity={CHIP_PRESSED_OPACITY}
                     style={[
                       styles.chip,
                       {
@@ -569,7 +582,7 @@ export const MuklogEditor = ({
                     <Text variant="bodySm" color={selected ? 'primaryFg' : 'fgWeak'}>
                       {MUKLOG_CATEGORIES[key].emoji} {MUKLOG_CATEGORIES[key].label}
                     </Text>
-                  </Pressable>
+                  </MotionPressable>
                 );
               })}
             </View>
@@ -630,10 +643,12 @@ export const MuklogEditor = ({
             <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
               방문일
             </Text>
-            <Pressable
+            <MotionPressable
               accessibilityRole="button"
               accessibilityLabel={`방문일 ${formatVisitedDate({ visitedAt, withDow: true })}, 선택`}
               onPress={() => setDateOpen(true)}
+              pressSize="lg"
+              pressedOpacity={DATE_ROW_PRESSED_OPACITY}
               style={[styles.dateRow, { borderColor: theme.color.hairline, backgroundColor: theme.color.surface }]}
             >
               <Icon name={IconName.Calendar} size={19} color="primary" />
@@ -641,7 +656,7 @@ export const MuklogEditor = ({
                 {formatVisitedDate({ visitedAt, withDow: true })}
               </Text>
               <Icon name={IconName.ChevronDown} size={18} color="fgAssistive" />
-            </Pressable>
+            </MotionPressable>
             <DatePickerSheet
               visible={dateOpen}
               value={visitedAt}

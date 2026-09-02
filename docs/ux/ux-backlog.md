@@ -74,7 +74,7 @@
 | U27 | 홈 셸 | 시트 진입 애니메이션 없음 — `Modal animationType="none"`+translateY 초기 0(`Sheet.tsx:279`,`:175`,`:250-257`). 킷은 딤 fade+패널 slideUp 명시(`mk-ui.jsx:203,207`) | 4 | 오픈 시 translateY 40→0(260ms) + 딤 페이드. 닫힘 경로 유지 | 중 | 하 | 없음(킷 정합) | 대기 |
 | U28 | 에디터 | 저장 완료가 푸시 발송 응답까지 대기 — "fire-and-forget"이라 주석하고 `await triggerMuklogPush`(`useCreateMuklog.ts:118`) | 3 | `void triggerMuklogPush({...})`(내부 예외 흡수 이미 있음) | 중 | 하 | 없음 | 대기 |
 | U29 | 에디터 | 메모 힌트가 진입 즉시 강조 톤 상시 노출(`MuklogEditor.tsx:601-608`) — 선제 경고 톤 | 5 | touched/제출 시도 후에만 강조, 평소 중립 카운터 | 중 | 하 | 없음 | 대기 |
-| U30 | 에디터·프로필 | 화면 로컬 Pressable pressed 피드백 없음 — 카테고리 칩(`MuklogEditor.tsx:533-553`)·검색 진입(`:488-510`)·방문일(`:614-625`)·저장(`:409-418`)·설정 행(`ProfileScreen.tsx:309-320`)·로그아웃(`:332-344`)·아바타(`:230-237`)·펜슬(`:260-270`) | 3 | `style={({pressed})=>...}` opacity 0.6~0.85(공용 프리미티브와 동일) | 중 | 하 | 없음 | 대기 |
+| U30 | 에디터·프로필 | 화면 로컬 Pressable pressed 피드백 없음 — 카테고리 칩(`MuklogEditor.tsx:533-553`)·검색 진입(`:488-510`)·방문일(`:614-625`)·저장(`:409-418`)·설정 행(`ProfileScreen.tsx:309-320`)·로그아웃(`:332-344`)·아바타(`:230-237`)·펜슬(`:260-270`) | 3 | `style={({pressed})=>...}` opacity 0.6~0.85(공용 프리미티브와 동일) | 중 | 하 | 없음 | 완료(motion-coverage, docs/history/2026-09-02-motion-coverage.md — 9지점 MotionPressable 치환+회원탈퇴 행 추가, AppVersionRow는 후속 최우선) |
 | U31 | 먹로그 상세 | error 상태에 복귀 경로 없음 — notFound만 "뒤로 가기"(`MuklogDetailScreen.tsx:185-191`), error는 "다시 시도"만(`:197-213`) | 7 | error 블록에 보조 "뒤로 가기" | 중 | 하 | 없음 | 대기 |
 | U32 | 먹로그 상세 | 사진 로드 전 흰 정사각형 — signed URL 직결(`:280-289`) | 3·9 | `FoodCover`(카테고리) 배경 → 로드 완료 시 덮기 | 중 | 하 | 없음 | 대기 |
 | U33 | 프로필 | 통계 3칸이 로딩 중 0 표시 후 값 변경(`ProfileScreen.tsx:143-149`) | 3 | loading이면 "–"/스켈레톤 | 중 | 하 | 없음 | 대기 |
