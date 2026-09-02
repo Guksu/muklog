@@ -5,6 +5,7 @@ import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Pressable, Text as RNText } from 'react-native';
 
+import { MOTION_DURATION } from '@/theme';
 import { renderWithTheme } from '@/test/renderWithTheme';
 
 import { ToastProvider, useToastController } from './ToastProvider';
@@ -72,6 +73,9 @@ describe('ToastProvider + useToastController', () => {
     });
     expect(screen.getByText('담았어요')).toBeTruthy();
     act(() => jest.advanceTimersByTime(2200));
+    // motion-pass-1(P8): 2200ms에 visible이 내려가고, 퇴장 연출(toastExit) 뒤에 트리에서 빠진다.
+    //   Provider의 상태 소유(visible만 내린다)는 그대로고, 사라지는 시점만 퇴장 길이만큼 뒤로 밀렸다.
+    act(() => jest.advanceTimersByTime(MOTION_DURATION.toastExit));
     expect(screen.queryByText('담았어요')).toBeNull();
   });
 

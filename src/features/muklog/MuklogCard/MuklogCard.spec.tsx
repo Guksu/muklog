@@ -2,9 +2,11 @@
 // 맛집 카드 — placeName·별점·카테고리 칩·위치줄(area·날짜)·메모 2줄 클램프·작성자 라벨
 //   (plan §6.2 / §5 T8, AC9·AC10) + 데이터 결측(category/area/memo null) 안전 처리(§9).
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import { act, fireEvent, screen } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
+import { MOTION_DURATION } from '@/theme';
 
 import { MuklogCard } from './MuklogCard';
 import { type Muklog } from '../types';
@@ -136,5 +138,51 @@ describe('MuklogCard', () => {
     renderCard();
     // onPress 미연결 시 카드 자체에 button role/상세 라벨이 없어야 한다(기존 사용처 회귀 방지).
     expect(screen.queryByLabelText('트라토리아 보나 상세 보기')).toBeNull();
+  });
+});
+
+describe('MuklogCard — 커버 사진 페이드인 (motion-pass-1 D2)', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    act(() => jest.runOnlyPendingTimers());
+    jest.useRealTimers();
+  });
+
+  const coverOpacity = () =>
+    (StyleSheet.flatten(screen.getByTestId('muklog-card-cover-image').props.style) as {
+      opacity: number;
+    }).opacity;
+
+  const settleFade = () => {
+    act(() => jest.advanceTimersByTime(MOTION_DURATION.photoFade + 50));
+  };
+
+  it('커버 로드 후 사진이 나타나고(불투명도 1) 그 뒤에도 카드 탭이 동작한다', () => {
+    const onPress = jest.fn();
+    renderWithTheme(
+      <MuklogCard
+        muklog={{ ...base, coverUri: 'https://signed.example/cover.jpg', photoCount: 1 }}
+        meId="me-uid"
+        onPress={onPress}
+      />,
+    );
+    fireEvent(screen.getByTestId('muklog-card-cover-image'), 'load');
+    settleFade();
+    expect(coverOpacity()).toBe(1);
+
+    fireEvent.press(screen.getByLabelText('트라토리아 보나 상세 보기'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('커버 로드 실패(error)에도 결국 보인다(fail-visible — 투명한 빈칸 금지)', () => {
+    renderWithTheme(
+      <MuklogCard
+        muklog={{ ...base, coverUri: 'https://signed.example/expired.jpg', photoCount: 1 }}
+        meId="me-uid"
+      />,
+    );
+    fireEvent(screen.getByTestId('muklog-card-cover-image'), 'error');
+    settleFade();
+    expect(coverOpacity()).toBe(1);
   });
 });

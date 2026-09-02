@@ -3,12 +3,18 @@
 //   SubBar "로그 만들기" + 🎉 + "우리 로그가 만들어졌어요" + 초대코드 카드 + "로그 열기"/"나중에".
 //   순수 프리젠테이션 — props 계약만(developer가 멀티로그 생성 플로우·네비 배선).
 //   이모지 허용(킷 정책). 스타일은 토큰만(raw hex 0).
-import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, InviteCodeCard, Screen, SubBar, Text } from '@/components';
-import { useTheme } from '@/theme';
+import {
+  CELEBRATE_DELAY_MS,
+  CELEBRATE_SCALE_FROM,
+  CELEBRATE_SPRING,
+  useReduceMotion,
+  useTheme,
+} from '@/theme';
 
 const PARTY_EMOJI = '🎉';
 
@@ -24,6 +30,33 @@ export type RoomCreatedScreenProps = {
 export const RoomCreatedScreen = ({ inviteCode, onEnter, onLater }: RoomCreatedScreenProps) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const reduceMotion = useReduceMotion();
+  // 🎉 팝 — 로그 생성은 드문 1회성 이벤트라 딜라이트가 허용되는 구간이다(fe-craft §1.2 빈도 예산).
+  //   scale(0)이 아니라 0.7에서 시작해 옅게 오버슈트하며 정착한다(fe-craft #5 · fe-skills like-pop 판단값).
+  const celebrateScale = useRef(new Animated.Value(CELEBRATE_SCALE_FROM)).current;
+
+  useEffect(
+    function playCelebratePop() {
+      if (reduceMotion) {
+        celebrateScale.setValue(1);
+        return undefined;
+      }
+      const startCelebratePop = () => {
+        Animated.spring(celebrateScale, {
+          toValue: 1,
+          ...CELEBRATE_SPRING,
+          useNativeDriver: true,
+        }).start();
+      };
+      // 화면이 자리잡은 뒤 터지도록 짧게 지연한다.
+      const id = setTimeout(startCelebratePop, CELEBRATE_DELAY_MS);
+      return function clearCelebrateDelay() {
+        clearTimeout(id);
+      };
+    },
+    [reduceMotion, celebrateScale],
+  );
+
   return (
     // 'bottom' 제외: 비-GNB 엣지투엣지 하단 빈 띠 방지 — 콘텐츠 paddingBottom+insets.bottom으로 인디케이터 클리어.
     <Screen edges={['left', 'right']} style={styles.screen}>
@@ -35,10 +68,17 @@ export const RoomCreatedScreen = ({ inviteCode, onEnter, onLater }: RoomCreatedS
           { paddingTop: theme.spacing[12], paddingHorizontal: theme.spacing[24], paddingBottom: theme.spacing[24] + insets.bottom },
         ]}
       >
-        {/* 킷 mk-home:278 🎉 fontSize 56, center. */}
-        <Text style={[styles.center, styles.emoji, { marginTop: theme.spacing[24] }]}>
+        {/* 킷 mk-home:278 🎉 fontSize 56, center. 감소 모션이면 transform을 아예 걸지 않는다. */}
+        <Animated.Text
+          style={[
+            styles.center,
+            styles.emoji,
+            { marginTop: theme.spacing[24] },
+            reduceMotion ? null : { transform: [{ scale: celebrateScale }] },
+          ]}
+        >
           {PARTY_EMOJI}
-        </Text>
+        </Animated.Text>
         {/* 킷 mk-home:279 제목 800/22/1.35 center. */}
         <Text variant="profileName" color="fg" style={[styles.center, styles.title, { marginTop: theme.spacing[8] }]}>
           우리 로그가 만들어졌어요

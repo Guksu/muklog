@@ -7,7 +7,6 @@
 import React from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   StyleSheet,
   View,
   type PressableProps,
@@ -19,6 +18,7 @@ import { useTheme } from '@/theme';
 import type { ColorToken } from '@/theme';
 
 import { Icon, IconName } from '../Icon';
+import { MotionPressable } from '../MotionPressable';
 import { Text } from '../Text';
 
 type Variant = 'primary' | 'soft' | 'ghost' | 'secondary';
@@ -26,6 +26,9 @@ type Size = 'lg' | 'md' | 'sm';
 
 // 킷 MkButton 사이즈별 pad·fontSize 실값(컨트롤 내부 수치 — 4px 그리드 밖이라 토큰화 안 함).
 //   lineHeight = round(fontSize × 1.2)(킷 lineHeight 1.2).
+// 눌렀을 때 도달할 불투명도 — 기존 눌림 스타일(opacity) 값 승계(비주얼 회귀 0). 축소 연출은 MotionPressable이 얹는다.
+const PRESSED_OPACITY = 0.85;
+
 const BUTTON_SIZE = {
   lg: { paddingVertical: 16, paddingHorizontal: 22, fontSize: 17, lineHeight: 20, iconSize: 20 },
   md: { paddingVertical: 13, paddingHorizontal: 18, fontSize: 16, lineHeight: 19, iconSize: 19 },
@@ -109,11 +112,13 @@ export const Button = ({
   const labelStyle: TextStyle = { fontSize: dim.fontSize, lineHeight: dim.lineHeight };
 
   return (
-    <Pressable
+    <MotionPressable
       accessibilityRole="button"
       accessibilityState={{ disabled: isInactive, busy: loading }}
       disabled={isInactive}
-      style={({ pressed }) => [container, pressed && !isInactive ? styles.pressed : null, style]}
+      pressSize="md"
+      pressedOpacity={PRESSED_OPACITY}
+      style={[container, style]}
       {...rest}
     >
       {loading ? (
@@ -126,12 +131,11 @@ export const Button = ({
           </Text>
         </View>
       )}
-    </Pressable>
+    </MotionPressable>
   );
 };
 
 const styles = StyleSheet.create({
-  pressed: { opacity: 0.85 },
   // 킷 gap 8(아이콘↔텍스트).
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });

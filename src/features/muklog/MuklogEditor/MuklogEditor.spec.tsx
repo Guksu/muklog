@@ -6,6 +6,7 @@ import React from 'react';
 import { StyleSheet } from 'react-native';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
+import { SWAP_TRANSITION_TEST_ID } from '@/components/SwapTransition';
 import { renderWithTheme } from '@/test/renderWithTheme';
 import { spacing, typography } from '@/theme';
 
@@ -869,5 +870,64 @@ describe('MuklogEditor — 메모 입력 고정 높이 (memo-max-height)', () =>
     const placeStyle = StyleSheet.flatten(screen.getByLabelText('장소 이름').props.style) as Record<string, unknown>;
     expect(placeStyle.minHeight).toBeUndefined();
     expect(placeStyle.maxHeight).toBeUndefined();
+  });
+});
+
+describe('MuklogEditor — 폼↔검색 전환 배선 (motion-pass-1 D1, 백로그 U54)', () => {
+  const ctrl = (over?: Partial<MuklogPlaceSearchControl>): MuklogPlaceSearchControl => ({
+    query: '',
+    onChangeQuery: jest.fn(),
+    status: 'idle',
+    results: [],
+    ...over,
+  });
+
+  const searchResult = (): PlaceSearchItem => ({
+    kakaoPlaceId: 'k1',
+    placeName: '트라토리아 보나',
+    categoryName: '음식점 > 양식 > 이탈리안',
+    categoryGroupCode: 'FD6',
+    addressName: '서울 마포구 연남동 227-15',
+    roadAddressName: '서울 마포구 월드컵북로 39',
+    lat: 37.56,
+    lng: 126.92,
+    phone: '',
+  });
+
+  it('검색 진입 직후에도 결과 행 탭이 동작한다(전환이 입력을 막지 않는다)', () => {
+    const onSelectPlace = jest.fn();
+    renderWithTheme(
+      <MuklogEditor
+        roomId="r1"
+        onBack={onBack}
+        onSaved={onSaved}
+        placeSearch={ctrl({ status: 'ready', query: '보나', results: [searchResult()] })}
+        onSelectPlace={onSelectPlace}
+      />,
+    );
+    // 폼 → 검색뷰(전진) 전환 직후 결과 행이 즉시 눌린다.
+    fireEvent.press(screen.getByLabelText('장소 검색하기'));
+    expect(screen.getByTestId(SWAP_TRANSITION_TEST_ID)).toBeTruthy();
+    fireEvent.press(screen.getByTestId('place-result-0'));
+    expect(onSelectPlace).toHaveBeenCalledWith({ item: searchResult() });
+    // 복귀(뒤) 전환 후에도 폼이 그대로 조회된다.
+    expect(screen.getByLabelText('메모')).toBeTruthy();
+  });
+
+  it('에디터 최초 마운트에는 추가 페이드가 없다(스택 전환 위 이중 모션 방지)', () => {
+    renderWithTheme(
+      <MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} placeSearch={ctrl()} />,
+    );
+    const wrapper = StyleSheet.flatten(
+      screen.getByTestId(SWAP_TRANSITION_TEST_ID).props.style,
+    ) as Record<string, unknown>;
+    expect(wrapper.opacity).toBe(1);
+  });
+
+  it('placeSearch가 없어도(null 방어) 폼이 렌더된다', () => {
+    renderWithTheme(<MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} />);
+    expect(screen.getByTestId(SWAP_TRANSITION_TEST_ID)).toBeTruthy();
+    expect(screen.getByLabelText('장소 이름')).toBeTruthy();
+    expect(screen.queryByLabelText('장소 검색')).toBeNull();
   });
 });

@@ -21,7 +21,7 @@
 //       (장소검색은 풀스크린 PlaceSearchView로 이관됐다 — architecture.md §4. 시트 안 TextInput 소비처는 0개.)
 //   RN Modal(transparent) 위에 absolute 오버레이를 깔아 네비 스택과 무관하게 화면 전체를 덮는다.
 //   스타일은 토큰만(raw hex 0). radius=sheet(20 위쪽 라운드는 26 근사 — 킷 26,26,0,0), 딤=반투명 잉크.
-import React, { createContext, useContext, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useRef } from 'react';
 import { Animated, Easing, Modal, Pressable, StyleSheet, View } from 'react-native';
 import {
   Gesture,
@@ -33,7 +33,16 @@ import {
 } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useTheme } from '@/theme';
+import {
+  MOTION_DISTANCE,
+  MOTION_DURATION,
+  MOTION_EASE_OUT,
+  MotionKind,
+  resolveMotionDistance,
+  resolveMotionDuration,
+  useReduceMotion,
+  useTheme,
+} from '@/theme';
 
 import { Text } from '../Text';
 
@@ -60,6 +69,10 @@ export const SHEET_DISMISS_TRANSLATE = 700;
 export const SHEET_DISMISS_DURATION = 200;
 /** 스냅백 스프링 — 오버슈트 없이 단정하게. */
 export const SHEET_SNAP_BACK_SPRING = { bounciness: 0, speed: 14 } as const;
+/** 진입 시 패널이 아래에서 올라오는 거리(px). 킷 mk-ui.jsx:207 slideUp [킷 대조 필요]. */
+export const SHEET_ENTER_TRANSLATE = MOTION_DISTANCE.sheetEnter;
+/** 진입 애니메이션 시간(ms). 킷 mkSlideUp 260 [킷 대조 필요]. */
+export const SHEET_ENTER_DURATION = MOTION_DURATION.sheetEnter;
 /** 딤 불투명도 — 킷 rgba(20,12,8,.32) 근사(정지 상태 값). */
 export const SHEET_BACKDROP_OPACITY = 0.32;
 /** 드래그를 끝까지 내렸을 때의 딤 불투명도. */
@@ -170,9 +183,17 @@ export type SheetProps = {
 export const Sheet = ({ visible, onClose, title, children }: SheetProps) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const reduceMotion = useReduceMotion();
 
   // 패널 세로 오프셋(드래그 추종). 닫힘/스냅백 후 0으로 복원해 다음 오픈을 깨끗이.
   const translateY = useRef(new Animated.Value(0)).current;
+  // 진입 진행도(0=진입 전, 1=정착) — 이동(slideUp)과 페이드를 별도 값으로 나눈다.
+  //   감소 모션에서 이동은 0으로 접히지만 페이드는 남아야 하기 때문이다(fe-craft #8, plan §3.1 리졸버).
+  //   ⚠️ 진입은 드래그 오프셋과 **별개의 transform 항목**으로 얹는다 — 같은 값에 합치면 드래그 계약(translateY)이 오염된다.
+  const entry = useRef(new Animated.Value(0)).current;
+  const enterFade = useRef(new Animated.Value(0)).current;
+  // 이번 열림에서 진입을 이미 재생했는지 — 열려 있는 동안의 재렌더가 연출을 되감지 않게 한다.
+  const enteredRef = useRef(false);
   // 닫힘 애니메이션 구간 — 재터치·딤 탭을 무시해 onClose가 정확히 1회만 나가게 한다.
   const closingRef = useRef(false);
   // 제스처가 활성화된 뒤 "세로 우세"까지 만족해 실제로 패널이 손가락을 따라가는 중인지.
@@ -247,14 +268,50 @@ export const Sheet = ({ visible, onClose, title, children }: SheetProps) => {
     .onUpdate(followDrag)
     .onEnd(settleDrag);
 
-  const resetOffsetOnOpen = () => {
-    if (!visible) return;
+  // 열릴 때마다 오프셋을 리셋하고 진입 연출을 1회 재생한다(U27).
+  //   ⚠️ useNativeDriver: false 고정 — 기존 드래그 translateY가 JS 구동(setValue)이라
+  //      같은 패널의 transform에 네이티브 구동 노드를 섞으면 런타임 에러가 난다(plan §3.9).
+  //   ⚠️ visible의 **상승 엣지에서만** 재생한다. 감소 모션 설정이 앱 실행 중 바뀌어도 열려 있는 시트를
+  //      되감지 않는다 — plan E3("다음 상호작용부터 반영"). Toast(renderedRef)·SwapTransition(shownKeyRef)과 같은 가드다.
+  const playSheetEnter = () => {
+    if (!visible) {
+      enteredRef.current = false;
+      return;
+    }
+    if (enteredRef.current) return;
+    enteredRef.current = true;
     // 부모가 onClose를 무시해 시트가 안 닫혔다가 다시 열리는 경우에도 패널이 화면 밖에 남지 않게.
     closingRef.current = false;
     followingRef.current = false;
     translateY.setValue(0);
+    entry.setValue(0);
+    enterFade.setValue(0);
+    Animated.parallel([
+      Animated.timing(entry, {
+        toValue: 1,
+        duration: resolveMotionDuration({
+          durationMs: SHEET_ENTER_DURATION,
+          kind: MotionKind.Move,
+          reduceMotion,
+        }),
+        easing: Easing.bezier(...MOTION_EASE_OUT),
+        useNativeDriver: false,
+      }),
+      Animated.timing(enterFade, {
+        toValue: 1,
+        duration: resolveMotionDuration({
+          durationMs: SHEET_ENTER_DURATION,
+          kind: MotionKind.Fade,
+          reduceMotion,
+        }),
+        easing: Easing.bezier(...MOTION_EASE_OUT),
+        useNativeDriver: false,
+      }),
+    ]).start();
   };
-  useEffect(resetOffsetOnOpen, [visible]);
+  // ⚠️ useLayoutEffect — 재오픈 시 진행도가 1로 남아 있어, 페인트 뒤에 0으로 되돌리면 시트가 정착 상태로
+  //   한 프레임 보였다가 다시 올라오는 깜빡임이 된다(qa-logic S5). 페인트 전에 내린다.
+  useLayoutEffect(playSheetEnter, [visible, reduceMotion]);
 
   // 닫히는 중 딤 탭·안드로이드 뒤로가기는 무시(닫힘은 애니메이션 완료 콜백이 책임진다).
   const requestClose = () => {
@@ -273,63 +330,77 @@ export const Sheet = ({ visible, onClose, title, children }: SheetProps) => {
     extrapolate: 'clamp',
   });
 
+  // 진입 이동(px) — 감소 모션이면 0으로 접혀 패널이 제자리에서 페이드만 한다.
+  const entryOffset = entry.interpolate({
+    inputRange: [0, 1],
+    outputRange: [resolveMotionDistance({ distance: SHEET_ENTER_TRANSLATE, reduceMotion }), 0],
+  });
+
   return (
     // animationType="none": fade면 닫히는 모달이 페이드아웃되는 동안 이전 시트 내용이 잔상으로 보임
     //   (시트→다른 시트 전환 시). none으로 즉시 마운트/언마운트해 잔상 제거(딤=즉시 피드백, 드래그 슬라이드는 유지).
     <Modal visible transparent animationType="none" onRequestClose={requestClose}>
       {/* Android에서 Modal은 별도 네이티브 윈도우라 앱 루트의 제스처 컨텍스트가 닿지 않는다 — 여기서 다시 루트를 연다. */}
       <GestureHandlerRootView style={styles.gestureRoot}>
-        {/* 딤 배경 — 탭하면 닫힘. 드래그를 따라 옅어진다. */}
-        <AnimatedPressable
-          testID="sheet-backdrop"
-          accessibilityRole="button"
-          accessibilityLabel="닫기"
-          onPress={requestClose}
-          style={[styles.backdrop, { backgroundColor: theme.color.fg, opacity: backdropOpacity }]}
-        />
-        {/* 하단 패널 — 탭해도 닫히지 않음(딤 위에 별도 레이어로 전파 차단). 드래그 추종 transform. */}
-        <View style={styles.panelWrap} pointerEvents="box-none">
-          <GestureDetector gesture={dragGesture}>
-            <Animated.View
-              testID="sheet-panel"
-              style={[
-                styles.panel,
-                {
-                  backgroundColor: theme.color.surface,
-                  paddingHorizontal: theme.spacing[20],
-                  // 하단 = 킷 34 근사(20) + 홈 인디케이터 safe-area inset(침범 방지).
-                  paddingBottom: insets.bottom + theme.spacing[20],
-                  transform: [{ translateY }],
-                },
-                theme.shadow.lg,
-              ]}
-            >
-              {/* 핸들 영역 — 비주얼 전용(드래그는 패널 전체가 받는다). */}
-              <View
-                testID="sheet-handle"
+        {/* 진입 페이드 레이어 — 딤과 패널이 함께 스며든다(드래그 연동 딤 계산은 아래에서 그대로 유지). */}
+        <Animated.View
+          testID="sheet-enter-layer"
+          style={[styles.gestureRoot, { opacity: enterFade }]}
+          pointerEvents="box-none"
+        >
+          {/* 딤 배경 — 탭하면 닫힘. 드래그를 따라 옅어진다. */}
+          <AnimatedPressable
+            testID="sheet-backdrop"
+            accessibilityRole="button"
+            accessibilityLabel="닫기"
+            onPress={requestClose}
+            style={[styles.backdrop, { backgroundColor: theme.color.fg, opacity: backdropOpacity }]}
+          />
+          {/* 하단 패널 — 탭해도 닫히지 않음(딤 위에 별도 레이어로 전파 차단). 드래그 추종 transform. */}
+          <View style={styles.panelWrap} pointerEvents="box-none">
+            <GestureDetector gesture={dragGesture}>
+              <Animated.View
+                testID="sheet-panel"
                 style={[
-                  styles.handleZone,
-                  { paddingTop: theme.spacing[10], paddingBottom: theme.spacing[14] },
+                  styles.panel,
+                  {
+                    backgroundColor: theme.color.surface,
+                    paddingHorizontal: theme.spacing[20],
+                    // 하단 = 킷 34 근사(20) + 홈 인디케이터 safe-area inset(침범 방지).
+                    paddingBottom: insets.bottom + theme.spacing[20],
+                    // [0]=드래그 추종(기존 계약) · [1]=진입 슬라이드업. 둘을 합치지 않고 나란히 둔다.
+                    transform: [{ translateY }, { translateY: entryOffset }],
+                  },
+                  theme.shadow.lg,
                 ]}
               >
-                <View style={[styles.handle, { backgroundColor: theme.color.hairline }]} />
-              </View>
-              {title ? (
-                <Text
-                  variant="sheetTitle"
-                  color="fg"
-                  style={[styles.title, { marginBottom: theme.spacing[16] }]}
+                {/* 핸들 영역 — 비주얼 전용(드래그는 패널 전체가 받는다). */}
+                <View
+                  testID="sheet-handle"
+                  style={[
+                    styles.handleZone,
+                    { paddingTop: theme.spacing[10], paddingBottom: theme.spacing[14] },
+                  ]}
                 >
-                  {title}
-                </Text>
-              ) : null}
-              {/* body — maxHeight 캡 아래에서 줄어들 수 있게 flexShrink. 내부 ScrollView가 이 영역 안에서 스크롤. */}
-              <SheetDragGestureContext.Provider value={dragGestureRef}>
-                <View style={styles.body}>{children}</View>
-              </SheetDragGestureContext.Provider>
-            </Animated.View>
+                  <View style={[styles.handle, { backgroundColor: theme.color.hairline }]} />
+                </View>
+                {title ? (
+                  <Text
+                    variant="sheetTitle"
+                    color="fg"
+                    style={[styles.title, { marginBottom: theme.spacing[16] }]}
+                  >
+                    {title}
+                  </Text>
+                ) : null}
+                {/* body — maxHeight 캡 아래에서 줄어들 수 있게 flexShrink. 내부 ScrollView가 이 영역 안에서 스크롤. */}
+                <SheetDragGestureContext.Provider value={dragGestureRef}>
+                  <View style={styles.body}>{children}</View>
+                </SheetDragGestureContext.Provider>
+        </Animated.View>
           </GestureDetector>
         </View>
+        </Animated.View>
       </GestureHandlerRootView>
     </Modal>
   );

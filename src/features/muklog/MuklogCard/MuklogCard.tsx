@@ -7,9 +7,9 @@
 // 소비: useMuklogs → Muklog. 작성자 라벨/아바타는 카드에서 제거(멤버 실명 매핑은 MuklogDetail 소관, plan §3.3).
 //   meId 는 리스트 배선 계약 유지를 위해 props 로 받되 카드는 소비하지 않는다(작성자 줄 제거).
 import React from 'react';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { FoodCover, Icon, IconName, Stars, Text } from '@/components';
+import { FadeInImage, FoodCover, Icon, IconName, Stars, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 import { categoryLabel } from '../categories';
@@ -100,7 +100,8 @@ export const MuklogCard = ({ muklog, onPress }: MuklogCardProps) => {
           카드가 overflow:hidden이라 커버 radius=0. 칩·사진 배지는 어느 쪽이든 동일하게 오버레이. */}
       {muklog.coverUri ? (
         <View style={styles.cover}>
-          <Image
+          {/* motion-pass-1 D2: 로드되면 페이드로 자리를 잡는다(FadeInImage는 Image 드롭인 — props 불변). */}
+          <FadeInImage
             testID="muklog-card-cover-image"
             accessibilityLabel={`${muklog.placeName} 대표 사진`}
             source={{ uri: muklog.coverUri }}

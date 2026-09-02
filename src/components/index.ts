@@ -37,3 +37,6 @@ export {
   type SocialButtonProps,
   type SocialButtonVariant,
 } from './SocialButton';
+export { MotionPressable, type MotionPressableProps } from './MotionPressable';
+export { SwapTransition, SwapDirection, type SwapTransitionProps } from './SwapTransition';
+export { FadeInImage, type FadeInImageProps } from './FadeInImage';

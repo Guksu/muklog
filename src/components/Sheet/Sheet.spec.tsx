@@ -7,16 +7,19 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 import React from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { AccessibilityInfo, StyleSheet, Text } from 'react-native';
 import { State, type NativeGesture, type PanGesture } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
-import { act, fireEvent, screen } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
+import { MOTION_DISTANCE, MOTION_DURATION } from '@/theme';
 import { renderWithTheme } from '@/test/renderWithTheme';
 
 import {
   resolveBackdropOpacity,
   Sheet,
+  SHEET_ENTER_DURATION,
+  SHEET_ENTER_TRANSLATE,
   SHEET_BACKDROP_FADE_DISTANCE,
   SHEET_BACKDROP_OPACITY,
   SHEET_BACKDROP_OPACITY_MIN,
@@ -552,5 +555,141 @@ describe('Sheet — 패널 드래그 dismiss (D1~D10)', () => {
       </Sheet>,
     );
     expect(panelTranslateY()).toBe(0);
+  });
+});
+
+// 진입 애니메이션(U27, plan §3.4 / P5) — 드래그 오프셋(transform[0])과 분리된 두 번째 translateY로 얹는다.
+//   Animated 궤적은 검증하지 않는다(plan §5-2) — "진입 전/정착 후"의 관찰 가능한 두 상태와
+//   진입이 콘텐츠 마운트를 지연시키지 않는다는 계약만 잠근다.
+describe('Sheet 진입 애니메이션 (E1~E4)', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    act(() => jest.runOnlyPendingTimers());
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  const enterOffset = () =>
+    (StyleSheet.flatten(screen.getByTestId('sheet-panel').props.style).transform as
+      { translateY: number }[])[1].translateY;
+
+  const dragOffset = () =>
+    (StyleSheet.flatten(screen.getByTestId('sheet-panel').props.style).transform as
+      { translateY: number }[])[0].translateY;
+
+  it('E1 — visible=true면 진입 연출과 무관하게 children이 즉시 마운트된다', () => {
+    renderWithTheme(
+      <Sheet visible onClose={jest.fn()} title="무엇을 할까요?">
+        <Text>액션</Text>
+      </Sheet>,
+    );
+    expect(screen.getByText('액션')).toBeTruthy();
+    expect(screen.getByText('무엇을 할까요?')).toBeTruthy();
+  });
+
+  it('E2 — 진입 직후 패널이 SHEET_ENTER_TRANSLATE만큼 아래에 있고, 정착하면 0이 된다', () => {
+    renderWithTheme(
+      <Sheet visible onClose={jest.fn()} title="무엇을 할까요?">
+        <Text>액션</Text>
+      </Sheet>,
+    );
+    expect(enterOffset()).toBe(SHEET_ENTER_TRANSLATE);
+    act(() => jest.advanceTimersByTime(SHEET_ENTER_DURATION + 50));
+    expect(enterOffset()).toBe(0);
+  });
+
+  it('E3 — 진입 오프셋은 드래그 오프셋을 침범하지 않는다(드래그 계약 불변)', () => {
+    renderWithTheme(
+      <Sheet visible onClose={jest.fn()} title="무엇을 할까요?">
+        <Text>액션</Text>
+      </Sheet>,
+    );
+    expect(dragOffset()).toBe(0);
+  });
+
+  it('E4 — 진입 상수는 모션 토큰에서 온다(리터럴 단일 출처)', () => {
+    expect(SHEET_ENTER_TRANSLATE).toBe(MOTION_DISTANCE.sheetEnter);
+    expect(SHEET_ENTER_DURATION).toBe(MOTION_DURATION.sheetEnter);
+  });
+});
+
+describe('Sheet 진입 애니메이션 — 감소 모션 (E5)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('E5 — 감소 모션이면 진입 이동이 사라진다(딤·패널 페이드는 유지)', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockReturnValue(Promise.resolve(true));
+    renderWithTheme(
+      <Sheet visible onClose={jest.fn()} title="무엇을 할까요?">
+        <Text>액션</Text>
+      </Sheet>,
+    );
+    await waitFor(() => {
+      const transform = StyleSheet.flatten(screen.getByTestId('sheet-panel').props.style)
+        .transform as { translateY: number }[];
+      expect(transform[1].translateY).toBe(0);
+    });
+  });
+});
+
+// 감소 모션 토글(plan E3 / qa-visual F1) — "다음 상호작용부터 반영"이 계약이다.
+//   열린 시트가 되감기면(진입 재생) 감소 모션 사용자에게 모션을 한 번 더 보여주는 셈이라 fe-craft #1·#8에 어긋난다.
+describe('Sheet 진입 애니메이션 — 감소 모션 토글 (E6~E7)', () => {
+  let reduceMotionListener: ((enabled: boolean) => void) | null = null;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    reduceMotionListener = null;
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockReturnValue(Promise.resolve(false));
+    jest
+      .spyOn(AccessibilityInfo, 'addEventListener')
+      .mockImplementation((_eventName: string, handler: unknown) => {
+        reduceMotionListener = handler as (enabled: boolean) => void;
+        return { remove: jest.fn() } as never;
+      });
+  });
+  afterEach(() => {
+    act(() => jest.runOnlyPendingTimers());
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  const enterLayerOpacity = () =>
+    (StyleSheet.flatten(screen.getByTestId('sheet-enter-layer').props.style) as { opacity: number })
+      .opacity;
+
+  it('E6 — 열린 시트에서 감소 모션이 켜져도 진입을 다시 재생하지 않는다', () => {
+    renderWithTheme(
+      <Sheet visible onClose={jest.fn()} title="무엇을 할까요?">
+        <Text>액션</Text>
+      </Sheet>,
+    );
+    act(() => jest.advanceTimersByTime(SHEET_ENTER_DURATION + 50));
+    expect(enterLayerOpacity()).toBe(1);
+
+    act(() => reduceMotionListener?.(true));
+    // 되감김(깜빡임) 없이 정착 상태 그대로여야 한다.
+    expect(enterLayerOpacity()).toBe(1);
+  });
+
+  it('E7 — 닫았다 다시 열면 진입을 정상적으로 재생한다(가드가 재오픈을 막지 않는다)', () => {
+    const { rerender } = renderWithTheme(
+      <Sheet visible onClose={jest.fn()} title="무엇을 할까요?">
+        <Text>액션</Text>
+      </Sheet>,
+    );
+    act(() => jest.advanceTimersByTime(SHEET_ENTER_DURATION + 50));
+    rerender(
+      <Sheet visible={false} onClose={jest.fn()} title="무엇을 할까요?">
+        <Text>액션</Text>
+      </Sheet>,
+    );
+    rerender(
+      <Sheet visible onClose={jest.fn()} title="무엇을 할까요?">
+        <Text>액션</Text>
+      </Sheet>,
+    );
+    expect(enterLayerOpacity()).toBe(0); // 진입 시작점
+    act(() => jest.advanceTimersByTime(SHEET_ENTER_DURATION + 50));
+    expect(enterLayerOpacity()).toBe(1);
   });
 });

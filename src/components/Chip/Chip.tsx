@@ -4,11 +4,15 @@
 //   unselected: surface 배경 + fgWeak 텍스트 + 헤어라인 보더(--line).
 //   radius full, pad 8×13, gap 5, 600/13.5(SemiBold), emoji 옵션(14). 가로 스크롤 행에서 재사용.
 import React from 'react';
-import { Pressable, StyleSheet, Text as RNText, type ViewStyle } from 'react-native';
+import { StyleSheet, Text as RNText, type ViewStyle } from 'react-native';
 
 import { useTheme } from '@/theme';
 
+import { MotionPressable } from '../MotionPressable';
 import { Text } from '../Text';
+
+// 눌렀을 때 도달할 불투명도 — 기존 눌림 스타일(opacity) 값 승계(비주얼 회귀 0).
+const PRESSED_OPACITY = 0.85;
 
 export type ChipProps = {
   /** 칩 라벨(예: 카테고리명·"전체"). */
@@ -32,19 +36,21 @@ export const Chip = ({ label, selected = false, onPress, emoji, testID }: ChipPr
     borderRadius: theme.radius.full,
   };
   return (
-    <Pressable
+    <MotionPressable
       testID={testID}
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={({ pressed }) => [styles.chip, container, pressed ? styles.pressed : null]}
+      pressSize="md"
+      pressedOpacity={PRESSED_OPACITY}
+      style={[styles.chip, container]}
     >
       {emoji ? <RNText style={styles.emoji}>{emoji}</RNText> : null}
       {/* 킷 600/13.5 — SemiBold(spotCount) family에 fontSize 13.5 오버라이드. */}
       <Text variant="spotCount" color={selected ? 'primaryFg' : 'fgWeak'} style={styles.label}>
         {label}
       </Text>
-    </Pressable>
+    </MotionPressable>
   );
 };
 
@@ -58,7 +64,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 13,
   },
-  pressed: { opacity: 0.85 },
   emoji: { fontSize: 14 },
   label: { fontSize: 13.5 },
 });

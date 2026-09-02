@@ -2,9 +2,14 @@
 // 공용 카드 surface — muklog LogCard 소프트 웜 섀도우(보더 대신 그림자), card radius(22) (plan §5-6, T9 / ui-redesign 보정).
 //   onPress 가 있으면 Pressable, 없으면 View. 스타일은 토큰만(raw hex 0).
 import React from 'react';
-import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { useTheme } from '@/theme';
+
+import { MotionPressable } from '../MotionPressable';
+
+// 눌렀을 때 도달할 불투명도 — 기존 눌림 스타일(opacity) 값 승계(비주얼 회귀 0).
+const PRESSED_OPACITY = 0.7;
 
 export type CardProps = {
   children: React.ReactNode;
@@ -28,15 +33,17 @@ export const Card = ({ children, onPress, testID, accessibilityLabel, style }: C
 
   if (onPress) {
     return (
-      <Pressable
+      <MotionPressable
         testID={testID}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         onPress={onPress}
-        style={({ pressed }) => [base, pressed ? styles.pressed : null, style]}
+        pressSize="lg"
+        pressedOpacity={PRESSED_OPACITY}
+        style={[base, style]}
       >
         {children}
-      </Pressable>
+      </MotionPressable>
     );
   }
 
@@ -46,7 +53,3 @@ export const Card = ({ children, onPress, testID, accessibilityLabel, style }: C
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  pressed: { opacity: 0.7 },
-});

@@ -5,9 +5,10 @@
 //         작성자 라벨, hasCoords stub 분기, loading/notFound/error 상태.
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { fireEvent, screen, within } from '@testing-library/react-native';
+import { act, fireEvent, screen, within } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
+import { MOTION_DURATION } from '@/theme';
 
 // MuklogMiniMap이 @/lib/env(모듈 로드 시 SUPABASE_URL 필수 throw)·react-native-webview를 전이 import → 스텁.
 //   KAKAO_JS_KEY '' → 미니맵 폴백(텍스트 박스) 경로(이 스펙은 위치 섹션 폴백 동작을 검증).
@@ -370,5 +371,37 @@ describe('MuklogDetailScreen — 작성자 실명 매핑 (S5b, T9)', () => {
   it('createdBy NULL은 members 무관 "탈퇴한 사용자"(회귀 0)', () => {
     renderWithMembers({ createdBy: null });
     expect(screen.getByText('탈퇴한 사용자')).toBeTruthy();
+  });
+});
+
+describe('MuklogDetailScreen — 사진 페이드인 (motion-pass-1 D2)', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    act(() => jest.runOnlyPendingTimers());
+    jest.useRealTimers();
+  });
+
+  const photoOpacity = ({ index }: { index: number }) =>
+    (StyleSheet.flatten(screen.getAllByTestId('muklog-detail-photo')[index].props.style) as {
+      opacity: number;
+    }).opacity;
+
+  it('사진이 로드되면 나타나고(불투명도 1) 캐러셀 페이징은 그대로다', () => {
+    renderReady({
+      photos: [photo({ orderIndex: 0, uri: 'u0' }), photo({ orderIndex: 1, uri: 'u1' })],
+    });
+    fireEvent(screen.getAllByTestId('muklog-detail-photo')[0], 'load');
+    act(() => jest.advanceTimersByTime(MOTION_DURATION.photoFade + 50));
+    expect(photoOpacity({ index: 0 })).toBe(1);
+
+    // 로드 이벤트가 캐러셀 페이징(onScroll 인덱스 계산)을 건드리지 않는다.
+    fireEvent.scroll(screen.getByTestId('muklog-detail-carousel'), {
+      nativeEvent: {
+        contentOffset: { x: 400, y: 0 },
+        contentSize: { width: 800, height: 250 },
+        layoutMeasurement: { width: 400, height: 250 },
+      },
+    });
+    expect(screen.getByTestId('muklog-detail-indicator')).toBeTruthy();
   });
 });

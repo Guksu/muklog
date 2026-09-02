@@ -3,12 +3,16 @@
 //   40×40 원형, 아이콘 size 기본 22, color/bg 토큰. badge=accent 도트(top7/right8, 8×8, bg색 2px 링).
 //   아이콘 단독 버튼이므로 accessibilityLabel 필수(접근성).
 import React from 'react';
-import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { useTheme } from '@/theme';
 import type { ColorToken } from '@/theme';
 
 import { Icon, IconName } from '../Icon';
+import { MotionPressable } from '../MotionPressable';
+
+// 눌렀을 때 도달할 불투명도 — 기존 눌림 스타일(opacity) 값 승계(비주얼 회귀 0).
+const PRESSED_OPACITY = 0.6;
 
 export type IconButtonProps = {
   /** 렌더할 아이콘(IconName). */
@@ -50,16 +54,18 @@ export const IconButton = ({
     borderColor: theme.color.bg,
   };
   return (
-    <Pressable
+    <MotionPressable
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       onPress={onPress}
-      style={({ pressed }) => [styles.button, container, pressed ? styles.pressed : null]}
+      pressSize="sm"
+      pressedOpacity={PRESSED_OPACITY}
+      style={[styles.button, container]}
     >
       <Icon name={name} size={size} color={color} />
       {badge ? <View testID="icon-button-badge" style={[styles.badge, badgeStyle]} /> : null}
-    </Pressable>
+    </MotionPressable>
   );
 };
 
@@ -71,7 +77,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pressed: { opacity: 0.6 },
   // 킷 도트 top7/right8, 8×8, 2px 링.
   badge: {
     position: 'absolute',

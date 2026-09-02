@@ -6,11 +6,11 @@
 // 생산자(소비): useAuth(userId) → useProfileContext(공유 닉네임/아바타·#2) → Avatar 표시. PlusHeaderButton(생성+refresh).
 //   먹로그·지도 탭 모두 react-navigation `header: () => <HomeHeader />`로 공통 적용(HomeTabs).
 import React from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useNavigation, type NavigationProp } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Avatar, Text } from "@/components";
+import { Avatar, MotionPressable, Text } from "@/components";
 import { useAuth } from "@/features/auth";
 import { defaultNickname, useProfileContext } from "@/features/profile";
 import { useTheme } from "@/theme";
@@ -19,6 +19,8 @@ import { PlusHeaderButton } from "../PlusHeaderButton";
 import { Routes, type AppStackParamList } from "../routes";
 
 const HEADER_AVATAR_SIZE = 36;
+// 눌렀을 때 도달할 불투명도 — 기존 눌림 스타일(opacity) 값 승계(비주얼 회귀 0).
+const PRESSED_OPACITY = 0.6;
 // 킷 mk-home: 먹로그 탭 title="먹로그"(:82), 지도 탭 title="지도"(:261). 탭별 워드마크 텍스트.
 const DEFAULT_WORDMARK = "먹로그";
 
@@ -74,22 +76,21 @@ export const HomeHeader = ({ title = DEFAULT_WORDMARK }: HomeHeaderProps) => {
 
       <View style={[styles.right, { gap: theme.spacing[4] }]}>
         <PlusHeaderButton />
-        <Pressable
+        <MotionPressable
           accessibilityRole="button"
           accessibilityLabel="프로필"
           onPress={() => navigation.navigate(Routes.Profile)}
           hitSlop={theme.spacing[8]}
-          style={({ pressed }) => [
-            styles.avatarButton,
-            pressed ? styles.pressed : null,
-          ]}
+          pressSize="sm"
+          pressedOpacity={PRESSED_OPACITY}
+          style={styles.avatarButton}
         >
           {authState.status === "authenticated" ? (
             <HomeHeaderAvatar userId={authState.userId} />
           ) : (
             <Avatar url={null} nickname={null} size={HEADER_AVATAR_SIZE} />
           )}
-        </Pressable>
+        </MotionPressable>
       </View>
     </View>
   );
@@ -108,5 +109,4 @@ const styles = StyleSheet.create({
   wordmarkEmoji: { fontSize: 19 },
   right: { flexDirection: "row", alignItems: "center" },
   avatarButton: { padding: 2 },
-  pressed: { opacity: 0.6 },
 });

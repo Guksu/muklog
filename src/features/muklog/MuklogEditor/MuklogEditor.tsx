@@ -18,7 +18,18 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DatePickerSheet, Icon, IconName, Screen, Stars, SubBar, Text, useToastController } from '@/components';
+import {
+  DatePickerSheet,
+  Icon,
+  IconName,
+  Screen,
+  Stars,
+  SubBar,
+  SwapDirection,
+  SwapTransition,
+  Text,
+  useToastController,
+} from '@/components';
 import { useTheme } from '@/theme';
 
 import { MEMO_INPUT_LINES, memoBoxHeight } from './memoBoxHeight';
@@ -40,6 +51,9 @@ import {
 import { useCreateMuklog } from '../useCreateMuklog';
 import { useMuklogPhotoPicker } from '../useMuklogPhotoPicker';
 import { MEMO_MIN_LENGTH, todayLocalDate } from '../validate';
+
+// 한 화면 안에서 교체되는 두 뷰의 식별자(SwapTransition swapKey) — motion-pass-1 D1.
+const EditorView = { Form: 'form', Search: 'search' } as const;
 
 // 결과 항목 → 매핑 카테고리(커버/라벨) 기본 해석. 컨테이너가 resolveCategory 미주입 시 에디터가 자체 제공.
 const defaultResolveCategory = ({ item }: { item: PlaceSearchItem }): MuklogCategoryKey | null =>
@@ -428,219 +442,226 @@ export const MuklogEditor = ({
 
   // ── 장소검색 풀스크린뷰(FLAG-1b) — searching일 때 폼 대신 PlaceSearchView(ui-publisher 비주얼, 킷 mk-log:383-414)로 스왑 ──
   //   결과 선택=handlePickInSearch(자동채움+복귀) / "직접 입력"(0건 폴백, §4.2)=handleUseManual(검색어 채택+복귀) / 뒤로=복귀.
-  if (searching && placeSearch) {
-    return (
-      <PlaceSearchView
-        query={placeSearch.query}
-        onChangeQuery={placeSearch.onChangeQuery}
-        status={placeSearch.status}
-        results={placeSearch.results}
-        errorMessage={placeSearch.errorMessage}
-        resolveCategory={placeSearch.resolveCategory ?? defaultResolveCategory}
-        onSelectResult={handlePickInSearch}
-        onUseManualInput={handleUseManual}
-        onBack={() => setSearching(false)}
-        backLabel="검색 취소"
-      />
-    );
-  }
+  //   motion-pass-1 D1(백로그 U54): 즉시 교체 대신 SwapTransition으로 감싼다 — 검색 진입은 오른쪽에서(전진),
+  //     폼 복귀는 왼쪽에서(복귀) 들어와 방향이 위계를 설명한다. 최초 마운트는 무애니메이션(스택 전환 위 이중 모션 방지).
+  //     placeSearch null 방어(searching && placeSearch)는 그대로 유지 — 검색 컨트롤이 없으면 언제나 폼이다.
 
   return (
-    <Screen edges={['left', 'right']} style={styles.screen}>
-      {/* 'top' 제외: SubBar가 insets.top을 직접 처리(LogScreen/Join/Profile/RoomCreated 동일 패턴). 포함 시 top inset 이중 적용.
-          'bottom' 제외: 비-GNB 엣지투엣지에서 하단 빈 띠 방지 — 배경은 화면 끝까지, 콘텐츠는 contentContainer paddingBottom+insets.bottom으로 인디케이터 클리어. */}
-      <SubBar title={isEdit ? '먹로그 편집' : '새 먹로그'} onBack={onBack} right={saveAction} />
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        style={styles.scroll}
-        contentContainerStyle={{
-          paddingHorizontal: theme.spacing[20],
-          paddingTop: theme.spacing[8],
-          paddingBottom: theme.spacing[28] + insets.bottom,
-        }}
-      >
-        {/* 장소 (필수) — 킷 mk-log MuklogEditor place 필드. 선택됨이면 요약카드, 아니면 검색+수동입력(ui-spec §5.1). */}
-        {/* 킷 mk-log:373-374 라벨 + accent "*"(필수). */}
-        <Text variant="fieldLabel" color="fg" style={styles.label}>
-          어디서 먹었나요? <Text variant="fieldLabel" color="primary">*</Text>
-        </Text>
-        {selectedPlace ? (
-          // 선택됨(검색 결과) — 킷 placeChosen 요약카드. 우상단 "변경"=재검색 진입(단일 액션, 사용자 요청).
-          <PlaceSelectedSummary
-            placeName={selectedPlace.placeName}
-            category={selectedPlace.category}
-            roadAddress={selectedPlace.roadAddress}
-            area={selectedPlace.area}
-            onChange={openSearch}
-          />
-        ) : placeSearch ? (
-          placeName.trim().length > 0 ? (
-            // 장소명만 있음(편집 프리필 / 직접입력) — manual-chosen 카드. 우상단 "변경"=재검색 진입.
-            <PlaceSelectedSummary
-              placeName={placeName}
-              category={category}
-              roadAddress={placeData.roadAddress}
-              area={placeData.area}
-              onChange={openSearch}
+    <SwapTransition
+      swapKey={searching && placeSearch ? EditorView.Search : EditorView.Form}
+      direction={searching && placeSearch ? SwapDirection.Forward : SwapDirection.Back}
+    >
+      {searching && placeSearch ? (
+        <PlaceSearchView
+          query={placeSearch.query}
+          onChangeQuery={placeSearch.onChangeQuery}
+          status={placeSearch.status}
+          results={placeSearch.results}
+          errorMessage={placeSearch.errorMessage}
+          resolveCategory={placeSearch.resolveCategory ?? defaultResolveCategory}
+          onSelectResult={handlePickInSearch}
+          onUseManualInput={handleUseManual}
+          onBack={() => setSearching(false)}
+          backLabel="검색 취소"
+        />
+      ) : (
+        <Screen edges={['left', 'right']} style={styles.screen}>
+          {/* 'top' 제외: SubBar가 insets.top을 직접 처리(LogScreen/Join/Profile/RoomCreated 동일 패턴). 포함 시 top inset 이중 적용.
+              'bottom' 제외: 비-GNB 엣지투엣지에서 하단 빈 띠 방지 — 배경은 화면 끝까지, 콘텐츠는 contentContainer paddingBottom+insets.bottom으로 인디케이터 클리어. */}
+          <SubBar title={isEdit ? '먹로그 편집' : '새 먹로그'} onBack={onBack} right={saveAction} />
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            style={styles.scroll}
+            contentContainerStyle={{
+              paddingHorizontal: theme.spacing[20],
+              paddingTop: theme.spacing[8],
+              paddingBottom: theme.spacing[28] + insets.bottom,
+            }}
+          >
+            {/* 장소 (필수) — 킷 mk-log MuklogEditor place 필드. 선택됨이면 요약카드, 아니면 검색+수동입력(ui-spec §5.1). */}
+            {/* 킷 mk-log:373-374 라벨 + accent "*"(필수). */}
+            <Text variant="fieldLabel" color="fg" style={styles.label}>
+              어디서 먹었나요? <Text variant="fieldLabel" color="primary">*</Text>
+            </Text>
+            {selectedPlace ? (
+              // 선택됨(검색 결과) — 킷 placeChosen 요약카드. 우상단 "변경"=재검색 진입(단일 액션, 사용자 요청).
+              <PlaceSelectedSummary
+                placeName={selectedPlace.placeName}
+                category={selectedPlace.category}
+                roadAddress={selectedPlace.roadAddress}
+                area={selectedPlace.area}
+                onChange={openSearch}
+              />
+            ) : placeSearch ? (
+              placeName.trim().length > 0 ? (
+                // 장소명만 있음(편집 프리필 / 직접입력) — manual-chosen 카드. 우상단 "변경"=재검색 진입.
+                <PlaceSelectedSummary
+                  placeName={placeName}
+                  category={category}
+                  roadAddress={placeData.roadAddress}
+                  area={placeData.area}
+                  onChange={openSearch}
+                />
+              ) : (
+                // 미선택 — 킷 searchBtn(돋보기 + "맛집 이름을 검색해요", mk-log:418) → 풀스크린 검색뷰 진입.
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="장소 검색하기"
+                  onPress={openSearch}
+                  style={[
+                    styles.searchBtn,
+                    {
+                      borderColor: theme.color.hairline,
+                      backgroundColor: theme.color.surface,
+                      // 킷 lk.searchBtn(mk-log:497): radius 16(xl), border 1.5, padding 15/16.
+                      borderRadius: theme.radius.xl,
+                      paddingVertical: theme.spacing[14],
+                      paddingHorizontal: theme.spacing[16],
+                      gap: theme.spacing[8],
+                    },
+                  ]}
+                >
+                  <Icon name={IconName.Search} size={20} color="fgMuted" />
+                  {/* 킷 mk-log:418 검색 버튼 라벨 500/15 → memoBody(500/15) 정합. */}
+                  <Text variant="memoBody" color="fgMuted">
+                    맛집 이름을 검색해요
+                  </Text>
+                </Pressable>
+              )
+            ) : (
+              // placeSearch 미주입(방어/회귀 안전) — 수동 입력만.
+              <TextInput
+                accessibilityLabel="장소 이름"
+                value={placeName}
+                onChangeText={setPlaceName}
+                maxLength={PLACE_NAME_MAX}
+                placeholder="장소 이름을 입력하세요"
+                placeholderTextColor={theme.color.fgMuted}
+                style={[styles.input, fieldInput]}
+              />
+            )}
+
+            {/* 카테고리 (8종 칩) */}
+            <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
+              카테고리
+            </Text>
+            <View style={styles.chipRow}>
+              {MUKLOG_CATEGORY_KEYS.map((key) => {
+                const selected = category === key;
+                return (
+                  <Pressable
+                    key={key}
+                    accessibilityRole="button"
+                    accessibilityLabel={`카테고리 ${MUKLOG_CATEGORIES[key].label}`}
+                    accessibilityState={{ selected }}
+                    onPress={() => setCategory(selected ? null : key)}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: selected ? theme.color.primary : theme.color.surface,
+                        borderColor: selected ? theme.color.primary : theme.color.hairline,
+                        borderRadius: theme.radius.full,
+                        paddingVertical: theme.spacing[8],
+                        paddingHorizontal: theme.spacing[12],
+                      },
+                    ]}
+                  >
+                    <Text variant="bodySm" color={selected ? 'primaryFg' : 'fgWeak'}>
+                      {MUKLOG_CATEGORIES[key].emoji} {MUKLOG_CATEGORIES[key].label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* 사진 (0~5) — 킷 mk-log.jsx:319-339. 편집은 existing+new 혼합 슬롯. */}
+            <View style={{ marginTop: theme.spacing[22] }}>
+              <PhotoPickerGrid
+                label="사진"
+                photos={gridPhotos}
+                uploading={loading}
+                onAdd={() => void handleAddPhoto()}
+                onRemove={(arg) => handleRemovePhoto(arg)}
+              />
+              {photoError ? (
+                <Text variant="bodySm" color="error" style={{ marginTop: theme.spacing[8] }}>
+                  {photoError}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* 별점 */}
+            <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
+              별점
+            </Text>
+            {/* 별점 + 보조 텍스트(킷 mk-log:449) — 선택 시 "n.0"(fg) / 미선택 시 "어땠어요?"(fgAssistive). 순수 표시. */}
+            <View style={styles.ratingRow}>
+              <Stars value={rating} size={32} editable onChange={setRating} />
+              <Text variant="ratingNum" color={rating > 0 ? 'fg' : 'fgAssistive'}>
+                {rating > 0 ? rating.toFixed(1) : '어땠어요?'}
+              </Text>
+            </View>
+
+            {/* 메모 */}
+            <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
+              메모
+            </Text>
+            <TextInput
+              accessibilityLabel="메모"
+              value={memo}
+              onChangeText={setMemo}
+              maxLength={MEMO_MAX}
+              multiline
+              placeholder="무엇을 먹었고 어땠는지 그날의 기록을 남겨보세요"
+              placeholderTextColor={theme.color.fgMuted}
+              style={[styles.input, styles.memo, fieldInput, memoBox]}
             />
-          ) : (
-            // 미선택 — 킷 searchBtn(돋보기 + "맛집 이름을 검색해요", mk-log:418) → 풀스크린 검색뷰 진입.
+            {/* 메모 필수·최소 5자 안내(사용자 요청). 미달 시 강조 톤. */}
+            <Text
+              testID="memo-hint"
+              variant="caption"
+              color={memoLongEnough ? 'fgMuted' : 'accentStrong'}
+              style={{ marginTop: theme.spacing[6] }}
+            >
+              {`메모는 최소 ${MEMO_MIN_LENGTH}자 이상 입력해 주세요.`}
+            </Text>
+
+            {/* 방문일 (기본 today, 미래 차단은 검증이 최종 방어) — 탭형 행→DatePickerSheet(킷 mk-log:416-420). */}
+            <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
+              방문일
+            </Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="장소 검색하기"
-              onPress={openSearch}
-              style={[
-                styles.searchBtn,
-                {
-                  borderColor: theme.color.hairline,
-                  backgroundColor: theme.color.surface,
-                  // 킷 lk.searchBtn(mk-log:497): radius 16(xl), border 1.5, padding 15/16.
-                  borderRadius: theme.radius.xl,
-                  paddingVertical: theme.spacing[14],
-                  paddingHorizontal: theme.spacing[16],
-                  gap: theme.spacing[8],
-                },
-              ]}
+              accessibilityLabel={`방문일 ${formatVisitedDate({ visitedAt, withDow: true })}, 선택`}
+              onPress={() => setDateOpen(true)}
+              style={[styles.dateRow, { borderColor: theme.color.hairline, backgroundColor: theme.color.surface }]}
             >
-              <Icon name={IconName.Search} size={20} color="fgMuted" />
-              {/* 킷 mk-log:418 검색 버튼 라벨 500/15 → memoBody(500/15) 정합. */}
-              <Text variant="memoBody" color="fgMuted">
-                맛집 이름을 검색해요
+              <Icon name={IconName.Calendar} size={19} color="primary" />
+              <Text variant="dateRowValue" color="fg" style={{ flex: 1 }}>
+                {formatVisitedDate({ visitedAt, withDow: true })}
               </Text>
+              <Icon name={IconName.ChevronDown} size={18} color="fgAssistive" />
             </Pressable>
-          )
-        ) : (
-          // placeSearch 미주입(방어/회귀 안전) — 수동 입력만.
-          <TextInput
-            accessibilityLabel="장소 이름"
-            value={placeName}
-            onChangeText={setPlaceName}
-            maxLength={PLACE_NAME_MAX}
-            placeholder="장소 이름을 입력하세요"
-            placeholderTextColor={theme.color.fgMuted}
-            style={[styles.input, fieldInput]}
-          />
-        )}
+            <DatePickerSheet
+              visible={dateOpen}
+              value={visitedAt}
+              onClose={() => setDateOpen(false)}
+              onSelect={({ date }) => {
+                setVisitedAt(date);
+                setDateOpen(false);
+              }}
+            />
 
-        {/* 카테고리 (8종 칩) */}
-        <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
-          카테고리
-        </Text>
-        <View style={styles.chipRow}>
-          {MUKLOG_CATEGORY_KEYS.map((key) => {
-            const selected = category === key;
-            return (
-              <Pressable
-                key={key}
-                accessibilityRole="button"
-                accessibilityLabel={`카테고리 ${MUKLOG_CATEGORIES[key].label}`}
-                accessibilityState={{ selected }}
-                onPress={() => setCategory(selected ? null : key)}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor: selected ? theme.color.primary : theme.color.surface,
-                    borderColor: selected ? theme.color.primary : theme.color.hairline,
-                    borderRadius: theme.radius.full,
-                    paddingVertical: theme.spacing[8],
-                    paddingHorizontal: theme.spacing[12],
-                  },
-                ]}
-              >
-                <Text variant="bodySm" color={selected ? 'primaryFg' : 'fgWeak'}>
-                  {MUKLOG_CATEGORIES[key].emoji} {MUKLOG_CATEGORIES[key].label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {/* 사진 (0~5) — 킷 mk-log.jsx:319-339. 편집은 existing+new 혼합 슬롯. */}
-        <View style={{ marginTop: theme.spacing[22] }}>
-          <PhotoPickerGrid
-            label="사진"
-            photos={gridPhotos}
-            uploading={loading}
-            onAdd={() => void handleAddPhoto()}
-            onRemove={(arg) => handleRemovePhoto(arg)}
-          />
-          {photoError ? (
-            <Text variant="bodySm" color="error" style={{ marginTop: theme.spacing[8] }}>
-              {photoError}
-            </Text>
-          ) : null}
-        </View>
-
-        {/* 별점 */}
-        <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
-          별점
-        </Text>
-        {/* 별점 + 보조 텍스트(킷 mk-log:449) — 선택 시 "n.0"(fg) / 미선택 시 "어땠어요?"(fgAssistive). 순수 표시. */}
-        <View style={styles.ratingRow}>
-          <Stars value={rating} size={32} editable onChange={setRating} />
-          <Text variant="ratingNum" color={rating > 0 ? 'fg' : 'fgAssistive'}>
-            {rating > 0 ? rating.toFixed(1) : '어땠어요?'}
-          </Text>
-        </View>
-
-        {/* 메모 */}
-        <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
-          메모
-        </Text>
-        <TextInput
-          accessibilityLabel="메모"
-          value={memo}
-          onChangeText={setMemo}
-          maxLength={MEMO_MAX}
-          multiline
-          placeholder="무엇을 먹었고 어땠는지 그날의 기록을 남겨보세요"
-          placeholderTextColor={theme.color.fgMuted}
-          style={[styles.input, styles.memo, fieldInput, memoBox]}
-        />
-        {/* 메모 필수·최소 5자 안내(사용자 요청). 미달 시 강조 톤. */}
-        <Text
-          testID="memo-hint"
-          variant="caption"
-          color={memoLongEnough ? 'fgMuted' : 'accentStrong'}
-          style={{ marginTop: theme.spacing[6] }}
-        >
-          {`메모는 최소 ${MEMO_MIN_LENGTH}자 이상 입력해 주세요.`}
-        </Text>
-
-        {/* 방문일 (기본 today, 미래 차단은 검증이 최종 방어) — 탭형 행→DatePickerSheet(킷 mk-log:416-420). */}
-        <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
-          방문일
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`방문일 ${formatVisitedDate({ visitedAt, withDow: true })}, 선택`}
-          onPress={() => setDateOpen(true)}
-          style={[styles.dateRow, { borderColor: theme.color.hairline, backgroundColor: theme.color.surface }]}
-        >
-          <Icon name={IconName.Calendar} size={19} color="primary" />
-          <Text variant="dateRowValue" color="fg" style={{ flex: 1 }}>
-            {formatVisitedDate({ visitedAt, withDow: true })}
-          </Text>
-          <Icon name={IconName.ChevronDown} size={18} color="fgAssistive" />
-        </Pressable>
-        <DatePickerSheet
-          visible={dateOpen}
-          value={visitedAt}
-          onClose={() => setDateOpen(false)}
-          onSelect={({ date }) => {
-            setVisitedAt(date);
-            setDateOpen(false);
-          }}
-        />
-
-        {error ? (
-          <Text variant="bodySm" color="error" style={{ marginTop: theme.spacing[12] }}>
-            {error}
-          </Text>
-        ) : null}
-      </ScrollView>
-      {/* 저장 성공 토스트는 전역(ToastProvider 루트 <Toast>)에서 렌더 — 화면별 <Toast> 없음(이관, 킷 mk-log:400). */}
-    </Screen>
+            {error ? (
+              <Text variant="bodySm" color="error" style={{ marginTop: theme.spacing[12] }}>
+                {error}
+              </Text>
+            ) : null}
+          </ScrollView>
+          {/* 저장 성공 토스트는 전역(ToastProvider 루트 <Toast>)에서 렌더 — 화면별 <Toast> 없음(이관, 킷 mk-log:400). */}
+        </Screen>
+      )}
+    </SwapTransition>
   );
 };
 
