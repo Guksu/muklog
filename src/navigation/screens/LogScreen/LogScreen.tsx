@@ -26,6 +26,8 @@ import {
   RenameDialog,
   Screen,
   SegmentControl,
+  SwapDirection,
+  SwapTransition,
   Text,
   useToastController,
 } from '@/components';
@@ -68,6 +70,9 @@ import { useRefreshOnFocus } from '../../useRefreshOnFocus';
 
 // 로그 내부 세그먼트 키(enum-style 단일 출처) — 'log'(기록)/'wish'(위시리스트). 기본 'log'.
 const LogSeg = { Log: 'log', Wish: 'wish' } as const;
+
+// 한 화면 안에서 교체되는 두 뷰의 식별자(SwapTransition swapKey) — MuklogEditor EditorView와 동형(motion-coverage D1).
+const LogView = { Main: 'main', Search: 'search' } as const;
 
 // 위시 추가 성공 토스트 카피(킷 mk-log:33).
 const WISH_ADDED_TOAST = '위시리스트에 담았어요 📍';
@@ -324,23 +329,6 @@ export const LogScreen = () => {
     }
   };
 
-  // 위시 추가 풀스크린 장소검색(MuklogEditor searching 스왑과 동일 패턴) — 폼 대신 PlaceSearchView로 스왑.
-  if (wishSearching) {
-    return (
-      <PlaceSearchView
-        query={placeSearch.query}
-        onChangeQuery={placeSearch.setQuery}
-        status={placeSearch.status}
-        results={placeSearch.results}
-        errorMessage={placeSearch.errorMessage}
-        onSelectResult={handleWishPick}
-        onUseManualInput={handleWishManual}
-        onBack={() => setWishSearching(false)}
-        backLabel="검색 취소"
-      />
-    );
-  }
-
   const { room } = state;
   const isCouple = room.memberCount >= 2;
 
@@ -422,147 +410,171 @@ export const LogScreen = () => {
     showToast({ message: INVITE_COPIED_TOAST(room.inviteCode), tone: 'positive' });
   };
 
+  // 위시 추가 풀스크린 장소검색(MuklogEditor searching 스왑과 동일 패턴) — 메인 화면 대신 PlaceSearchView로 스왑.
+  //   motion-coverage D1(백로그 U30·원칙 4): 즉시 교체 대신 SwapTransition으로 감싼다 — 검색 진입은 오른쪽에서(전진),
+  //     메인 복귀는 왼쪽에서(복귀) 들어와 방향이 위계를 설명한다. 최초 마운트는 무애니메이션(스택 전환 위 이중 모션 방지).
+  //     MuklogEditor의 `searching && placeSearch` 같은 null 방어는 여기에 없다 — placeSearch가 화면 내부 훅이라 항상 존재한다.
+  //   상위 조기 반환 3개(!roomId·loading·error)는 래퍼 밖에 그대로 둔다 — 전환은 "준비된 화면 안의 뷰 교체"만 설명한다.
   return (
-    <Screen edges={['left', 'right']} style={styles.screen}>
-      {/* 'bottom' 제외: 비-GNB 엣지투엣지 하단 빈 띠 방지 — 최하단 리스트(MuklogList/WishlistView) 스크롤
-          paddingBottom에 insets.bottom을 반영해 인디케이터 클리어(배경은 화면 끝까지). */}
-      {/* 상단 헤더 — 뒤로가기 + 아바타 겹침 + 로그명(킷 mk-log:18-29). 킷 헤더엔 멤버 배지 없음(커플 여부는 아바타 겹침으로 표현).
-          네이티브 헤더는 숨김(AppNavigator) — 이 자체 헤더가 단일 헤더(이중 헤더 방지).
-          ⚠️ 네이티브 헤더 OFF로 사라진 top inset을 여기서 보전 — 킷 MK_STATUS_PAD=56(시뮬 근사 고정) 대신
-          insets.top + spacing[8](HomeHeader와 동일 패턴)으로 동적 번역해 노치/다이나믹 아일랜드 겹침 방지. */}
-      <View
-        testID="logscreen-header"
-        style={[
-          styles.header,
-          {
-            paddingLeft: theme.spacing[8],
-            paddingRight: theme.spacing[12],
-            paddingTop: insets.top + theme.spacing[8],
-          },
-        ]}
-      >
-        <IconButton
-          name={IconName.ChevronLeft}
-          size={24}
-          color="fg"
-          accessibilityLabel="뒤로 가기"
-          onPress={() => navigation.goBack()}
+    <SwapTransition
+      swapKey={wishSearching ? LogView.Search : LogView.Main}
+      direction={wishSearching ? SwapDirection.Forward : SwapDirection.Back}
+    >
+      {wishSearching ? (
+        <PlaceSearchView
+          query={placeSearch.query}
+          onChangeQuery={placeSearch.setQuery}
+          status={placeSearch.status}
+          results={placeSearch.results}
+          errorMessage={placeSearch.errorMessage}
+          onSelectResult={handleWishPick}
+          onUseManualInput={handleWishManual}
+          onBack={() => setWishSearching(false)}
+          backLabel="검색 취소"
         />
-        {/* 로그명 표시(display-only). 헤더 아바타 겹침은 참여자 블록으로 이동(members-display S5b, plan §4.2).
-            이름 변경은 ⋯메뉴 "로그 이름 변경"으로 이전(사용자 요청) — 타이틀 탭 동작 없음. */}
-        <LogTitleButton title={title} />
-        {/* ⋯ 더보기 — 나가기 메뉴 시트 open(LogTitleButton flex:1로 우측 끝 정렬, ui-spec §3.3-1). */}
-        <IconButton
-          name={IconName.MoreHorizontal}
-          size={24}
-          color="fg"
-          accessibilityLabel="더보기"
-          onPress={() => setMenuOpen(true)}
-        />
-      </View>
+      ) : (
+        <Screen edges={['left', 'right']} style={styles.screen}>
+          {/* 'bottom' 제외: 비-GNB 엣지투엣지 하단 빈 띠 방지 — 최하단 리스트(MuklogList/WishlistView) 스크롤
+              paddingBottom에 insets.bottom을 반영해 인디케이터 클리어(배경은 화면 끝까지). */}
+          {/* 상단 헤더 — 뒤로가기 + 아바타 겹침 + 로그명(킷 mk-log:18-29). 킷 헤더엔 멤버 배지 없음(커플 여부는 아바타 겹침으로 표현).
+              네이티브 헤더는 숨김(AppNavigator) — 이 자체 헤더가 단일 헤더(이중 헤더 방지).
+              ⚠️ 네이티브 헤더 OFF로 사라진 top inset을 여기서 보전 — 킷 MK_STATUS_PAD=56(시뮬 근사 고정) 대신
+              insets.top + spacing[8](HomeHeader와 동일 패턴)으로 동적 번역해 노치/다이나믹 아일랜드 겹침 방지. */}
+          <View
+            testID="logscreen-header"
+            style={[
+              styles.header,
+              {
+                paddingLeft: theme.spacing[8],
+                paddingRight: theme.spacing[12],
+                paddingTop: insets.top + theme.spacing[8],
+              },
+            ]}
+          >
+            <IconButton
+              name={IconName.ChevronLeft}
+              size={24}
+              color="fg"
+              accessibilityLabel="뒤로 가기"
+              onPress={() => navigation.goBack()}
+            />
+            {/* 로그명 표시(display-only). 헤더 아바타 겹침은 참여자 블록으로 이동(members-display S5b, plan §4.2).
+                이름 변경은 ⋯메뉴 "로그 이름 변경"으로 이전(사용자 요청) — 타이틀 탭 동작 없음. */}
+            <LogTitleButton title={title} />
+            {/* ⋯ 더보기 — 나가기 메뉴 시트 open(LogTitleButton flex:1로 우측 끝 정렬, ui-spec §3.3-1). */}
+            <IconButton
+              name={IconName.MoreHorizontal}
+              size={24}
+              color="fg"
+              accessibilityLabel="더보기"
+              onPress={() => setMenuOpen(true)}
+            />
+          </View>
 
-      {/* 예약삭제 배너 — 헤더 아래·세그 위, deleteScheduledAt 있을 때만(게이팅은 여기, ui-spec §3.2).
-          세그 무관 항상 표시(예약은 로그 전체 상태). 요청자=취소 버튼 / 상대=안내만(ScheduledDeletionBanner 내부). */}
-      {room.deleteScheduledAt ? (
-        <View style={{ paddingHorizontal: theme.spacing[20], paddingTop: theme.spacing[8] }}>
-          <ScheduledDeletionBanner
-            countdownLabel={deletionCountdownLabel({
-              scheduledAt: room.deleteScheduledAt,
-              now: Date.now(),
-            })}
-            isRequester={meId === room.deleteRequestedBy}
-            onCancel={() => void handleCancelDeletion()}
-            canceling={canceling}
+          {/* 예약삭제 배너 — 헤더 아래·세그 위, deleteScheduledAt 있을 때만(게이팅은 여기, ui-spec §3.2).
+              세그 무관 항상 표시(예약은 로그 전체 상태). 요청자=취소 버튼 / 상대=안내만(ScheduledDeletionBanner 내부). */}
+          {room.deleteScheduledAt ? (
+            <View style={{ paddingHorizontal: theme.spacing[20], paddingTop: theme.spacing[8] }}>
+              <ScheduledDeletionBanner
+                countdownLabel={deletionCountdownLabel({
+                  scheduledAt: room.deleteScheduledAt,
+                  now: Date.now(),
+                })}
+                isRequester={meId === room.deleteRequestedBy}
+                onCancel={() => void handleCancelDeletion()}
+                canceling={canceling}
+              />
+            </View>
+          ) : null}
+
+          {/* 세그먼트(기록 N / 위시리스트 M) — 킷 mk-log:56-72. 컨테이너 패딩 "6px 20px 2px"(상6/좌우20/하2). */}
+          <View style={styles.segWrap}>
+            <SegmentControl
+              segments={[
+                { key: LogSeg.Log, label: '기록', count: muklogCount },
+                { key: LogSeg.Wish, label: '위시리스트', count: wishCount },
+              ]}
+              selected={seg}
+              onChange={({ key }) => setSeg(key)}
+            />
+          </View>
+
+          {/* 본문 스위치 — 'log'=MuklogList(+FAB) / 'wish'=WishlistView(FAB 없음, 킷 mk-log:119). */}
+          <View style={styles.body}>
+            {seg === LogSeg.Wish ? (
+              <WishlistBody
+                state={wishlistState}
+                meNickname={meNickname}
+                meAvatarUrl={meAvatarUrl ?? null}
+                onAdd={handleAddWish}
+                onVisit={handleVisitWish}
+                onRemove={(arg) => void handleRemoveWish(arg)}
+                onRetry={() => void refreshWishlist()}
+              />
+            ) : (
+              // 참여자 블록(members-display S5b, 킷 mk-log:79-103)을 MuklogList 스크롤 헤더로 주입 — 리스트와 함께 스크롤돼
+              //   위로 사라진다(사용자 요청). wish 세그엔 미렌더(I1). 구 솔로 배너/커플 컴팩트 행/헤더 익명 아바타는 이 블록으로 대체.
+              //   멤버 ready일 때만 렌더(loading/error는 best-effort 미렌더 — 리스트를 막지 않음, plan §4.1).
+              <MuklogList
+                roomId={roomId}
+                meId={meId}
+                state={muklogsState}
+                refresh={refreshMuklogs}
+                header={
+                  membersState.status === 'ready' ? (
+                    <ParticipantBlock
+                      members={membersState.members}
+                      meId={meId}
+                      canInvite={membersState.members.length < 5}
+                      onInvite={() => void handleInvite()}
+                    />
+                  ) : null
+                }
+              />
+            )}
+          </View>
+
+          {/* 로그 이름 편집 다이얼로그(킷 mk-extra:24-64 RenameDialog) — pencil 탭으로 open. 저장 → renameRoom → 성공 시 close + refresh.
+              controlled: draft(nameDraft)는 LogScreen 소유. subtitle은 킷 D-7(💡 제거). extra=초대코드는 솔로(memberCount<2)만 노출(D-2/AC2.5). */}
+          <RenameDialog
+            open={editOpen}
+            title="로그 이름"
+            subtitle="비워두면 기본 이름으로 돌아가요"
+            value={nameDraft}
+            onChange={setNameDraft}
+            onCancel={() => setEditOpen(false)}
+            onSave={() => void handleSaveName(nameDraft)}
+            placeholder={fallbackName}
+            saving={renaming}
+            error={renameError}
+            extra={isCouple ? undefined : <InviteCodeCard code={room.inviteCode} compact />}
           />
-        </View>
-      ) : null}
 
-      {/* 세그먼트(기록 N / 위시리스트 M) — 킷 mk-log:56-72. 컨테이너 패딩 "6px 20px 2px"(상6/좌우20/하2). */}
-      <View style={styles.segWrap}>
-        <SegmentControl
-          segments={[
-            { key: LogSeg.Log, label: '기록', count: muklogCount },
-            { key: LogSeg.Wish, label: '위시리스트', count: wishCount },
-          ]}
-          selected={seg}
-          onChange={({ key }) => setSeg(key)}
-        />
-      </View>
-
-      {/* 본문 스위치 — 'log'=MuklogList(+FAB) / 'wish'=WishlistView(FAB 없음, 킷 mk-log:119). */}
-      <View style={styles.body}>
-        {seg === LogSeg.Wish ? (
-          <WishlistBody
-            state={wishlistState}
-            meNickname={meNickname}
-            meAvatarUrl={meAvatarUrl ?? null}
-            onAdd={handleAddWish}
-            onVisit={handleVisitWish}
-            onRemove={(arg) => void handleRemoveWish(arg)}
-            onRetry={() => void refreshWishlist()}
+          {/* 나가기 메뉴 + 확인 시트(room-lifecycle, 킷 비종속·MuklogDetail 패턴) — open은 LogScreen 소유, RPC·nav는 handleLeave.
+              성공 시 닫기는 controlled(커플=refresh·솔로=goBack). 카피 분기(커플 24h 유예 / 솔로 즉시)는 isCouple으로. */}
+          <LeaveLogSheets
+            menuVisible={menuOpen}
+            confirmVisible={confirmOpen}
+            isCouple={isCouple}
+            onCloseMenu={() => setMenuOpen(false)}
+            onSelectRename={() => {
+              setMenuOpen(false);
+              handleOpenNameEdit();
+            }}
+            onSelectLeave={() => {
+              setMenuOpen(false);
+              setConfirmOpen(true);
+            }}
+            onCloseConfirm={() => setConfirmOpen(false)}
+            onConfirmLeave={() => void handleLeave()}
+            leaving={leaving}
+            leaveError={leaveError}
           />
-        ) : (
-          // 참여자 블록(members-display S5b, 킷 mk-log:79-103)을 MuklogList 스크롤 헤더로 주입 — 리스트와 함께 스크롤돼
-          //   위로 사라진다(사용자 요청). wish 세그엔 미렌더(I1). 구 솔로 배너/커플 컴팩트 행/헤더 익명 아바타는 이 블록으로 대체.
-          //   멤버 ready일 때만 렌더(loading/error는 best-effort 미렌더 — 리스트를 막지 않음, plan §4.1).
-          <MuklogList
-            roomId={roomId}
-            meId={meId}
-            state={muklogsState}
-            refresh={refreshMuklogs}
-            header={
-              membersState.status === 'ready' ? (
-                <ParticipantBlock
-                  members={membersState.members}
-                  meId={meId}
-                  canInvite={membersState.members.length < 5}
-                  onInvite={() => void handleInvite()}
-                />
-              ) : null
-            }
-          />
-        )}
-      </View>
 
-      {/* 로그 이름 편집 다이얼로그(킷 mk-extra:24-64 RenameDialog) — pencil 탭으로 open. 저장 → renameRoom → 성공 시 close + refresh.
-          controlled: draft(nameDraft)는 LogScreen 소유. subtitle은 킷 D-7(💡 제거). extra=초대코드는 솔로(memberCount<2)만 노출(D-2/AC2.5). */}
-      <RenameDialog
-        open={editOpen}
-        title="로그 이름"
-        subtitle="비워두면 기본 이름으로 돌아가요"
-        value={nameDraft}
-        onChange={setNameDraft}
-        onCancel={() => setEditOpen(false)}
-        onSave={() => void handleSaveName(nameDraft)}
-        placeholder={fallbackName}
-        saving={renaming}
-        error={renameError}
-        extra={isCouple ? undefined : <InviteCodeCard code={room.inviteCode} compact />}
-      />
-
-      {/* 나가기 메뉴 + 확인 시트(room-lifecycle, 킷 비종속·MuklogDetail 패턴) — open은 LogScreen 소유, RPC·nav는 handleLeave.
-          성공 시 닫기는 controlled(커플=refresh·솔로=goBack). 카피 분기(커플 24h 유예 / 솔로 즉시)는 isCouple으로. */}
-      <LeaveLogSheets
-        menuVisible={menuOpen}
-        confirmVisible={confirmOpen}
-        isCouple={isCouple}
-        onCloseMenu={() => setMenuOpen(false)}
-        onSelectRename={() => {
-          setMenuOpen(false);
-          handleOpenNameEdit();
-        }}
-        onSelectLeave={() => {
-          setMenuOpen(false);
-          setConfirmOpen(true);
-        }}
-        onCloseConfirm={() => setConfirmOpen(false)}
-        onConfirmLeave={() => void handleLeave()}
-        leaving={leaving}
-        leaveError={leaveError}
-      />
-
-      {/* 위시 추가 성공/예약취소 에러 토스트는 전역(ToastProvider 루트 <Toast>)에서 렌더 — 화면별 <Toast> 없음(이관). */}
-    </Screen>
+          {/* 위시 추가 성공/예약취소 에러 토스트는 전역(ToastProvider 루트 <Toast>)에서 렌더 — 화면별 <Toast> 없음(이관). */}
+        </Screen>
+      )}
+    </SwapTransition>
   );
 };
 

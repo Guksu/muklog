@@ -289,6 +289,7 @@ jest.mock('@/features/wishlist', () => {
 
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 
+import { SWAP_TRANSITION_TEST_ID } from '@/components/SwapTransition';
 import { useRoom, useRoomMembers, useRenameRoom } from '@/features/room';
 import { useProfileContext } from '@/features/profile';
 import { LogScreen } from './LogScreen';
@@ -1122,5 +1123,101 @@ describe('LogScreen — room-lifecycle 나가기/예약삭제 배선 (T9~T11)', 
       expect(screen.getByText('이미 삭제 예약이 해제됐거나 없는 로그예요.')).toBeTruthy(),
     );
     expect(refresh).toHaveBeenCalled();
+  });
+});
+
+// ── 위시 장소검색 스왑 전환(motion-coverage D1 / plan §5-1 A) ──────────────────────────────
+//   seam = 사용자 가시 동작(접근성 라벨) + SWAP_TRANSITION_TEST_ID 래퍼의 렌더 시점 opacity.
+//   Animated 궤적·중간 프레임·duration 값은 검증하지 않는다(plan §5-2).
+describe('LogScreen — 위시 검색 스왑 전환(motion-coverage D1, 백로그 U30/원칙 4)', () => {
+  const readyRoom = () => ({
+    status: 'ready' as const,
+    room: { roomId: 'r1', inviteCode: 'ABCDEF', memberCount: 1, mode: 'couple', name: null },
+  });
+
+  // 래퍼의 렌더 시점 불투명도 — 1이면 무애니(정착), 1 미만이면 진입 전환이 재생 중이다.
+  const wrapperOpacity = () =>
+    (StyleSheet.flatten(screen.getByTestId(SWAP_TRANSITION_TEST_ID).props.style) as Record<string, unknown>)
+      .opacity as number;
+
+  const openSearch = () => {
+    fireEvent.press(screen.getByText('위시리스트 0'));
+    fireEvent.press(screen.getByLabelText('wish-add'));
+  };
+
+  beforeEach(() => {
+    setRoomState(readyRoom());
+  });
+
+  it('A-1: 최초 마운트(기록 세그)에서는 전환이 재생되지 않는다(무애니)', () => {
+    renderWithTheme(<LogScreen />);
+    expect(screen.getByTestId(SWAP_TRANSITION_TEST_ID)).toBeTruthy();
+    expect(wrapperOpacity()).toBe(1);
+  });
+
+  it('A-2: 위시 "추가" → 검색뷰가 래퍼를 유지한 채(리마운트 아님) 진입 전환을 재생한다', () => {
+    renderWithTheme(<LogScreen />);
+    openSearch();
+    expect(screen.getByLabelText('place-search')).toBeTruthy();
+    // 래퍼가 언마운트/리마운트되면 최초 마운트 규칙으로 1이 나온다 — 이 단언이 조기 반환→삼항 전환의 핵심 가드.
+    expect(wrapperOpacity()).toBeLessThan(1);
+  });
+
+  it('A-3: "검색 취소" → 메인 복귀 + 복귀 전환 재생', () => {
+    renderWithTheme(<LogScreen />);
+    openSearch();
+    fireEvent.press(screen.getByLabelText('search-back'));
+    expect(screen.queryByLabelText('place-search')).toBeNull();
+    expect(wrapperOpacity()).toBeLessThan(1);
+  });
+
+  it('A-4: 전환 직후 즉시 결과 선택이 가능하고 위시 추가 계약이 그대로다(회귀 0)', async () => {
+    renderWithTheme(<LogScreen />);
+    openSearch();
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('search-pick'));
+    });
+    expect(mockAddWishlist).toHaveBeenCalledTimes(1);
+    expect(mockAddWishlist).toHaveBeenCalledWith({
+      input: {
+        roomId: 'r1',
+        placeName: '성수동 베이커리',
+        category: 'cafe',
+        area: '성수동',
+        roadAddress: '서울 성동구 연무장길 1',
+        lat: 37.544,
+        lng: 127.055,
+        kakaoPlaceId: '12345',
+      },
+    });
+    expect(refreshWishlist).toHaveBeenCalled();
+    expect(screen.getByText('위시리스트에 담았어요 📍')).toBeTruthy();
+  });
+
+  // AC⑤는 loading·error·roomId 없음 3분기 전부 "전환 래퍼 미렌더"를 요구한다(상위 조기 반환 유지).
+  it.each([
+    [
+      'error',
+      () => setRoomState({ status: 'error', message: '이 로그에 접근할 권한이 없어요.' }),
+      () => expect(screen.getByText('이 로그에 접근할 권한이 없어요.')).toBeTruthy(),
+    ],
+    [
+      'loading',
+      () => setRoomState({ status: 'loading' }),
+      () => expect(screen.getByTestId('logscreen-loading')).toBeTruthy(),
+    ],
+    [
+      'roomId 없음',
+      () => {
+        mockParams.current = {};
+        setRoomState({ status: 'loading' });
+      },
+      () => expect(screen.getByText('로그를 찾을 수 없어요')).toBeTruthy(),
+    ],
+  ])('A-5: %s 분기는 전환 래퍼 없이 기존 뷰만 렌더한다(상위 조기 반환 유지)', (_name, setup, expectView) => {
+    setup();
+    renderWithTheme(<LogScreen />);
+    expect(screen.queryByTestId(SWAP_TRANSITION_TEST_ID)).toBeNull();
+    expectView();
   });
 });
