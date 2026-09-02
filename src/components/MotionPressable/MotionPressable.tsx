@@ -20,13 +20,12 @@ import {
   MOTION_DURATION,
   MOTION_EASE_OUT,
   PRESS_OUT_SPRING,
+  PRESSED_OPACITY,
+  resolvePressedOpacity,
   resolvePressScale,
   useReduceMotion,
   type PressScaleSize,
 } from '@/theme';
-
-/** 눌림 불투명도 기본값 — 기존 공용 버튼·칩의 눌림 스타일 값. */
-const DEFAULT_PRESSED_OPACITY = 0.85;
 
 /** 평상 상태 불투명도 — 눌림 보간의 시작점(소비처의 정적 opacity는 여기에 덮인다). */
 const RESTING_OPACITY = 1;
@@ -39,9 +38,16 @@ export const MOTION_PRESSABLE_STATIC_OPACITY_WARNING =
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export type MotionPressableProps = Omit<PressableProps, 'style'> & {
-  /** 눌림 스케일 등급. sm=아이콘·아바타(0.94) / md=버튼·칩(0.96) / lg=카드·행(0.98). 기본 md. */
+  /**
+   * 눌림 스케일 등급. fab=지도 위 떠 있는 오버레이(0.92) / sm=아이콘·아바타(0.94) /
+   * md=버튼·칩(0.96) / lg=카드·행(0.98). 기본 md.
+   */
   pressSize?: PressScaleSize;
-  /** 눌림 시 도달할 불투명도. 각 소비처의 기존 값을 그대로 넘겨 비주얼을 보존한다. 기본 0.85. */
+  /**
+   * 눌림 시 도달할 불투명도. 각 소비처의 기존 값을 그대로 넘겨 비주얼을 보존한다. 기본 0.85.
+   * `1`(= 스케일만으로 피드백)을 넘겨도 **감소 모션에서는 바닥값까지 내려간다** — 그때는 스케일이
+   * 제거되어 반응이 0이 되기 때문이다(평상 경로에서는 넘긴 값 그대로).
+   */
   pressedOpacity?: number;
   /**
    * 정적/토큰 스타일. 함수 형태(({pressed}) => ...)는 지원하지 않는다 — Animated 합성 대상이라 배열·객체만.
@@ -55,7 +61,7 @@ export type MotionPressableProps = Omit<PressableProps, 'style'> & {
 
 export const MotionPressable = ({
   pressSize = 'md',
-  pressedOpacity = DEFAULT_PRESSED_OPACITY,
+  pressedOpacity = PRESSED_OPACITY.default,
   style,
   children,
   disabled = false,
@@ -97,7 +103,9 @@ export const MotionPressable = ({
   // 비활성이면 눌림 연출을 걸지 않는다 — 소비처가 비활성 표시로 준 opacity가 그대로 보여야 한다(plan §3.3-5).
   const opacity = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [RESTING_OPACITY, pressedOpacity],
+    // 감소 모션에서는 스케일이 1로 접혀 사라지므로 불투명도가 유일한 피드백 수단이다 —
+    // 소비처가 킷대로 1을 줬어도 바닥값까지 내려 "눌러도 무반응"을 만들지 않는다(fe-craft #8).
+    outputRange: [RESTING_OPACITY, resolvePressedOpacity({ pressedOpacity, reduceMotion })],
   });
   const scale = progress.interpolate({
     inputRange: [0, 1],

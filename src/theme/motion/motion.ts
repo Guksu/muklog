@@ -41,9 +41,30 @@ export const MOTION_DISTANCE = {
   toastExit: 6,
 } as const;
 
-/** 눌림 스케일 등급 — fe-skills press-feedback 판단값(작은 컨트롤일수록 더 깊게). */
-export const PRESS_SCALE = { sm: 0.94, md: 0.96, lg: 0.98 } as const;
+/**
+ * 눌림 스케일 등급 — fe-skills press-feedback 판단값(작은 컨트롤일수록 더 깊게).
+ *
+ * sm·md·lg는 "크기" 축이다. `fab`만 **크기가 아니라 레이어** 축의 예외다 —
+ * 킷이 지도 위에 떠 있는 두 컨트롤(현재위치 FAB `mk-home:295` · 재검색 pill `mk-home:368`)의
+ * `onMouseDown`에 `transform: scale(.92)`를 **직접 지정**했다. 값이 크기에서 유도되지 않으므로
+ * 크기 등급에 억지로 접지 않고 별도 등급으로 담는다(축 혼선을 여기 주석으로 잠근다).
+ * 두 컨트롤은 이미 `shadow.fab` 토큰을 공유해 코드베이스에 같은 어휘가 있다(tokens.ts:194-198).
+ * 새 소비처를 `fab`에 넣기 전에 "지도·콘텐츠 위에 떠 있는 레이어인가"를 먼저 확인할 것.
+ */
+export const PRESS_SCALE = { fab: 0.92, sm: 0.94, md: 0.96, lg: 0.98 } as const;
 export type PressScaleSize = keyof typeof PRESS_SCALE;
+
+/**
+ * 눌림 불투명도 표준 dim.
+ *   default — 소비처가 `pressedOpacity`를 주지 않을 때의 기본 dim.
+ *   reduceMotionFloor — 감소 모션 ON에서 **보장하는 최소 피드백**. 소비처가 스케일만으로 피드백을
+ *     주는 경우(`pressedOpacity: 1`) 감소 모션에서는 스케일이 제거되어 반응이 0이 되기 때문이다.
+ *     fe-craft #8("감소 모션은 제거가 아니라 완화 — opacity·색은 유지, 이동만 제거") ·
+ *     fe-skills press-feedback(reduced-motion에서 `transform: none` + 밝기 변화만 남긴다) ·
+ *     ux-principles 원칙 3(즉각 피드백). 웹 정본의 `filter: brightness(.92)`는 RN에 없어
+ *     가장 가까운 근사인 불투명도로 옮겼고, 값은 이미 앱 전체가 쓰는 표준 dim에 맞춰 어휘를 하나로 둔다.
+ */
+export const PRESSED_OPACITY = { default: 0.85, reduceMotionFloor: 0.85 } as const;
 
 /** 눌렀다 뗄 때 스프링 — 목표 체감 ≈220ms, 아주 옅은 오버슈트(킷 플레이풀 성격과 응집). */
 export const PRESS_OUT_SPRING = { bounciness: 6, speed: 12 } as const;
@@ -62,7 +83,7 @@ export type MotionKind = (typeof MotionKind)[keyof typeof MotionKind];
 
 /**
  * 눌림 스케일 목표값을 구한다.
- * @param size 컨트롤 크기 등급(sm 아이콘·아바타 / md 버튼·칩 / lg 카드·행)
+ * @param size 눌림 등급(fab 떠 있는 오버레이 / sm 아이콘·아바타 / md 버튼·칩 / lg 카드·행)
  * @param reduceMotion 기기 감소 모션 설정
  * @returns 스케일 목표값. 감소 모션이면 1(스케일 없음 — 불투명도 피드백만 남는다)
  */
@@ -73,6 +94,24 @@ export const resolvePressScale = ({
   size: PressScaleSize;
   reduceMotion: boolean;
 }): number => (reduceMotion ? 1 : PRESS_SCALE[size]);
+
+/**
+ * 눌렸을 때 도달할 불투명도를 구한다.
+ *   감소 모션에서는 스케일이 1로 접혀 사라지므로(resolvePressScale), 불투명도가 유일한 피드백 수단이 된다.
+ *   그래서 감소 모션에서만 바닥값을 적용한다 — 소비처가 킷대로 `1`(스케일만)을 줘도 반응이 0이 되지 않는다.
+ *   평상 경로(감소 모션 OFF)는 소비처 값을 1픽셀도 바꾸지 않는다(킷 값 정확 재현).
+ * @param pressedOpacity 소비처가 지정한 눌림 불투명도
+ * @param reduceMotion 기기 감소 모션 설정
+ * @returns 실제로 적용할 눌림 불투명도. 감소 모션이면 바닥값 이하로만(더 진한 소비처 값은 그대로 존중)
+ */
+export const resolvePressedOpacity = ({
+  pressedOpacity,
+  reduceMotion,
+}: {
+  pressedOpacity: number;
+  reduceMotion: boolean;
+}): number =>
+  reduceMotion ? Math.min(pressedOpacity, PRESSED_OPACITY.reduceMotionFloor) : pressedOpacity;
 
 /**
  * 감소 모션을 반영한 이동 거리를 구한다(이동은 감소 모션에서 완전히 제거 — fe-craft #8).
