@@ -3,11 +3,17 @@
 //   버전 문자열·업데이트 상태는 props(값 배선=developer). 여기선 상태별 렌더 분기·액션 콜백만 본다.
 //   role/testID 우선(정확 문구는 ui-spec 확정 후 검증).
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
 import { AppVersionRow } from './AppVersionRow';
+
+const AVAILABLE_STATUS = {
+  kind: 'available',
+  storeUrl: 'https://apps.apple.com/app/id6782955594',
+} as const;
 
 describe('AppVersionRow', () => {
   it('status 미지정(기본 checking) — "앱 버전 {version}"만 렌더한다(후방호환)', () => {
@@ -82,5 +88,62 @@ describe('AppVersionRow', () => {
     expect(screen.getByText('최신 버전이에요')).toBeTruthy();
     expect(screen.queryByTestId('app-version-update')).toBeNull();
     expect(screen.queryByRole('button')).toBeNull();
+  });
+});
+
+// ── 프레스 치환 A1(motion-press-final D1 / plan §5-1 T9·T10·T18) ────────────────────────
+//   seam = testID로 조회한 노드의 (a) onPress 횟수 (b) flatten style의 transform 키 유무.
+//   pressedOpacity 실값·Animated 궤적은 검증하지 않는다(plan §5-2 — 실값은 motion.spec가 잠갔다).
+describe('AppVersionRow — 업데이트 액션 눌림 피드백(motion-press-final A1, U30)', () => {
+  // 감소 모션 OFF/ON 고정 — transform 단언은 OS 설정에 의존하면 안 된다(MotionPressable.spec 선례).
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flattenAction = () =>
+    StyleSheet.flatten(screen.getByTestId('app-version-update').props.style) as Record<
+      string,
+      unknown
+    >;
+
+  const renderAvailableRow = ({ onUpdatePress }: { onUpdatePress?: () => void } = {}) => {
+    renderWithTheme(
+      <AppVersionRow version="1.2.0" status={AVAILABLE_STATUS} onUpdatePress={onUpdatePress} />,
+    );
+  };
+
+  it('T9: 감소 모션 OFF — 업데이트 액션에 눌림 모션(transform)이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderAvailableRow();
+    await waitFor(() => expect(flattenAction().transform).toBeDefined());
+  });
+
+  it('T10: 감소 모션 ON — transform 없이 불투명도 피드백만 남는다(fe-craft #8)', async () => {
+    mockReduceMotion({ enabled: true });
+    renderAvailableRow();
+    await waitFor(() => expect(flattenAction().opacity).toBeDefined());
+    expect(flattenAction().transform).toBeUndefined();
+  });
+
+  it('T18: pressIn→pressOut→press를 3회 반복해도 onUpdatePress가 정확히 3회 발화한다', () => {
+    const onUpdatePress = jest.fn();
+    renderAvailableRow({ onUpdatePress });
+    const action = screen.getByTestId('app-version-update');
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      fireEvent(action, 'pressIn');
+      fireEvent(action, 'pressOut');
+      fireEvent.press(action);
+    }
+    expect(onUpdatePress).toHaveBeenCalledTimes(3);
+  });
+
+  it('D1-f: style에 정적 opacity를 넘기지 않는다 — MotionPressable 경고 0건', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderAvailableRow();
+    expect(warn).not.toHaveBeenCalled();
   });
 });

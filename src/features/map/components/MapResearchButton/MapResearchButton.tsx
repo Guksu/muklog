@@ -5,7 +5,7 @@
 //   스팟 카드뿐이고 재검색 계열 요소가 0건이다 → 킷 시안 재현이 아니라 **킷 패턴 파생 신규 제안**이다.
 //   파생 근거 2겹(ui-spec §2):
 //     ① 스킨(지도 위에 떠 있는 레이어) = 킷 locate FAB(mk-home:363-372) → surface 배경 · radius.full ·
-//        box-shadow 0 4px 14px rgba(0,0,0,.18) = shadow.fab · press scale(.92). 헤어라인 보더가 아니라
+//        box-shadow 0 4px 14px rgba(0,0,0,.18) = shadow.fab · press scale(.92)(→ MotionPressable 등급 fab). 헤어라인 보더가 아니라
 //        그림자를 쓰는 이유 = 떠 있는 레이어라서(브랜드 규칙의 예외가 아니라 선례 준수).
 //     ② 내용(라벨+아이콘을 가진 컨트롤) = 킷 MkButton size="sm" variant="soft"(mk-ui:85-104) →
 //        pad 9×14 · 700/14 · gap 8 · leftIcon size fs+3=17 · 아이콘·라벨 동색 accentStrong.
@@ -14,9 +14,9 @@
 // 이 컴포넌트는 **자기 노출 조건을 모른다**. `researchAvailable`(useNearbyPlaces)로 조건 렌더하는 것은
 //   부모(MapTabScreen) 책임이고, 배치(상단 가로 중앙 절대배치)도 부모 소유다(ui-spec §3, 레이아웃 책임 분리).
 import React from 'react';
-import { Pressable, StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
+import { StyleSheet, type TextStyle, type ViewStyle } from 'react-native';
 
-import { Icon, IconName, Text } from '@/components';
+import { Icon, IconName, MotionPressable, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 // 카피 단일 출처(리더 Q3 확정). 라벨 = 접근성 라벨(지도 관용 표현, 해요체 예외 — plan §5.1).
@@ -28,6 +28,10 @@ const RESEARCH_PILL = { paddingVertical: 9, paddingHorizontal: 14, fontSize: 14,
 
 // 최소 터치 타깃 보정 — pill 실높이 35(9+17+9)라 세로 hitSlop 5로 45pt를 확보한다(킷 pad는 불변).
 const RESEARCH_HIT_SLOP = { top: 5, bottom: 5, left: 8, right: 8 } as const;
+
+// 킷은 눌림에 스케일만 지정했다(불투명도 변화 없음) — 감소 모션에서의 최소 피드백은
+//   MotionPressable의 바닥값이 책임진다(ui-spec §2). FAB과 같은 값을 쓴다(같은 오버레이 층).
+const MAP_OVERLAY_PRESSED_OPACITY = 1;
 
 export type MapResearchButtonProps = {
   /** 탭 콜백(현재 뷰포트 1회 재조회는 호출부=MapTabScreen이 nearby.research로 배선). */
@@ -47,20 +51,22 @@ export const MapResearchButton = ({ onPress, testID }: MapResearchButtonProps) =
   // 킷 MkButton sm: 700/14(button 토큰 = SUIT-Bold)에 킷 실수치 오버라이드. lineHeight = round(14×1.2).
   const label: TextStyle = { fontSize: RESEARCH_PILL.fontSize, lineHeight: RESEARCH_PILL.lineHeight };
   return (
-    <Pressable
+    <MotionPressable
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={RESEARCH_LABEL}
       hitSlop={RESEARCH_HIT_SLOP}
       onPress={onPress}
-      style={({ pressed }) => [styles.pill, container, pressed ? styles.pressed : null]}
+      pressSize="fab"
+      pressedOpacity={MAP_OVERLAY_PRESSED_OPACITY}
+      style={[styles.pill, container]}
     >
       {/* 킷 soft variant: 아이콘·라벨이 같은 accentStrong(currentColor 상속, mk-ui:96·104). */}
       <Icon name={IconName.Search} size={RESEARCH_PILL.iconSize} color="accentStrong" />
       <Text variant="button" color="accentStrong" style={label}>
         {RESEARCH_LABEL}
       </Text>
-    </Pressable>
+    </MotionPressable>
   );
 };
 
@@ -75,7 +81,4 @@ const styles = StyleSheet.create({
     paddingVertical: RESEARCH_PILL.paddingVertical,
     paddingHorizontal: RESEARCH_PILL.paddingHorizontal,
   },
-  // 킷 locate FAB onMouseDown scale(.92)(mk-home:368) — 지도 위 떠 있는 레이어 2종(FAB·pill)의 press 피드백 통일.
-  //   킷 MkButton은 .97이나, 같은 오버레이 층에서 두 피드백이 갈리면 어긋나 보인다(리더 확정: .92).
-  pressed: { transform: [{ scale: 0.92 }] },
 });

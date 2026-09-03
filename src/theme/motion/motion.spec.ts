@@ -11,8 +11,10 @@ import {
   MotionKind,
   PRESS_OUT_SPRING,
   PRESS_SCALE,
+  PRESSED_OPACITY,
   resolveMotionDistance,
   resolveMotionDuration,
+  resolvePressedOpacity,
   resolvePressScale,
 } from './motion';
 
@@ -23,10 +25,33 @@ describe('resolvePressScale', () => {
     expect(resolvePressScale({ size: 'lg', reduceMotion: false })).toBe(0.98);
   });
 
-  it('감소 모션이면 세 등급 모두 1이다(스케일 제거 — 불투명도 피드백만 남는다)', () => {
+  it('떠 있는 레이어 등급 fab은 0.92다(킷 mk-home:295·:368 scale(.92) 승계 — T1)', () => {
+    expect(resolvePressScale({ size: 'fab', reduceMotion: false })).toBe(0.92);
+  });
+
+  it('감소 모션이면 네 등급 모두 1이다(스케일 제거 — 불투명도 피드백만 남는다 — T2)', () => {
+    expect(resolvePressScale({ size: 'fab', reduceMotion: true })).toBe(1);
     expect(resolvePressScale({ size: 'sm', reduceMotion: true })).toBe(1);
     expect(resolvePressScale({ size: 'md', reduceMotion: true })).toBe(1);
     expect(resolvePressScale({ size: 'lg', reduceMotion: true })).toBe(1);
+  });
+});
+
+describe('resolvePressedOpacity — 감소 모션 최소 피드백 바닥값', () => {
+  it('감소 모션이 꺼져 있으면 소비처 값을 그대로 준다(평상 경로는 킷 값 정확 — P3-b)', () => {
+    expect(resolvePressedOpacity({ pressedOpacity: 1, reduceMotion: false })).toBe(1);
+    expect(resolvePressedOpacity({ pressedOpacity: 0.6, reduceMotion: false })).toBe(0.6);
+  });
+
+  it('감소 모션이면 바닥값보다 옅은 피드백을 바닥값까지 내린다(피드백 0 방지 — P3-a)', () => {
+    expect(resolvePressedOpacity({ pressedOpacity: 1, reduceMotion: true })).toBe(
+      PRESSED_OPACITY.reduceMotionFloor,
+    );
+  });
+
+  it('감소 모션이어도 바닥값보다 진한 소비처 값은 건드리지 않는다(기존 소비처 동작 불변 — P3-c)', () => {
+    expect(resolvePressedOpacity({ pressedOpacity: 0.6, reduceMotion: true })).toBe(0.6);
+    expect(resolvePressedOpacity({ pressedOpacity: 0.45, reduceMotion: true })).toBe(0.45);
   });
 });
 
@@ -95,6 +120,29 @@ describe('모션 예산 불변식', () => {
     expect(PRESS_SCALE.md).toBeLessThan(PRESS_SCALE.lg);
     expect(PRESS_SCALE.sm).toBeGreaterThanOrEqual(0.9);
     expect(PRESS_SCALE.lg).toBeLessThan(1);
+  });
+
+  it('떠 있는 레이어(fab)는 가장 깊지만 여전히 예산 안이다(fab < sm · 전 등급 0.9~1 — T4)', () => {
+    expect(PRESS_SCALE.fab).toBeLessThan(PRESS_SCALE.sm);
+    Object.values(PRESS_SCALE).forEach((scale) => {
+      // fe-skills press-feedback "0.9 이하로 과장하지 마라"(고빈도 노출) + fe-craft #4 축소 예산.
+      expect(scale).toBeGreaterThanOrEqual(0.9);
+      expect(scale).toBeLessThan(1);
+    });
+  });
+
+  it('기존 3등급 실값은 앵커다 — 소비처 8곳 이상이 이미 쓴다(T3)', () => {
+    expect(PRESS_SCALE.sm).toBe(0.94);
+    expect(PRESS_SCALE.md).toBe(0.96);
+    expect(PRESS_SCALE.lg).toBe(0.98);
+  });
+
+  it('감소 모션 바닥값은 눈에 보이되 과하지 않다(표준 dim과 같은 어휘)', () => {
+    // 절대 앵커 — 상대 관계만 잠그면 둘을 함께 바꿔도 green이라(qa-logic 권고) 실값을 고정한다.
+    expect(PRESSED_OPACITY.default).toBe(0.85);
+    expect(PRESSED_OPACITY.reduceMotionFloor).toBe(PRESSED_OPACITY.default);
+    expect(PRESSED_OPACITY.reduceMotionFloor).toBeLessThan(1);
+    expect(PRESSED_OPACITY.reduceMotionFloor).toBeGreaterThan(0.5);
   });
 
   it('🎉 팝은 scale(0)이 아닌 지점에서 시작하고 짧게 지연된 뒤 터진다(fe-craft #5)', () => {

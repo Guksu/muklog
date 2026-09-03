@@ -3,9 +3,10 @@
 //   Animated.Value의 중간 값·스프링 궤적은 테스트하지 않는다(plan §5-2) — 감소 모션 분기와 props 통과만 잠근다.
 import React from 'react';
 import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
+import { PRESSED_OPACITY } from '@/theme';
 
 import { MotionPressable, MOTION_PRESSABLE_STATIC_OPACITY_WARNING } from './MotionPressable';
 
@@ -187,5 +188,64 @@ describe('MotionPressable — 정적 opacity 오용 경고', () => {
       </MotionPressable>,
     );
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+// 감소 모션 최소 피드백 바닥값(plan §5-1 T5·T6, P3) — 감소 모션에서는 스케일이 제거되므로
+//   불투명도가 유일한 피드백 수단이 된다. 킷대로 `pressedOpacity={1}`을 준 소비처(지도 오버레이 2종)가
+//   감소 모션 사용자에게 "아무 반응 없음"이 되지 않는지를 잠근다.
+//   읽는 것은 **눌림이 정착한 뒤의 스타일 값 하나**다 — 보간 중간값·스프링 궤적은 읽지 않는다(plan §5-2).
+describe('MotionPressable — 감소 모션 눌림 피드백 바닥값', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  const renderPressed = async ({
+    reduceMotion,
+    pressedOpacity,
+  }: {
+    reduceMotion: boolean;
+    pressedOpacity: number;
+  }) => {
+    mockReduceMotion({ enabled: reduceMotion });
+    renderWithTheme(
+      <MotionPressable testID="mp" pressSize="fab" pressedOpacity={pressedOpacity}>
+        <Text>내 위치로 이동</Text>
+      </MotionPressable>,
+    );
+    // 감소 모션 조회는 비동기다 — 분기가 반영된 뒤에 눌러야 한다.
+    await waitFor(() =>
+      expect(flattenStyle({ testID: 'mp' }).transform === undefined).toBe(reduceMotion),
+    );
+    fireEvent(screen.getByTestId('mp'), 'pressIn');
+    // 누름 60ms가 끝나 값이 정착한 뒤의 스타일만 본다(중간 프레임 아님).
+    act(() => {
+      jest.advanceTimersByTime(200);
+    });
+    return flattenStyle({ testID: 'mp' });
+  };
+
+  it('감소 모션 ON + pressedOpacity 1이어도 눌림 피드백이 남는다(바닥값 적용 — T5)', async () => {
+    const pressedStyle = await renderPressed({ reduceMotion: true, pressedOpacity: 1 });
+    expect(pressedStyle.transform).toBeUndefined();
+    expect(pressedStyle.opacity).toBeCloseTo(PRESSED_OPACITY.reduceMotionFloor, 5);
+  });
+
+  it('감소 모션 ON이어도 바닥값보다 진한 소비처 값은 그대로다(기존 소비처 동작 불변)', async () => {
+    const pressedStyle = await renderPressed({ reduceMotion: true, pressedOpacity: 0.6 });
+    expect(pressedStyle.opacity).toBeCloseTo(0.6, 5);
+  });
+
+  it('감소 모션 OFF에서는 pressedOpacity 1이 그대로다 — 스케일만(킷 값 정확 — T6)', async () => {
+    const pressedStyle = await renderPressed({ reduceMotion: false, pressedOpacity: 1 });
+    expect(pressedStyle.opacity).toBeCloseTo(1, 5);
+    expect(pressedStyle.transform).toBeDefined();
+  });
+
+  it('감소 모션 OFF에서 기존 소비처 값(0.6)도 그대로다', async () => {
+    const pressedStyle = await renderPressed({ reduceMotion: false, pressedOpacity: 0.6 });
+    expect(pressedStyle.opacity).toBeCloseTo(0.6, 5);
   });
 });

@@ -3,7 +3,8 @@
 //   비주얼·배치(pill 높이/그림자/상단 중앙)는 디바이스 스모크·qa-visual. 여기선 렌더·카피·onPress·접근성만 단언.
 //   ⚠ 노출 조건(researchAvailable)은 부모(MapTabScreen)가 소유 — 컴포넌트가 visible prop을 갖지 않음을 함께 잠근다.
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -44,5 +45,64 @@ describe('MapResearchButton', () => {
     renderWithTheme(<MapResearchButton onPress={() => {}} testID="map-research-button" />);
     expect(screen.getByTestId('map-research-button')).toBeTruthy();
     expect(screen.queryByLabelText('이 지역에서 검색')).toBeTruthy();
+  });
+});
+
+// ── 프레스 치환 B2(motion-press-final D3 / plan §5-1 T14·T15·T18) ──────────────────────
+//   seam = 접근성 라벨로 조회한 노드의 (a) onPress 횟수 (b) hitSlop prop (c) transform 키 유무.
+describe('MapResearchButton — 눌림 피드백 부착(motion-press-final B2, U30)', () => {
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flattenPill = () =>
+    StyleSheet.flatten(screen.getByLabelText('이 지역에서 검색').props.style) as Record<
+      string,
+      unknown
+    >;
+
+  it('T14: hitSlop이 렌더 노드에 그대로 전달된다(최소 터치 타깃 45pt 보존)', () => {
+    renderWithTheme(<MapResearchButton onPress={() => {}} />);
+    expect(screen.getByLabelText('이 지역에서 검색').props.hitSlop).toEqual({
+      top: 5,
+      bottom: 5,
+      left: 8,
+      right: 8,
+    });
+  });
+
+  it('T15-a: 감소 모션 OFF — 눌림 모션(transform)이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderWithTheme(<MapResearchButton onPress={() => {}} />);
+    await waitFor(() => expect(flattenPill().transform).toBeDefined());
+  });
+
+  it('T15-b: 감소 모션 ON — transform 없이 불투명도 피드백만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderWithTheme(<MapResearchButton onPress={() => {}} />);
+    await waitFor(() => expect(flattenPill().opacity).toBeDefined());
+    expect(flattenPill().transform).toBeUndefined();
+  });
+
+  it('T18: pressIn→pressOut→press를 3회 반복해도 onPress가 정확히 3회 발화한다', () => {
+    const handlePress = jest.fn();
+    renderWithTheme(<MapResearchButton onPress={handlePress} />);
+    const pill = screen.getByLabelText('이 지역에서 검색');
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      fireEvent(pill, 'pressIn');
+      fireEvent(pill, 'pressOut');
+      fireEvent.press(pill);
+    }
+    expect(handlePress).toHaveBeenCalledTimes(3);
+  });
+
+  it('D3-f: style에 정적 opacity를 넘기지 않는다 — MotionPressable 경고 0건', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderWithTheme(<MapResearchButton onPress={() => {}} testID="map-research-button" />);
+    expect(warn).not.toHaveBeenCalled();
   });
 });
