@@ -1,8 +1,8 @@
 // src/features/muklog/PlaceSelectedSummary.spec.tsx
 // 장소 선택 요약 카드 — 킷 mk-log.jsx:302-310 placeChosen 재현. 장소명·📍주소·커버·선택 해제(plan D2).
 import React from 'react';
-import { StyleSheet } from 'react-native';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -47,5 +47,44 @@ describe('PlaceSelectedSummary', () => {
     expect(screen.queryByText('선택 해제')).toBeNull();
     fireEvent.press(screen.getByLabelText('장소 변경'));
     expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('hitSlop 8을 유지한다', () => {
+    renderWithTheme(<PlaceSelectedSummary placeName="보나" onChange={jest.fn()} />);
+    expect(screen.getByLabelText('장소 변경').props.hitSlop).toBe(8);
+  });
+});
+
+// ── 프레스 치환 A11(motion-press-sweep T4 / ui-spec §2-2·§3-1) ──────────────────────────
+//   seam = a11yLabel(장소 변경)로 조회한 노드의 (a) flatten style의 transform/opacity 키 유무.
+describe('PlaceSelectedSummary — "변경" 액션 눌림 피드백(motion-press-sweep A11)', () => {
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flatten = () =>
+    StyleSheet.flatten(screen.getByLabelText('장소 변경').props.style) as Record<string, unknown>;
+
+  it('A11 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderWithTheme(<PlaceSelectedSummary placeName="보나" onChange={jest.fn()} />);
+    await waitFor(() => expect(flatten().transform).toBeDefined());
+  });
+
+  it('A11 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderWithTheme(<PlaceSelectedSummary placeName="보나" onChange={jest.fn()} />);
+    await waitFor(() => expect(flatten().opacity).toBeDefined());
+    expect(flatten().transform).toBeUndefined();
+  });
+
+  it('렌더 시 console.warn 0건(정적 opacity 계약 위반 없음)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderWithTheme(<PlaceSelectedSummary placeName="보나" onChange={jest.fn()} />);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

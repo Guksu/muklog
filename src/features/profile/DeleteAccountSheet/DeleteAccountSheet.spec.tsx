@@ -3,7 +3,8 @@
 //   되돌릴 수 없음 강조 카피 + danger "탈퇴하기" + ghost 취소. presentational(콜백만 발신).
 //   open/close 오케스트레이션·deleteAccount 실행·성공 후 signOut 은 부모(ProfileScreen, developer 훅 소비).
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -76,5 +77,49 @@ describe('DeleteAccountSheet — 진행 중/에러 상태', () => {
   it('error 없으면 에러 텍스트 슬롯을 렌더하지 않는다', () => {
     renderWithTheme(<DeleteAccountSheet {...baseProps} visible error={null} />);
     expect(screen.queryByTestId('delete-account-error')).toBeNull();
+  });
+});
+
+// ── 프레스 치환 A12(motion-press-sweep T5 / ui-spec §2-2·§3-1) ──────────────────────────
+//   seam = testID(delete-account-confirm)로 조회한 노드의 (a) flatten style의 transform/opacity 키 유무.
+describe('DeleteAccountSheet — danger 버튼 눌림 피드백(motion-press-sweep A12)', () => {
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flatten = () =>
+    StyleSheet.flatten(screen.getByTestId('delete-account-confirm').props.style) as Record<
+      string,
+      unknown
+    >;
+
+  it('A12 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderWithTheme(<DeleteAccountSheet {...baseProps} visible />);
+    await waitFor(() => expect(flatten().transform).toBeDefined());
+  });
+
+  it('A12 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderWithTheme(<DeleteAccountSheet {...baseProps} visible />);
+    await waitFor(() => expect(flatten().opacity).toBeDefined());
+    expect(flatten().transform).toBeUndefined();
+  });
+
+  it('P5 — deleting=true면 transform이 부착되지 않고 flatten opacity가 0.45다', () => {
+    mockReduceMotion({ enabled: false });
+    renderWithTheme(<DeleteAccountSheet {...baseProps} visible deleting />);
+    expect(flatten().transform).toBeUndefined();
+    expect(flatten().opacity).toBe(0.45);
+  });
+
+  it('렌더 시 console.warn 0건(정적 opacity 계약 위반 없음)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderWithTheme(<DeleteAccountSheet {...baseProps} visible />);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

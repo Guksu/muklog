@@ -3,7 +3,8 @@
 //   UpdateSuggestModal 셸(딤·중앙카드·상단 hairline 2버튼 행)을 그대로 승계한 "입력 없는 확인형".
 //   배선(reloadAsync·dismiss 상태)은 developer(T8) — 여기선 표시·콜백(지금 적용/나중에·딤 탭)만 본다.
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -78,5 +79,53 @@ describe('OtaReadyDialog', () => {
       .join('\n');
     expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(code).not.toMatch(/rgba?\(/);
+  });
+});
+
+// ── 프레스 치환 A6·A7(motion-press-sweep T3 / ui-spec §2-2·§3-1) ────────────────────────
+//   seam = testID로 조회한 노드의 (a) flatten style의 transform/opacity 키 유무.
+//   pressedOpacity 실값·Animated 궤적은 검증하지 않는다(plan §9-2).
+describe('OtaReadyDialog — 액션 눌림 피드백(motion-press-sweep A6·A7)', () => {
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flatten = ({ testId }: { testId: string }) =>
+    StyleSheet.flatten(screen.getByTestId(testId).props.style) as Record<string, unknown>;
+
+  it('A6 나중에 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderWithTheme(<OtaReadyDialog visible onApply={noop} onDismiss={noop} />);
+    await waitFor(() => expect(flatten({ testId: 'ota-dismiss' }).transform).toBeDefined());
+  });
+
+  it('A6 나중에 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderWithTheme(<OtaReadyDialog visible onApply={noop} onDismiss={noop} />);
+    await waitFor(() => expect(flatten({ testId: 'ota-dismiss' }).opacity).toBeDefined());
+    expect(flatten({ testId: 'ota-dismiss' }).transform).toBeUndefined();
+  });
+
+  it('A7 지금 적용 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderWithTheme(<OtaReadyDialog visible onApply={noop} onDismiss={noop} />);
+    await waitFor(() => expect(flatten({ testId: 'ota-apply' }).transform).toBeDefined());
+  });
+
+  it('A7 지금 적용 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderWithTheme(<OtaReadyDialog visible onApply={noop} onDismiss={noop} />);
+    await waitFor(() => expect(flatten({ testId: 'ota-apply' }).opacity).toBeDefined());
+    expect(flatten({ testId: 'ota-apply' }).transform).toBeUndefined();
+  });
+
+  it('렌더 시 console.warn 0건(정적 opacity 계약 위반 없음)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderWithTheme(<OtaReadyDialog visible onApply={noop} onDismiss={noop} />);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

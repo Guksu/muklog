@@ -6,14 +6,25 @@
 //   데이터는 props로만: logs(표시 라벨·멤버수·roomId) + onSelect({ roomId }). 라벨 산출(displayLogName 등)·
 //   목록 소스·insert는 developer 몫. 여기선 프리젠테이션 + 선택 콜백만.
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
+import { ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 
-import { Icon, IconName, MemberBadge, Sheet, Text, useSheetScrollGesture } from '@/components';
+import {
+  Icon,
+  IconName,
+  MemberBadge,
+  MotionPressable,
+  Sheet,
+  Text,
+  useSheetScrollGesture,
+} from '@/components';
 import { useTheme } from '@/theme';
 
 // 기본 시트 제목(해요체, 카피 단일 출처). 부모가 title로 대체 가능.
 const DEFAULT_TITLE = '어디에 담을까요?';
+
+// 눌림 불투명도 — 치환 전 로컬 styles.pressed 실값 승계(비주얼 회귀 0). 등급은 lg(전폭 리스트 행). ui-spec §2-2 A8.
+const LOG_ROW_PRESSED_OPACITY = 0.6;
 
 /** 시트에 표시할 로그 1행. 표시 전용 최소 shape(MyLog 전체와 디커플 — developer가 매핑해 주입). */
 export type LogPickerItem = {
@@ -60,17 +71,18 @@ const LogPickerBody = ({
     <GestureDetector gesture={scrollGesture}>
       <ScrollView bounces={false} showsVerticalScrollIndicator={false}>
         {logs.map((log, index) => (
-          <Pressable
+          <MotionPressable
             key={log.roomId}
             testID={`log-picker-row-${log.roomId}`}
             accessibilityRole="button"
             accessibilityLabel={log.label}
             onPress={() => onSelect({ roomId: log.roomId })}
-            style={({ pressed }) => [
+            pressSize="lg"
+            pressedOpacity={LOG_ROW_PRESSED_OPACITY}
+            style={[
               styles.row,
               { gap: theme.spacing[8], paddingVertical: theme.spacing[14] },
               index > 0 ? divider : null,
-              pressed ? styles.pressed : null,
             ]}
           >
             <Text variant="cardTitle" color="fg" numberOfLines={1} style={styles.label}>
@@ -78,7 +90,7 @@ const LogPickerBody = ({
             </Text>
             <MemberBadge memberCount={log.memberCount} />
             <Icon name={IconName.ChevronRight} size={20} color="fgMuted" />
-          </Pressable>
+          </MotionPressable>
         ))}
       </ScrollView>
     </GestureDetector>
@@ -100,5 +112,4 @@ export const LogPickerSheet = ({
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center' },
   label: { flex: 1, minWidth: 0 },
-  pressed: { opacity: 0.6 },
 });

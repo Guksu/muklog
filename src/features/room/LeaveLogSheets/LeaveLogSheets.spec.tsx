@@ -3,7 +3,8 @@
 //   메뉴(단일 danger 행 "로그 나가기") / 확인 시트 카피 분기(커플=24h 유예 / 솔로=즉시 삭제).
 //   open/close 오케스트레이션·leaveRoom RPC·성공 후 nav/refresh는 developer(이 컴포넌트는 presentational, 콜백만 발신).
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -125,5 +126,67 @@ describe('LeaveLogSheets — 나가기 확인 시트(카피 분기)', () => {
     // 시트 유지(취소·나가기 모두 노출).
     expect(screen.getByLabelText('취소')).toBeTruthy();
     expect(screen.getByLabelText('나가기')).toBeTruthy();
+  });
+});
+
+// ── 프레스 치환 A13·A14(motion-press-sweep T5 / ui-spec §2-2·§3-1) ──────────────────────
+//   seam: A13은 testID(leave-confirm), A14는 a11yLabel(로그 이름 변경/로그 나가기).
+describe('LeaveLogSheets — 눌림 피드백(motion-press-sweep A13·A14)', () => {
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flattenTestId = ({ testId }: { testId: string }) =>
+    StyleSheet.flatten(screen.getByTestId(testId).props.style) as Record<string, unknown>;
+  const flattenLabel = ({ label }: { label: string }) =>
+    StyleSheet.flatten(screen.getByLabelText(label).props.style) as Record<string, unknown>;
+
+  it('A13 나가기 danger 버튼 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderWithTheme(<LeaveLogSheets {...baseProps} confirmVisible isCouple />);
+    await waitFor(() => expect(flattenTestId({ testId: 'leave-confirm' }).transform).toBeDefined());
+  });
+
+  it('A13 나가기 danger 버튼 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderWithTheme(<LeaveLogSheets {...baseProps} confirmVisible isCouple />);
+    await waitFor(() => expect(flattenTestId({ testId: 'leave-confirm' }).opacity).toBeDefined());
+    expect(flattenTestId({ testId: 'leave-confirm' }).transform).toBeUndefined();
+  });
+
+  it('A13 — leaving=true면 transform이 부착되지 않고 flatten opacity가 0.45다', () => {
+    mockReduceMotion({ enabled: false });
+    renderWithTheme(<LeaveLogSheets {...baseProps} confirmVisible isCouple leaving />);
+    expect(flattenTestId({ testId: 'leave-confirm' }).transform).toBeUndefined();
+    expect(flattenTestId({ testId: 'leave-confirm' }).opacity).toBe(0.45);
+  });
+
+  it('A14 MenuRow(로그 나가기) — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderWithTheme(<LeaveLogSheets {...baseProps} menuVisible />);
+    await waitFor(() => expect(flattenLabel({ label: '로그 나가기' }).transform).toBeDefined());
+  });
+
+  it('A14 MenuRow(로그 나가기) — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderWithTheme(<LeaveLogSheets {...baseProps} menuVisible />);
+    await waitFor(() => expect(flattenLabel({ label: '로그 나가기' }).opacity).toBeDefined());
+    expect(flattenLabel({ label: '로그 나가기' }).transform).toBeUndefined();
+  });
+
+  it('A14 MenuRow(로그 이름 변경) — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderWithTheme(<LeaveLogSheets {...baseProps} menuVisible />);
+    await waitFor(() => expect(flattenLabel({ label: '로그 이름 변경' }).transform).toBeDefined());
+  });
+
+  it('렌더 시 console.warn 0건(정적 opacity 계약 위반 없음)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderWithTheme(<LeaveLogSheets {...baseProps} menuVisible confirmVisible isCouple />);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

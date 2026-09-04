@@ -1,7 +1,8 @@
 // src/features/muklog/PlaceResultRow.spec.tsx
 // 장소검색 결과 1행 — 킷 mk-log.jsx:402-409 재현. 장소명·카테고리라벨·주소·탭 콜백·커버 그라데이션.
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -58,5 +59,39 @@ describe('PlaceResultRow', () => {
   it('접근성 라벨은 "<장소명> 선택"이다', () => {
     renderWithTheme(<PlaceResultRow placeName="보나" onPress={jest.fn()} />);
     expect(screen.getByLabelText('보나 선택')).toBeTruthy();
+  });
+});
+
+// ── 프레스 치환 A9(motion-press-sweep T4 / ui-spec §2-2·§3-1) ───────────────────────────
+//   seam = testID로 조회한 노드의 (a) flatten style의 transform/opacity 키 유무.
+describe('PlaceResultRow — 눌림 피드백(motion-press-sweep A9)', () => {
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flatten = () =>
+    StyleSheet.flatten(screen.getByTestId('result-0').props.style) as Record<string, unknown>;
+
+  it('A9 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderWithTheme(<PlaceResultRow placeName="보나" onPress={jest.fn()} testID="result-0" />);
+    await waitFor(() => expect(flatten().transform).toBeDefined());
+  });
+
+  it('A9 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderWithTheme(<PlaceResultRow placeName="보나" onPress={jest.fn()} testID="result-0" />);
+    await waitFor(() => expect(flatten().opacity).toBeDefined());
+    expect(flatten().transform).toBeUndefined();
+  });
+
+  it('렌더 시 console.warn 0건(정적 opacity 계약 위반 없음)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderWithTheme(<PlaceResultRow placeName="보나" onPress={jest.fn()} testID="result-0" />);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

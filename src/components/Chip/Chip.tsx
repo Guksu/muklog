@@ -12,7 +12,7 @@ import { MotionPressable } from '../MotionPressable';
 import { Text } from '../Text';
 
 // 눌렀을 때 도달할 불투명도 — 기존 눌림 스타일(opacity) 값 승계(비주얼 회귀 0).
-const PRESSED_OPACITY = 0.85;
+const CHIP_PRESSED_OPACITY = 0.85;
 
 export type ChipProps = {
   /** 칩 라벨(예: 카테고리명·"전체"). */
@@ -42,7 +42,7 @@ export const Chip = ({ label, selected = false, onPress, emoji, testID }: ChipPr
       accessibilityState={{ selected }}
       onPress={onPress}
       pressSize="md"
-      pressedOpacity={PRESSED_OPACITY}
+      pressedOpacity={CHIP_PRESSED_OPACITY}
       style={[styles.chip, container]}
     >
       {emoji ? <RNText style={styles.emoji}>{emoji}</RNText> : null}

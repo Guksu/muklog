@@ -9,7 +9,7 @@ import { useTheme } from '@/theme';
 import { MotionPressable } from '../MotionPressable';
 
 // 눌렀을 때 도달할 불투명도 — 기존 눌림 스타일(opacity) 값 승계(비주얼 회귀 0).
-const PRESSED_OPACITY = 0.7;
+const CARD_PRESSED_OPACITY = 0.7;
 
 export type CardProps = {
   children: React.ReactNode;
@@ -39,7 +39,7 @@ export const Card = ({ children, onPress, testID, accessibilityLabel, style }: C
         accessibilityLabel={accessibilityLabel}
         onPress={onPress}
         pressSize="lg"
-        pressedOpacity={PRESSED_OPACITY}
+        pressedOpacity={CARD_PRESSED_OPACITY}
         style={[base, style]}
       >
         {children}

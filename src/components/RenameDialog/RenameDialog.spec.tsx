@@ -3,8 +3,8 @@
 //   프리젠테이션 단위 검증: open 토글·controlled value·취소/저장 콜백·X클리어·maxLength·error/extra 슬롯.
 //   배선(정규화·RPC·검증)은 developer 몫 — 여기선 콜백 호출과 슬롯 렌더만 본다(plan §4.2 동작 계약 / T1 AC1.1~1.8).
 import React from 'react';
-import { Text } from 'react-native';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet, Text } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -204,5 +204,74 @@ describe('RenameDialog', () => {
       />,
     );
     expect(screen.getByText('INVITE_SLOT')).toBeTruthy();
+  });
+});
+
+// ── 프레스 치환 A1·A2(motion-press-sweep T3 / ui-spec §2-2·§3-1) ────────────────────────
+//   seam = testID로 조회한 노드의 (a) flatten style의 transform/opacity 키 유무 (b) onPress 횟수.
+//   pressedOpacity 실값·Animated 궤적은 검증하지 않는다(plan §9-2 — 실값은 motion.spec가 잠갔다).
+describe('RenameDialog — 취소/저장 액션 눌림 피드백(motion-press-sweep A1·A2)', () => {
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flatten = ({ testId }: { testId: string }) =>
+    StyleSheet.flatten(screen.getByTestId(testId).props.style) as Record<string, unknown>;
+
+  const renderDialog = (props: Partial<React.ComponentProps<typeof RenameDialog>> = {}) => {
+    renderWithTheme(
+      <RenameDialog
+        open
+        title="로그 이름"
+        value="새 이름"
+        onChange={noop}
+        onCancel={noop}
+        onSave={noop}
+        {...props}
+      />,
+    );
+  };
+
+  it('A1 취소 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderDialog();
+    await waitFor(() => expect(flatten({ testId: 'rename-dialog-cancel' }).transform).toBeDefined());
+  });
+
+  it('A1 취소 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderDialog();
+    await waitFor(() => expect(flatten({ testId: 'rename-dialog-cancel' }).opacity).toBeDefined());
+    expect(flatten({ testId: 'rename-dialog-cancel' }).transform).toBeUndefined();
+  });
+
+  it('A2 저장 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderDialog();
+    await waitFor(() => expect(flatten({ testId: 'rename-dialog-save' }).transform).toBeDefined());
+  });
+
+  it('A2 저장 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderDialog();
+    await waitFor(() => expect(flatten({ testId: 'rename-dialog-save' }).opacity).toBeDefined());
+    expect(flatten({ testId: 'rename-dialog-save' }).transform).toBeUndefined();
+  });
+
+  it('A2 저장 — saveDisabled=true면 transform이 부착되지 않고 flatten opacity가 0.45다', () => {
+    mockReduceMotion({ enabled: false });
+    renderDialog({ saveDisabled: true });
+    expect(flatten({ testId: 'rename-dialog-save' }).transform).toBeUndefined();
+    expect(flatten({ testId: 'rename-dialog-save' }).opacity).toBe(0.45);
+  });
+
+  it('렌더 시 console.warn 0건(정적 opacity 계약 위반 없음)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderDialog();
+    expect(warn).not.toHaveBeenCalled();
   });
 });

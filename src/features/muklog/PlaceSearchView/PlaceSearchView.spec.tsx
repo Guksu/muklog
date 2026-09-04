@@ -2,7 +2,8 @@
 // 장소검색 풀스크린 뷰 — 킷 mk-log.jsx:383-414 PlaceSearch 재현 (FLAG-1b).
 //   헤더(뒤로 + 검색 입력바) + 결과 리스트 + 상태(loading/empty/error). 표시 전용(controlled props).
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -140,5 +141,51 @@ describe('PlaceSearchView', () => {
       />,
     );
     expect(screen.getByLabelText('직접 입력')).toBeTruthy();
+  });
+});
+
+// ── 프레스 치환 A10(motion-press-sweep T4 / ui-spec §2-2·§3-1) ──────────────────────────
+//   seam = a11yLabel(직접 입력)로 조회한 노드의 (a) flatten style의 transform/opacity 키 유무.
+//   새 testID를 추가하지 않는다(plan §9-1).
+describe('PlaceSearchView — "직접 입력" 폴백 행 눌림 피드백(motion-press-sweep A10)', () => {
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flatten = () =>
+    StyleSheet.flatten(screen.getByLabelText('직접 입력').props.style) as Record<string, unknown>;
+
+  const renderManualRow = () =>
+    renderWithTheme(
+      <PlaceSearchView
+        {...baseProps}
+        status="ready"
+        query="없는가게"
+        results={[]}
+        onUseManualInput={jest.fn()}
+      />,
+    );
+
+  it('A10 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderManualRow();
+    await waitFor(() => expect(flatten().transform).toBeDefined());
+  });
+
+  it('A10 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderManualRow();
+    await waitFor(() => expect(flatten().opacity).toBeDefined());
+    expect(flatten().transform).toBeUndefined();
+  });
+
+  it('렌더 시 console.warn 0건(정적 opacity 계약 위반 없음)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderManualRow();
+    expect(warn).not.toHaveBeenCalled();
   });
 });

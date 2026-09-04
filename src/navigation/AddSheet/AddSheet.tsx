@@ -10,7 +10,7 @@ import { useTheme } from '@/theme';
 
 const ICON_BADGE_SIZE = 46;
 // 눌렀을 때 도달할 불투명도 — 기존 눌림 스타일(opacity) 값 승계(비주얼 회귀 0).
-const PRESSED_OPACITY = 0.6;
+const ADD_SHEET_PRESSED_OPACITY = 0.6;
 
 export type AddSheetProps = {
   visible: boolean;
@@ -58,7 +58,7 @@ const SheetAction = ({
       disabled={disabled}
       onPress={onPress}
       pressSize="lg"
-      pressedOpacity={PRESSED_OPACITY}
+      pressedOpacity={ADD_SHEET_PRESSED_OPACITY}
       style={[styles.row, row]}
     >
       <View style={[styles.badge, badge]}>

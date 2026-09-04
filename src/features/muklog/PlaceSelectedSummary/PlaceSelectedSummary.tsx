@@ -7,9 +7,9 @@
 //
 // 경계(plan): 표시 전용. onClear(선택 해제) 콜백만 — 좌표 NULL 처리·자동채움 복귀는 소비처(developer).
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { FoodCover, Text } from '@/components';
+import { FoodCover, MotionPressable, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 import { type MuklogCategoryKey } from '../categories';
@@ -34,6 +34,9 @@ const COVER_SIZE = 48;
 const COVER_RADIUS = 12;
 const COVER_EMOJI = 24;
 const BORDER_WIDTH = 1.5; // 킷 lk.placeChosen "1.5px solid var(--mk-accent-line)"
+
+// 눌림 불투명도 — 치환 전 로컬 styles.pressed 실값 승계(비주얼 회귀 0). 등급은 sm(인라인 텍스트 액션). ui-spec §2-2 A11.
+const CHANGE_ACTION_PRESSED_OPACITY = 0.6;
 
 export const PlaceSelectedSummary = ({
   placeName,
@@ -74,18 +77,19 @@ export const PlaceSelectedSummary = ({
           </Text>
         ) : null}
       </View>
-      <Pressable
+      <MotionPressable
         accessibilityRole="button"
         accessibilityLabel="장소 변경"
         onPress={onChange}
         hitSlop={8}
-        style={({ pressed }) => (pressed ? styles.pressed : null)}
+        pressSize="sm"
+        pressedOpacity={CHANGE_ACTION_PRESSED_OPACITY}
       >
         {/* 킷 "변경"(700/13, accent-strong) — 장소 재검색 진입(단일 액션). */}
         <Text variant="caption" color="accentStrong" style={styles.action}>
           변경
         </Text>
-      </Pressable>
+      </MotionPressable>
     </View>
   );
 };
@@ -96,6 +100,5 @@ const styles = StyleSheet.create({
   // fontSize 12.5로 줄이며 lineHeight도 함께 준다 — meta 변종 lineHeight(13)<= 줄높이가 빠듯해
   //   📍 이모지+한글 상단이 클립되던 문제(흰 여백처럼 보임). lineHeight 17로 여유 확보.
   sub: { fontSize: 12.5, lineHeight: 17, marginTop: 3 },
-  pressed: { opacity: 0.6 },
   action: { fontSize: 13 },
 });

@@ -4,10 +4,10 @@
 //   표시 전용(controlled) — query/results/status/onSelectResult는 developer(usePlaceSearch)가 주입,
 //     searching 진입/복귀 상태머신은 컨테이너(MuklogEditor)가 소유(onBack=복귀). 토큰만(raw hex 0), 이모지 허용.
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Icon, IconName, IconButton, Screen, Text } from '@/components';
+import { Icon, IconName, IconButton, MotionPressable, Screen, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 import { PlaceResultRow } from '../PlaceResultRow';
@@ -24,6 +24,9 @@ const resolveByKakaoCategory = ({ item }: { item: PlaceSearchItem }): MuklogCate
 const SEARCH_ICON_SIZE = 18; // 킷 mk-log:391
 const EMPTY_MESSAGE = '검색 결과가 없어요. 직접 입력해도 돼요.'; // plan §4.2
 const IDLE_LABEL = '장소 이름을 검색해 보세요'; // 킷 "연남동 주변 추천"(목업) 대체 — 일반 안내
+
+// 눌림 불투명도 — 치환 전 로컬 styles.pressed 실값 승계(비주얼 회귀 0). 등급은 lg(전폭 보더 행). ui-spec §2-2 A10.
+const MANUAL_ROW_PRESSED_OPACITY = 0.6;
 
 export type PlaceSearchViewProps = {
   /** 검색어(controlled). usePlaceSearch.query. */
@@ -161,11 +164,13 @@ export const PlaceSearchView = ({
 
         {showManual ? (
           // §4.2 "직접 입력" 폴백 행 — 킷 결과행 톤(accent). 검색어를 장소명으로 채택.
-          <Pressable
+          <MotionPressable
             accessibilityRole="button"
             accessibilityLabel="직접 입력"
             onPress={onUseManualInput}
-            style={({ pressed }) => [
+            pressSize="lg"
+            pressedOpacity={MANUAL_ROW_PRESSED_OPACITY}
+            style={[
               styles.manualRow,
               {
                 borderColor: theme.color.hairline,
@@ -175,13 +180,12 @@ export const PlaceSearchView = ({
                 paddingVertical: theme.spacing[14],
                 paddingHorizontal: theme.spacing[16],
               },
-              pressed ? styles.pressed : null,
             ]}
           >
             <Text variant="body" color="accentStrong">
               ‘{manualName}’(으)로 직접 입력
             </Text>
-          </Pressable>
+          </MotionPressable>
         ) : null}
 
         {status === 'ready' && results.length > 0 ? (
@@ -213,5 +217,4 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   stateRow: { flexDirection: 'row', alignItems: 'center' },
   manualRow: { borderWidth: StyleSheet.hairlineWidth },
-  pressed: { opacity: 0.6 },
 });
