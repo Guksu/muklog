@@ -5,9 +5,9 @@
 //   presentational: open/close는 부모가 제어(menuVisible/confirmVisible), leaveRoom RPC·성공 후 nav/refresh는 developer.
 //   ⋯ 진입 버튼은 LogScreen 헤더(developer 배선) — 이 컴포넌트는 시트 2종만 소유. 스타일=토큰만(raw hex 0).
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { Button, Icon, IconName, Sheet, Text } from '@/components';
+import { Button, Icon, IconName, MotionPressable, Sheet, Text } from '@/components';
 import { useTheme } from '@/theme';
 import type { ColorToken } from '@/theme';
 
@@ -21,6 +21,11 @@ const SOLO_TITLE = '로그를 삭제할까요?';
 const SOLO_BODY = '이 로그와 모든 기록이 사라져요.\n되돌릴 수 없어요.';
 const SOLO_CONFIRM_LABEL = '삭제하기';
 const CANCEL_LABEL = '취소';
+
+// 눌림 불투명도 — 치환 전 인라인 실값 승계(비주얼 회귀 0). 등급은 md(전폭 라벨 버튼). ui-spec §2-2 A13.
+const DANGER_BTN_PRESSED_OPACITY = 0.85;
+// 눌림 불투명도 — 치환 전 인라인 실값 승계(비주얼 회귀 0). 등급은 lg(전폭 메뉴 행). ui-spec §2-2 A14.
+const MENU_ROW_PRESSED_OPACITY = 0.6;
 
 export type LeaveLogSheetsProps = {
   /** ⋯ 메뉴 시트 표시(부모: LogScreen 헤더 ⋯ 버튼이 open). */
@@ -104,20 +109,22 @@ export const LeaveLogSheets = ({
         ) : null}
         <View style={{ gap: theme.spacing[10] }}>
           {/* danger 버튼(status-negative) — 확인 시트는 닫지 않음(developer가 성공 시 close/goBack). */}
-          <Pressable
+          <MotionPressable
             testID="leave-confirm"
             accessibilityRole="button"
             accessibilityLabel={confirmLabel}
             accessibilityState={{ disabled: leaving, busy: leaving }}
             disabled={leaving}
             onPress={onConfirmLeave}
-            style={({ pressed }) => [
+            pressSize="md"
+            pressedOpacity={DANGER_BTN_PRESSED_OPACITY}
+            style={[
               styles.dangerBtn,
               {
                 backgroundColor: theme.color.negative,
                 borderRadius: theme.radius.control,
                 paddingVertical: theme.spacing[14],
-                opacity: leaving ? 0.45 : pressed ? 0.85 : 1,
+                opacity: leaving ? 0.45 : 1,
               },
             ]}
           >
@@ -128,7 +135,7 @@ export const LeaveLogSheets = ({
                 {confirmLabel}
               </Text>
             )}
-          </Pressable>
+          </MotionPressable>
           <Button
             title={CANCEL_LABEL}
             accessibilityLabel={CANCEL_LABEL}
@@ -161,17 +168,18 @@ const MenuRow = ({
   const theme = useTheme();
   const tint: ColorToken = danger ? 'negative' : 'fg';
   return (
-    <Pressable
+    <MotionPressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       onPress={onPress}
-      style={({ pressed }) => [
+      pressSize="lg"
+      pressedOpacity={MENU_ROW_PRESSED_OPACITY}
+      style={[
         styles.menuRow,
         {
           gap: theme.spacing[14],
           paddingVertical: theme.spacing[14],
           paddingHorizontal: theme.spacing[8],
-          opacity: pressed ? 0.6 : 1,
         },
       ]}
     >
@@ -179,7 +187,7 @@ const MenuRow = ({
       <Text variant="body" color={tint}>
         {label}
       </Text>
-    </Pressable>
+    </MotionPressable>
   );
 };
 

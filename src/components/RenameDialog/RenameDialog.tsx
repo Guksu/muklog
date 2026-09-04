@@ -24,10 +24,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 
 import { Icon, IconName } from '../Icon';
+import { MotionPressable } from '../MotionPressable';
 import { Text } from '../Text';
 
 // 딤 배경(킷 rgba(20,12,8,.34)) — 웜 잉크 위 투명도로 근사(토큰 동일 색 부재, Sheet와 동일 접근).
 const BACKDROP_OPACITY = 0.34;
+
+// 눌림 불투명도 — 치환 전 로컬 styles.pressed 실값 승계(비주얼 회귀 0). 등급은 md(라벨 버튼). ui-spec §2-2 A1·A2.
+const DIALOG_ACTION_PRESSED_OPACITY = 0.6;
 
 // 컨트롤 내부 레이아웃 수치(킷 verbatim) — 4px 그리드 밖이라 토큰화하지 않는다(Button.BUTTON_SIZE 선례).
 const DIALOG_LAYOUT = {
@@ -218,30 +222,30 @@ export const RenameDialog = ({
 
           {/* iOS 알림 버튼 행 — 상단 hairline + 취소 │ 저장 분할 */}
           <View style={[styles.actions, { borderTopColor: theme.color.hairlineAlt }]}>
-            <Pressable
+            <MotionPressable
               testID="rename-dialog-cancel"
               accessibilityRole="button"
               accessibilityLabel="취소"
               onPress={onCancel}
-              style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}
+              pressSize="md"
+              pressedOpacity={DIALOG_ACTION_PRESSED_OPACITY}
+              style={styles.action}
             >
               <Text variant="dialogInput" color="fgWeak">
                 취소
               </Text>
-            </Pressable>
+            </MotionPressable>
             <View style={[styles.divider, { backgroundColor: theme.color.hairlineAlt }]} />
-            <Pressable
+            <MotionPressable
               testID="rename-dialog-save"
               accessibilityRole="button"
               accessibilityLabel="저장"
               accessibilityState={{ disabled: isSaveDisabled, busy: saving }}
               disabled={isSaveDisabled}
               onPress={handleSave}
-              style={({ pressed }) => [
-                styles.action,
-                pressed && !isSaveDisabled ? styles.pressed : null,
-                isSaveDisabled ? styles.actionDisabled : null,
-              ]}
+              pressSize="md"
+              pressedOpacity={DIALOG_ACTION_PRESSED_OPACITY}
+              style={[styles.action, isSaveDisabled ? styles.actionDisabled : null]}
             >
               {saving ? (
                 <ActivityIndicator testID="rename-dialog-saving" color={theme.color.accentStrong} />
@@ -250,7 +254,7 @@ export const RenameDialog = ({
                   저장
                 </Text>
               )}
-            </Pressable>
+            </MotionPressable>
           </View>
         </Pressable>
       </View>
@@ -278,5 +282,4 @@ const styles = StyleSheet.create({
   action: { flex: 1, paddingVertical: DIALOG_LAYOUT.buttonPadding, alignItems: 'center', justifyContent: 'center' },
   actionDisabled: { opacity: 0.45 },
   divider: { width: DIALOG_LAYOUT.dividerWidth },
-  pressed: { opacity: 0.6 },
 });

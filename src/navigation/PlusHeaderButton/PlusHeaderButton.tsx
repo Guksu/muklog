@@ -12,7 +12,7 @@ import { Icon, IconName, MotionPressable } from '@/components';
 import { useTheme } from '@/theme';
 
 // 눌렀을 때 도달할 불투명도 — 기존 눌림 스타일(opacity) 값 승계(비주얼 회귀 0).
-const PRESSED_OPACITY = 0.6;
+const PLUS_HEADER_BUTTON_PRESSED_OPACITY = 0.6;
 
 import { AddSheet } from '../AddSheet';
 import { useStartLogFlow } from '../useStartLogFlow';
@@ -42,7 +42,7 @@ export const PlusHeaderButton = () => {
         onPress={() => setSheetOpen(true)}
         hitSlop={theme.spacing[8]}
         pressSize="sm"
-        pressedOpacity={PRESSED_OPACITY}
+        pressedOpacity={PLUS_HEADER_BUTTON_PRESSED_OPACITY}
         // mk-home HomeHeader 재현: 액센트-weak 버블 배경 + 액센트 아이콘(원형 40 버블).
         style={[
           styles.button,

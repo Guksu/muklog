@@ -9,7 +9,6 @@
 import React from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text as RNText,
@@ -21,7 +20,19 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Avatar, Button, FadeInImage, FoodCover, Icon, IconButton, IconName, Sheet, Stars, Text } from '@/components';
+import {
+  Avatar,
+  Button,
+  FadeInImage,
+  FoodCover,
+  Icon,
+  IconButton,
+  IconName,
+  MotionPressable,
+  Sheet,
+  Stars,
+  Text,
+} from '@/components';
 // 직접 경로 import — 배럴(@/features/map/components)은 다른 지도 컴포넌트(expo-location 등) 의존을 함께 끌어옴.
 import { MuklogMiniMap } from '@/features/map/components/MuklogMiniMap';
 import { AuthorKind, resolveAuthor } from '@/features/muklog/author';
@@ -91,6 +102,11 @@ const FALLBACK_EMOJI_SIZE = 92; // mk-log:136 emojiSize 92
 const AUTHOR_AVATAR_SIZE = 26;
 const STARS_SIZE = 18; // mk-log:164
 const INFO_ICON_SIZE = 18; // mk-log:239
+
+// 눌림 불투명도 — 치환 전 인라인 실값 승계(비주얼 회귀 0). 등급은 md(전폭 라벨 버튼). ui-spec §2-2 A15.
+const DELETE_BTN_PRESSED_OPACITY = 0.85;
+// 눌림 불투명도 — 치환 전 인라인 실값 승계(비주얼 회귀 0). 등급은 lg(전폭 메뉴 행). ui-spec §2-2 A16.
+const MENU_ROW_PRESSED_OPACITY = 0.6;
 
 // ── 메타 정보 한 줄 (킷 InfoRow mk-log:236-243) ─────────────────────────────────────
 //   location/calendar 아이콘(primary) + 라벨(48px 고정, fgMuted) + 값(우정렬, fg). last면 하단 보더 없음.
@@ -486,20 +502,22 @@ export const MuklogDetailScreen = ({
         ) : null}
         <View style={{ gap: theme.spacing[10] }}>
           {/* 삭제하기 — 킷 status-negative 버튼(negative 토큰). 확인 시트는 닫지 않음(developer가 성공 시 goBack). */}
-          <Pressable
+          <MotionPressable
             testID="muklog-delete-confirm"
             accessibilityRole="button"
             accessibilityLabel="삭제하기"
             accessibilityState={{ disabled: deleting, busy: deleting }}
             disabled={deleting}
             onPress={onConfirmDelete}
-            style={({ pressed }) => [
+            pressSize="md"
+            pressedOpacity={DELETE_BTN_PRESSED_OPACITY}
+            style={[
               styles.deleteBtn,
               {
                 backgroundColor: theme.color.negative,
                 borderRadius: theme.radius.control,
                 paddingVertical: theme.spacing[14],
-                opacity: deleting ? 0.45 : pressed ? 0.85 : 1,
+                opacity: deleting ? 0.45 : 1,
               },
             ]}
           >
@@ -510,7 +528,7 @@ export const MuklogDetailScreen = ({
                 삭제하기
               </Text>
             )}
-          </Pressable>
+          </MotionPressable>
           <Button
             title="취소"
             accessibilityLabel="취소"
@@ -543,20 +561,22 @@ const MenuRow = ({
   const theme = useTheme();
   const tint: ColorToken = danger ? 'negative' : 'fg';
   return (
-    <Pressable
+    <MotionPressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       onPress={onPress}
-      style={({ pressed }) => [
+      pressSize="lg"
+      pressedOpacity={MENU_ROW_PRESSED_OPACITY}
+      style={[
         styles.menuRow,
-        { gap: theme.spacing[14], paddingVertical: theme.spacing[14], paddingHorizontal: theme.spacing[8], opacity: pressed ? 0.6 : 1 },
+        { gap: theme.spacing[14], paddingVertical: theme.spacing[14], paddingHorizontal: theme.spacing[8] },
       ]}
     >
       <Icon name={icon} size={21} color={tint} />
       <Text variant="body" color={tint}>
         {label}
       </Text>
-    </Pressable>
+    </MotionPressable>
   );
 };
 

@@ -12,7 +12,7 @@ import { Icon, IconName } from '../Icon';
 import { MotionPressable } from '../MotionPressable';
 
 // 눌렀을 때 도달할 불투명도 — 기존 눌림 스타일(opacity) 값 승계(비주얼 회귀 0).
-const PRESSED_OPACITY = 0.6;
+const ICON_BUTTON_PRESSED_OPACITY = 0.6;
 
 export type IconButtonProps = {
   /** 렌더할 아이콘(IconName). */
@@ -60,7 +60,7 @@ export const IconButton = ({
       accessibilityLabel={accessibilityLabel}
       onPress={onPress}
       pressSize="sm"
-      pressedOpacity={PRESSED_OPACITY}
+      pressedOpacity={ICON_BUTTON_PRESSED_OPACITY}
       style={[styles.button, container]}
     >
       <Icon name={name} size={size} color={color} />

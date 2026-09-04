@@ -20,7 +20,7 @@ import { Routes, type AppStackParamList } from "../routes";
 
 const HEADER_AVATAR_SIZE = 36;
 // 눌렀을 때 도달할 불투명도 — 기존 눌림 스타일(opacity) 값 승계(비주얼 회귀 0).
-const PRESSED_OPACITY = 0.6;
+const HOME_HEADER_PRESSED_OPACITY = 0.6;
 // 킷 mk-home: 먹로그 탭 title="먹로그"(:82), 지도 탭 title="지도"(:261). 탭별 워드마크 텍스트.
 const DEFAULT_WORDMARK = "먹로그";
 
@@ -82,7 +82,7 @@ export const HomeHeader = ({ title = DEFAULT_WORDMARK }: HomeHeaderProps) => {
           onPress={() => navigation.navigate(Routes.Profile)}
           hitSlop={theme.spacing[8]}
           pressSize="sm"
-          pressedOpacity={PRESSED_OPACITY}
+          pressedOpacity={HOME_HEADER_PRESSED_OPACITY}
           style={styles.avatarButton}
         >
           {authState.status === "authenticated" ? (

@@ -9,11 +9,13 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
-import { Text } from '@/components';
+import { MotionPressable, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 // 딤 배경(킷 rgba(20,12,8,.34)) — 웜 잉크 위 투명도 근사(UpdateSuggestModal·RenameDialog와 동일 접근·값).
 const BACKDROP_OPACITY = 0.34;
+// 눌림 불투명도 — 치환 전 로컬 styles.pressed 실값 승계(비주얼 회귀 0). 등급은 md(라벨 버튼). ui-spec §2-2 A6·A7.
+const DIALOG_ACTION_PRESSED_OPACITY = 0.6;
 // 셸 레이아웃 수치(UpdateSuggestModal.tsx:19-24와 동기 — 킷 verbatim, 4px 그리드 밖이라 토큰화 안 함).
 const DIALOG_LAYOUT = {
   cardWidth: '84%' as const,
@@ -84,29 +86,33 @@ export const OtaReadyDialog = ({ visible, onApply, onDismiss }: OtaReadyDialogPr
 
           {/* iOS 알림 버튼 행 — 상단 hairline. 나중에 │ 지금 적용(primary). */}
           <View style={[styles.actions, { borderTopColor: theme.color.hairlineAlt }]}>
-            <Pressable
+            <MotionPressable
               testID="ota-dismiss"
               accessibilityRole="button"
               accessibilityLabel="나중에"
               onPress={onDismiss}
-              style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}
+              pressSize="md"
+              pressedOpacity={DIALOG_ACTION_PRESSED_OPACITY}
+              style={styles.action}
             >
               <Text variant="dialogInput" color="fgWeak">
                 나중에
               </Text>
-            </Pressable>
+            </MotionPressable>
             <View style={[styles.divider, { backgroundColor: theme.color.hairlineAlt }]} />
-            <Pressable
+            <MotionPressable
               testID="ota-apply"
               accessibilityRole="button"
               accessibilityLabel="지금 적용"
               onPress={onApply}
-              style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}
+              pressSize="md"
+              pressedOpacity={DIALOG_ACTION_PRESSED_OPACITY}
+              style={styles.action}
             >
               <Text variant="button" color="accentStrong">
                 지금 적용
               </Text>
-            </Pressable>
+            </MotionPressable>
           </View>
         </Pressable>
       </View>
@@ -129,5 +135,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   divider: { width: DIALOG_LAYOUT.dividerWidth },
-  pressed: { opacity: 0.6 },
 });

@@ -5,9 +5,9 @@
 //   presentational: open/close·deleteAccount 실행·성공 후 signOut 은 부모(ProfileScreen)가 소유.
 //   진행 중(deleting)이면 danger 버튼 비활성(중복 실행 차단), 실패(error)는 인라인(세션 유지·재시도). 스타일=토큰만.
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { Button, Sheet, Text } from '@/components';
+import { Button, MotionPressable, Sheet, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 // 카피(퍼블리싱 SSOT) — plan §4. 되돌릴 수 없음 + 상대방 기록 보존 안내를 명확히.
@@ -15,6 +15,9 @@ const TITLE = '정말 탈퇴할까요?';
 const BODY = '계정과 내 정보가 삭제돼요. 되돌릴 수 없어요.\n함께 만든 기록은 상대방에게 남아요.';
 const CONFIRM_LABEL = '탈퇴하기';
 const CANCEL_LABEL = '취소';
+
+// 눌림 불투명도 — 치환 전 인라인 실값 승계(비주얼 회귀 0). 등급은 md(전폭 라벨 버튼). ui-spec §2-2 A12.
+const DANGER_BTN_PRESSED_OPACITY = 0.85;
 
 export type DeleteAccountSheetProps = {
   /** 확인 시트 표시(부모: "회원 탈퇴" 행 탭 → open / 취소·성공 시 close). */
@@ -65,20 +68,22 @@ export const DeleteAccountSheet = ({
       ) : null}
       <View style={{ gap: theme.spacing[10] }}>
         {/* danger 버튼(status-negative) — LeaveLogSheets 패턴과 동일. 성공 시 close/signOut 은 부모. */}
-        <Pressable
+        <MotionPressable
           testID="delete-account-confirm"
           accessibilityRole="button"
           accessibilityLabel={CONFIRM_LABEL}
           accessibilityState={{ disabled: deleting, busy: deleting }}
           disabled={deleting}
           onPress={handleConfirm}
-          style={({ pressed }) => [
+          pressSize="md"
+          pressedOpacity={DANGER_BTN_PRESSED_OPACITY}
+          style={[
             styles.dangerBtn,
             {
               backgroundColor: theme.color.negative,
               borderRadius: theme.radius.control,
               paddingVertical: theme.spacing[14],
-              opacity: deleting ? 0.45 : pressed ? 0.85 : 1,
+              opacity: deleting ? 0.45 : 1,
             },
           ]}
         >
@@ -89,7 +94,7 @@ export const DeleteAccountSheet = ({
               {CONFIRM_LABEL}
             </Text>
           )}
-        </Pressable>
+        </MotionPressable>
         <Button
           title={CANCEL_LABEL}
           accessibilityLabel={CANCEL_LABEL}

@@ -4,8 +4,8 @@
 //   검증: 캐러셀(0/1/N장·인디케이터), category/rating/memo NULL 폴백, back→onBack, share/more 부재,
 //         작성자 라벨, hasCoords stub 분기, loading/notFound/error 상태.
 import React from 'react';
-import { StyleSheet } from 'react-native';
-import { act, fireEvent, screen, within } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 import { MOTION_DURATION } from '@/theme';
@@ -308,6 +308,74 @@ describe('MuklogDetailScreen — more 메뉴 / 편집·삭제 (muklog-edit §5 �
     renderManage({ canManage: true });
     expect(screen.queryByLabelText('공유')).toBeNull();
     expect(screen.queryByTestId('muklog-detail-share')).toBeNull();
+  });
+
+  // ── 프레스 치환 A15·A16(motion-press-sweep T5 / ui-spec §2-2·§3-1) ────────────────────
+  //   seam: A15는 testID(muklog-delete-confirm), A16은 a11yLabel(편집/삭제).
+  describe('눌림 피드백(motion-press-sweep A15·A16)', () => {
+    const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+      jest
+        .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+        .mockReturnValue(Promise.resolve(enabled));
+    };
+
+    afterEach(() => jest.restoreAllMocks());
+
+    const flattenTestId = ({ testId }: { testId: string }) =>
+      StyleSheet.flatten(screen.getByTestId(testId).props.style) as Record<string, unknown>;
+    const flattenLabel = ({ label }: { label: string }) =>
+      StyleSheet.flatten(screen.getByLabelText(label).props.style) as Record<string, unknown>;
+
+    it('A15 삭제하기 danger 버튼 — 감소 모션 OFF: transform이 부착된다', async () => {
+      mockReduceMotion({ enabled: false });
+      renderManage({ canManage: true });
+      fireEvent.press(screen.getByLabelText('더보기'));
+      fireEvent.press(screen.getByLabelText('삭제'));
+      await waitFor(() =>
+        expect(flattenTestId({ testId: 'muklog-delete-confirm' }).transform).toBeDefined(),
+      );
+    });
+
+    it('A15 삭제하기 danger 버튼 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+      mockReduceMotion({ enabled: true });
+      renderManage({ canManage: true });
+      fireEvent.press(screen.getByLabelText('더보기'));
+      fireEvent.press(screen.getByLabelText('삭제'));
+      await waitFor(() => expect(flattenTestId({ testId: 'muklog-delete-confirm' }).opacity).toBeDefined());
+      expect(flattenTestId({ testId: 'muklog-delete-confirm' }).transform).toBeUndefined();
+    });
+
+    it('A15 — deleting=true면 transform이 부착되지 않고 flatten opacity가 0.45다', () => {
+      mockReduceMotion({ enabled: false });
+      renderManage({ canManage: true, deleting: true });
+      fireEvent.press(screen.getByLabelText('더보기'));
+      fireEvent.press(screen.getByLabelText('삭제'));
+      expect(flattenTestId({ testId: 'muklog-delete-confirm' }).transform).toBeUndefined();
+      expect(flattenTestId({ testId: 'muklog-delete-confirm' }).opacity).toBe(0.45);
+    });
+
+    it('A16 MenuRow(편집) — 감소 모션 OFF: transform이 부착된다', async () => {
+      mockReduceMotion({ enabled: false });
+      renderManage({ canManage: true });
+      fireEvent.press(screen.getByLabelText('더보기'));
+      await waitFor(() => expect(flattenLabel({ label: '편집' }).transform).toBeDefined());
+    });
+
+    it('A16 MenuRow(삭제) — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+      mockReduceMotion({ enabled: true });
+      renderManage({ canManage: true });
+      fireEvent.press(screen.getByLabelText('더보기'));
+      await waitFor(() => expect(flattenLabel({ label: '삭제' }).opacity).toBeDefined());
+      expect(flattenLabel({ label: '삭제' }).transform).toBeUndefined();
+    });
+
+    it('렌더 시 console.warn 0건(정적 opacity 계약 위반 없음)', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      renderManage({ canManage: true });
+      fireEvent.press(screen.getByLabelText('더보기'));
+      fireEvent.press(screen.getByLabelText('삭제')); // 확인 시트를 열어 muklog-delete-confirm(A15)까지 마운트시킨다
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 });
 

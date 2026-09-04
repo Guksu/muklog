@@ -6,9 +6,9 @@
 //
 // 경계(plan): 표시 전용. 탭 콜백(onPress)만 노출 — 선택→자동채움 로직은 소비처(MuklogEntrySheet/developer).
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { FoodCover, Icon, IconName, Text } from '@/components';
+import { FoodCover, Icon, IconName, MotionPressable, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 import { categoryLabel, type MuklogCategoryKey } from '../categories';
@@ -34,6 +34,9 @@ const COVER_RADIUS = 12;
 const COVER_EMOJI = 22;
 const PLUS_SIZE = 20;
 
+// 눌림 불투명도 — 치환 전 로컬 styles.pressed 실값 승계(비주얼 회귀 0). 등급은 lg(카드형 리스트 행). ui-spec §2-2 A9.
+const RESULT_ROW_PRESSED_OPACITY = 0.6;
+
 export const PlaceResultRow = ({
   placeName,
   category = null,
@@ -49,15 +52,16 @@ export const PlaceResultRow = ({
   const subline = [label, place].filter(Boolean).join(' · ');
 
   return (
-    <Pressable
+    <MotionPressable
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={`${placeName} 선택`}
       onPress={onPress}
-      style={({ pressed }) => [
+      pressSize="lg"
+      pressedOpacity={RESULT_ROW_PRESSED_OPACITY}
+      style={[
         styles.row,
         { borderRadius: theme.radius.control, paddingVertical: 11, paddingHorizontal: 12 },
-        pressed ? styles.pressed : null,
       ]}
     >
       <FoodCover category={category} size={COVER_SIZE} radius={COVER_RADIUS} emojiSize={COVER_EMOJI} />
@@ -74,14 +78,13 @@ export const PlaceResultRow = ({
         ) : null}
       </View>
       <Icon name={IconName.Plus} size={PLUS_SIZE} color="primary" />
-    </Pressable>
+    </MotionPressable>
   );
 };
 
 const styles = StyleSheet.create({
   // 킷 lk.resultRow: gap 12, transparent bg(보더 없음).
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  pressed: { opacity: 0.6 },
   body: { flex: 1, minWidth: 0 },
   name: { fontSize: 15 },
   subline: { fontSize: 12.5, marginTop: 2 },

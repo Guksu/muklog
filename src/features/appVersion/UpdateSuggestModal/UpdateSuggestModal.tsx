@@ -10,11 +10,13 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
-import { Text } from '@/components';
+import { MotionPressable, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 // 딤 배경(킷 rgba(20,12,8,.34)) — 웜 잉크 위 투명도 근사(RenameDialog와 동일 접근·값).
 const BACKDROP_OPACITY = 0.34;
+// 눌림 불투명도 — 치환 전 로컬 styles.pressed 실값 승계(비주얼 회귀 0). 등급은 md(라벨 버튼). ui-spec §2-2 A3·A4·A5.
+const DIALOG_ACTION_PRESSED_OPACITY = 0.6;
 // 셸 레이아웃 수치(RenameDialog.tsx:33-48와 동기 — 킷 verbatim, 4px 그리드 밖이라 토큰화 안 함).
 const DIALOG_LAYOUT = {
   cardWidth: '84%' as const,
@@ -92,43 +94,49 @@ export const UpdateSuggestModal = ({
           {/* iOS 알림 버튼 행 — 상단 hairline. storeUrl 있으면 나중에 │ 업데이트, 없으면 단일 확인. */}
           {storeUrl ? (
             <View style={[styles.actions, { borderTopColor: theme.color.hairlineAlt }]}>
-              <Pressable
+              <MotionPressable
                 testID="update-suggest-dismiss"
                 accessibilityRole="button"
                 accessibilityLabel="나중에"
                 onPress={onDismiss}
-                style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}
+                pressSize="md"
+                pressedOpacity={DIALOG_ACTION_PRESSED_OPACITY}
+                style={styles.action}
               >
                 <Text variant="dialogInput" color="fgWeak">
                   나중에
                 </Text>
-              </Pressable>
+              </MotionPressable>
               <View style={[styles.divider, { backgroundColor: theme.color.hairlineAlt }]} />
-              <Pressable
+              <MotionPressable
                 testID="update-suggest-update"
                 accessibilityRole="button"
                 accessibilityLabel="업데이트"
                 onPress={onUpdatePress}
-                style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}
+                pressSize="md"
+                pressedOpacity={DIALOG_ACTION_PRESSED_OPACITY}
+                style={styles.action}
               >
                 <Text variant="button" color="accentStrong">
                   업데이트
                 </Text>
-              </Pressable>
+              </MotionPressable>
             </View>
           ) : (
             <View style={[styles.actions, { borderTopColor: theme.color.hairlineAlt }]}>
-              <Pressable
+              <MotionPressable
                 testID="update-suggest-dismiss"
                 accessibilityRole="button"
                 accessibilityLabel="확인"
                 onPress={onDismiss}
-                style={({ pressed }) => [styles.action, pressed ? styles.pressed : null]}
+                pressSize="md"
+                pressedOpacity={DIALOG_ACTION_PRESSED_OPACITY}
+                style={styles.action}
               >
                 <Text variant="button" color="accentStrong">
                   확인
                 </Text>
-              </Pressable>
+              </MotionPressable>
             </View>
           )}
         </Pressable>
@@ -147,5 +155,4 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth },
   action: { flex: 1, paddingVertical: DIALOG_LAYOUT.buttonPadding, alignItems: 'center', justifyContent: 'center' },
   divider: { width: DIALOG_LAYOUT.dividerWidth },
-  pressed: { opacity: 0.6 },
 });
