@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-09-05 |
 | 브랜치 | claude/wishlist-ui-improvements-w8rirm (세션 지정 — squash merge 권장) |
-| PR | (생성 후 갱신) |
+| PR | https://github.com/Guksu/muklog/pull/27 |
 | 관련 경로 | `src/lib/{queryClient,queryKeys,useCachedQuery}/`(신설) · `src/features/muklog/{signedUrlCache,signedUrlMap,useMuklogs,useMuklog}/` · `src/features/room/useMyLogs/` · `src/features/auth/useClearCachesOnSignOut/`(신설) · `App.tsx`
 
 ## 1. 개요
