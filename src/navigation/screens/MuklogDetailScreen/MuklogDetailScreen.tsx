@@ -29,6 +29,7 @@ import {
   IconButton,
   IconName,
   MotionPressable,
+  PhotoViewer,
   Sheet,
   Stars,
   Text,
@@ -107,6 +108,9 @@ const INFO_ICON_SIZE = 18; // mk-log:239
 const DELETE_BTN_PRESSED_OPACITY = 0.85;
 // 눌림 불투명도 — 치환 전 인라인 실값 승계(비주얼 회귀 0). 등급은 lg(전폭 메뉴 행). ui-spec §2-2 A16.
 const MENU_ROW_PRESSED_OPACITY = 0.6;
+// 눌림 불투명도 — motion-press-c의 MuklogCard(lg/0.7) 승계: 같은 "사진 위를 눌러 상세로 들어가는" 표면이라
+//   판정 어휘를 새로 만들지 않고 앱 안에서 이미 쓰는 값을 그대로 쓴다(사진 위 dim은 0.85로는 눈에 잘 안 띈다).
+const PHOTO_PRESSED_OPACITY = 0.7;
 
 // ── 메타 정보 한 줄 (킷 InfoRow mk-log:236-243) ─────────────────────────────────────
 //   location/calendar 아이콘(primary) + 라벨(48px 고정, fgMuted) + 값(우정렬, fg). last면 하단 보더 없음.
@@ -177,6 +181,9 @@ export const MuklogDetailScreen = ({
   // more 메뉴 / 삭제 확인 시트 열림 상태(킷 mk-log:124-125 menuOpen/confirmOpen).
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  // 풀스크린 사진 뷰어(photo-viewer §3.3) — null=닫힘 / 숫자=그 **배열 인덱스**에서 열림.
+  //   orderIndex가 아니다: 삭제 이력이 있으면 order_index에 구멍이 나 배열 위치와 어긋난다(B2).
+  const [viewerIndex, setViewerIndex] = React.useState<number | null>(null);
 
   if (state.status === 'loading') {
     return (
@@ -292,16 +299,28 @@ export const MuklogDetailScreen = ({
               onScroll={handleScroll}
               scrollEventThrottle={16}
             >
-              {muklog.photos.map((p) => (
-                // motion-pass-1 D2: 로드되면 페이드로 자리를 잡는다(FadeInImage는 Image 드롭인 — props 불변).
-                <FadeInImage
+              {muklog.photos.map((p, i) => (
+                // 탭 어포던스 — 누르면 풀스크린 뷰어가 이 사진에서 열린다(photo-viewer D1·D2).
+                //   낭독은 래퍼가 1회만 한다(안쪽 이미지는 accessible={false}) — 같은 문구 중복 낭독 방지(B6).
+                //   위치 숫자는 **배열 인덱스**로 센다(orderIndex 아님) — 뷰어 카운터(`n / total`)와 어긋나지 않게(B2).
+                <MotionPressable
                   key={`${p.orderIndex}-${p.uri}`}
-                  testID="muklog-detail-photo"
-                  accessibilityLabel={`${muklog.placeName} 사진 ${p.orderIndex + 1}`}
-                  source={{ uri: p.uri }}
-                  resizeMode="cover"
-                  style={{ width, aspectRatio: PHOTO_ASPECT }}
-                />
+                  testID="muklog-detail-photo-press"
+                  accessibilityRole="button"
+                  accessibilityLabel={`${muklog.placeName} 사진 ${i + 1} 크게 보기`}
+                  onPress={() => setViewerIndex(i)}
+                  pressSize="lg"
+                  pressedOpacity={PHOTO_PRESSED_OPACITY}
+                >
+                  {/* motion-pass-1 D2: 로드되면 페이드로 자리를 잡는다(FadeInImage는 Image 드롭인 — props 불변). */}
+                  <FadeInImage
+                    testID="muklog-detail-photo"
+                    accessible={false}
+                    source={{ uri: p.uri }}
+                    resizeMode="cover"
+                    style={{ width, aspectRatio: PHOTO_ASPECT }}
+                  />
+                </MotionPressable>
               ))}
             </ScrollView>
           ) : (
@@ -539,6 +558,19 @@ export const MuklogDetailScreen = ({
           />
         </View>
       </Sheet>
+
+      {/* 풀스크린 사진 뷰어 — 상세 루트 최하단(Sheet 2개와 같은 층). ScrollView 안에 넣지 않는다.
+          상세가 이미 가진 signed URL 문자열을 그대로 넘긴다 → 신규 네트워크 호출 0(plan §8).
+          visible과 initialIndex를 같은 렌더에서 함께 준다 — 뷰어는 visible 상승 엣지에서만 인덱스를 읽는다(B8). */}
+      <PhotoViewer
+        visible={viewerIndex !== null}
+        photos={muklog.photos.map((p, i) => ({
+          uri: p.uri,
+          accessibilityLabel: `${muklog.placeName} 사진 ${i + 1}`,
+        }))}
+        initialIndex={viewerIndex ?? 0}
+        onClose={() => setViewerIndex(null)}
+      />
     </View>
   );
 };

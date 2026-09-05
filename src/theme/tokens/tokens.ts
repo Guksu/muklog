@@ -54,6 +54,11 @@ const palette = {
   // 사진 위 어두운 글래스 배지 베이스 — 킷 MuklogCard 사진수 배지 rgba(0,0,0,.32)+blur(mk-log:94).
   //   RN blur 미지원 → 반투명 검정 근사(불투명도만, 흐림 없음). 불투명도는 킷 실값 .32 정합(blur 부재 보정용 .42에서 환원).
   scrimStrong:'rgba(0,0,0,0.32)',
+  // 풀스크린 사진 뷰어 배경 — 킷이 이 표면에 침묵해 ux-principles로 판단(photo-viewer plan §3.4).
+  //   사진 감상 표면은 주변 광을 죽여 이미지가 유일한 정보가 되게 한다(원칙 1 한 화면 한 가지 일 · 원칙 6 정보 위계).
+  //   완전 불투명 검정이 아닌 .94인 이유: 뒤에 상세 화면이 있음을 아주 옅게 남겨 "덮여 있다 → 닫으면 돌아간다"를
+  //   시각적으로 보존한다(원칙 4 — 레이어가 상태 전이를 설명). scrimStrong(.32 사진 위 글래스)과는 값·의미가 다르다.
+  viewerBg:'rgba(0,0,0,0.94)',
   // 비활성 텍스트(disabled) — 원티드 --text-disable = --label-disable rgba(55,56,60,.16)(figma-variables.css:207).
   //   에디터 저장 버튼 비활성 등. fgAssistive(#B0B0B0 불투명)보다 더 옅은 킷 정확값.
   labelDisable:'rgba(55,56,60,0.16)',
@@ -128,6 +133,9 @@ const lightColor = {
   socialGoogleBg: palette.white, socialGoogleFg: palette.socialGoogleFg,
   // 카드 사진수 배지 글래스 근사(킷 rgba(0,0,0,.32)+blur). 라이트/다크 공통(사진 위라 항상 어둡게).
   scrimStrong: palette.scrimStrong,
+  // 풀스크린 사진 뷰어 배경(킷 침묵 → ux-principles 판단, photo-viewer §3.4).
+  //   라이트/다크 공통 — 사진 감상 표면이라 톤 고정(toastBg·mapSurface와 같은 부류로, darkColor 스프레드로 자동 미러).
+  viewerBg: palette.viewerBg,
   // 파괴 액션(삭제) — 킷 status-negative(#E5484D). negativeFg=버튼 글자 흰색.
   negative: palette.statusNegative, negativeFg: palette.white,
   // 파괴 상태(예약삭제) 배너 약톤 배경(room-lifecycle) — 킷 비종속 신규 UI(plan §4 "status-negative weak 톤").

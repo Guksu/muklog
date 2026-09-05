@@ -41,3 +41,9 @@ export {
 export { MotionPressable, type MotionPressableProps } from './MotionPressable';
 export { SwapTransition, SwapDirection, type SwapTransitionProps } from './SwapTransition';
 export { FadeInImage, type FadeInImageProps } from './FadeInImage';
+export {
+  PhotoViewer,
+  clampPhotoIndex,
+  type PhotoViewerProps,
+  type PhotoViewerPhoto,
+} from './PhotoViewer';
