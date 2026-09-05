@@ -10,11 +10,11 @@
 //
 // 소비: LogScreen 'log' 세그에서 <MuklogList roomId meId state refresh /> 마운트(state=useMuklogs, meId=auth uid).
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, type NavigationProp } from '@react-navigation/native';
 
-import { Button, Chip, Icon, IconName, Text } from '@/components';
+import { Button, Chip, Icon, IconName, MotionPressable, Text } from '@/components';
 import { Routes, type AppStackParamList } from '@/navigation/routes';
 import { useTheme } from '@/theme';
 
@@ -22,6 +22,9 @@ import { categoryLabel } from '../categories';
 import { filterMuklogsByCategory, muklogCategoriesInUse } from '../filterByCategory';
 import { MuklogCard } from '../MuklogCard';
 import { type MuklogsState } from '../types';
+
+// 부여 판정: 지도 FAB fab/1 승계 — 콘텐츠 위 떠 있는 레이어(motion-press-c §2 C12, 킷 근거 없는 축 확장)
+const FAB_PRESSED_OPACITY = 1;
 
 export type MuklogListProps = {
   /** 조회 대상 로그 id(LogScreen route.params.roomId) — FAB navigate 대상. */
@@ -171,10 +174,12 @@ export const MuklogList = ({ roomId, meId, state, refresh, header }: MuklogListP
       </ScrollView>
 
       {/* FAB — 새 먹로그 에디터(풀스크린) 진입 */}
-      <Pressable
+      <MotionPressable
         accessibilityRole="button"
         accessibilityLabel="새 먹로그"
         onPress={handleOpenEditor}
+        pressSize="fab"
+        pressedOpacity={FAB_PRESSED_OPACITY}
         style={[
           styles.fab,
           {
@@ -192,7 +197,7 @@ export const MuklogList = ({ roomId, meId, state, refresh, header }: MuklogListP
         ]}
       >
         <Icon name={IconName.Plus} size={26} color="primaryFg" />
-      </Pressable>
+      </MotionPressable>
     </View>
   );
 };

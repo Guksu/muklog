@@ -75,6 +75,7 @@ export const MkSwitch = ({
   };
 
   return (
+    // 눌림 피드백 미부여(motion-press-c 판정): 노브 슬라이드 220ms가 곧 상태 피드백이고, 트랙을 축소하면 노브의 translateX 이동 거리까지 함께 줄어 보인다(원칙 4 · fe-craft #1).
     <Pressable
       testID="mk-switch"
       accessibilityRole="switch"

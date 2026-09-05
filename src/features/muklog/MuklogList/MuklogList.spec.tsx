@@ -4,8 +4,8 @@
 //   ⚠️ wishlist 스프린트: 데이터 조회·포커스 refresh가 LogScreen으로 이관 → 이 spec은 props 기반 렌더만 검증.
 //   ⚠️ FLAG-1: 입력 시트→풀스크린 에디터 라우트 전환. FAB는 navigate(MuklogEditor)만(장소검색은 에디터 컨테이너로 이동).
 import React from 'react';
-import { View } from 'react-native';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet, View } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 import { spacing } from '@/theme';
@@ -202,3 +202,38 @@ describe('MuklogList — 상세 진입 배선 (plan §4.3)', () => {
 
 // 장소검색 컨테이너 배선(usePlaceSearch/usePlaceSelection)은 FLAG-1 전환으로 MuklogEditorRoute로 이동 →
 //   해당 검증은 MuklogEditorRoute.spec / MuklogEditor.spec에서 다룬다.
+
+// ── 프레스 부여 C12(motion-press-c T5 / ui-spec §2) ────────────────────────
+//   seam = a11yLabel "새 먹로그" 노드의 flatten style transform/opacity 키 유무(테스트 전용 testID 증설 금지).
+//   pressedOpacity 실값·Animated 궤적은 검증하지 않는다(plan §8-2). fab/1은 감소 모션에서 바닥값 0.85로 클램프된다.
+describe('MuklogList — 홈 FAB 눌림 피드백(motion-press-c C12)', () => {
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flattenFab = () =>
+    StyleSheet.flatten(screen.getByLabelText('새 먹로그').props.style) as Record<string, unknown>;
+
+  it('C12 FAB — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderList({ state: { status: 'ready', muklogs: [] } });
+    await waitFor(() => expect(flattenFab().transform).toBeDefined());
+  });
+
+  it('C12 FAB — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderList({ state: { status: 'ready', muklogs: [] } });
+    await waitFor(() => expect(flattenFab().opacity).toBeDefined());
+    expect(flattenFab().transform).toBeUndefined();
+  });
+
+  it('렌더 시 console.warn 0건(정적 opacity 계약 위반 없음)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderList({ state: { status: 'ready', muklogs: [muklog()] } });
+    expect(warn).not.toHaveBeenCalled();
+  });
+});

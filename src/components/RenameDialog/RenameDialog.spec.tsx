@@ -275,3 +275,50 @@ describe('RenameDialog — 취소/저장 액션 눌림 피드백(motion-press-sw
     expect(warn).not.toHaveBeenCalled();
   });
 });
+
+// ── 프레스 부여 C9(motion-press-c T4 / ui-spec §2) ────────────────────────
+//   seam = testID `rename-dialog-clear` 노드의 flatten style transform/opacity 키 유무.
+//   P4(console.warn 0건)는 위 A1·A2 블록이 같은 렌더 트리(value 있음 → ✕ 렌더)로 이미 커버한다.
+//   Category B 2지점(:133 딤 · :146 전파차단 카드)은 이 스프린트에서 건드리지 않는다.
+describe('RenameDialog — 입력 지우기 ✕ 눌림 피드백(motion-press-c C9)', () => {
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flattenClear = () =>
+    StyleSheet.flatten(screen.getByTestId('rename-dialog-clear').props.style) as Record<
+      string,
+      unknown
+    >;
+
+  // ✕는 value가 빈 문자열이면 렌더되지 않는다 — 값이 있는 상태에서만 검증한다(plan E9).
+  const renderWithValue = () => {
+    renderWithTheme(
+      <RenameDialog
+        open
+        title="로그 이름"
+        value="새 이름"
+        onChange={noop}
+        onCancel={noop}
+        onSave={noop}
+      />,
+    );
+  };
+
+  it('C9 지우기 ✕ — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderWithValue();
+    await waitFor(() => expect(flattenClear().transform).toBeDefined());
+  });
+
+  it('C9 지우기 ✕ — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderWithValue();
+    await waitFor(() => expect(flattenClear().opacity).toBeDefined());
+    expect(flattenClear().transform).toBeUndefined();
+  });
+});

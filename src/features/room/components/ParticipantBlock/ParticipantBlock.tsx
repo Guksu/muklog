@@ -8,9 +8,9 @@
 //   멤버 행(mk-log:86) gap 16, flexWrap → 각 항목 width 50, column, gap 6: Avatar 46 ring={userId===meId} + 닉(600/12 mk-ink2, maxWidth50, 1줄 ellipsis, center)
 //   초대 버튼(mk-log:93-100) canInvite일 때: dashed 원 46(accentLine 2px, radius full) + plus 20(accentStrong) + "초대"(700/12 accentStrong)
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { Avatar, Icon, IconName, Text } from '@/components';
+import { Avatar, Icon, IconName, MotionPressable, Text } from '@/components';
 import { defaultNickname } from '@/features/profile/defaultNickname';
 import { useTheme } from '@/theme';
 
@@ -32,6 +32,9 @@ const AVATAR_SIZE = 46;
 const ITEM_WIDTH = 50;
 // 킷 mk-log:95-96 dashed 원 46 · plus 20.
 const INVITE_PLUS_SIZE = 20;
+
+// 부여 판정: 46 아바타 sm/0.6 승계 — 같은 행에 나란히 서는 46 컨트롤(motion-press-c §2 C7)
+const INVITE_PRESSED_OPACITY = 0.6;
 
 /** 멤버 표시 닉 — nickname 우선, null/빈이면 결정적 defaultNickname(userId) (킷 mk-log:90 폴백). */
 const memberDisplayName = ({ member }: { member: RoomMember }): string =>
@@ -75,11 +78,13 @@ export const ParticipantBlock = ({ members, meId, canInvite, onInvite }: Partici
         ))}
 
         {canInvite ? (
-          <Pressable
+          <MotionPressable
             testID="participant-invite"
             accessibilityRole="button"
             accessibilityLabel="참여자 초대"
             onPress={onInvite}
+            pressSize="sm"
+            pressedOpacity={INVITE_PRESSED_OPACITY}
             style={[styles.item, { gap: theme.spacing[6], width: ITEM_WIDTH }]}
           >
             <View
@@ -98,7 +103,7 @@ export const ParticipantBlock = ({ members, meId, canInvite, onInvite }: Partici
             <Text variant="participantInvite" color="accentStrong" numberOfLines={1} style={styles.name}>
               초대
             </Text>
-          </Pressable>
+          </MotionPressable>
         ) : null}
       </View>
     </View>

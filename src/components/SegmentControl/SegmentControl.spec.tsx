@@ -1,6 +1,7 @@
 // src/components/SegmentControl.spec.tsx
 // iOS 스타일 세그먼트 컨트롤 — 킷 mk-log.jsx:56-72 정합. 라벨+카운트·선택 상태·onChange 분기 검증(plan TC-6 비주얼).
 import React from 'react';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
 import { fireEvent, screen } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
@@ -45,5 +46,23 @@ describe('SegmentControl', () => {
     );
     expect(screen.getByText('에이')).toBeTruthy();
     expect(screen.getByText('비')).toBeTruthy();
+  });
+});
+
+// ── 미부여 회귀 가드 N4(motion-press-c T6 / ui-spec §5-3) ────────────────────────
+//   세그먼트 칸은 라벨을 가진 탭 타깃이라 "빠뜨렸다"고 오인하기 쉽다 — 미부여가 판정임을 잠근다.
+//   role은 'button'이 아니라 'tab'이라 role 기반 쿼리를 쓰지 않는다(ui-spec §8-5).
+describe('SegmentControl — 세그먼트 칸 눌림 피드백 미부여 가드(motion-press-c N4)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('N4: 감소 모션 OFF에서도 세그먼트 칸의 flatten style에 transform이 없다', () => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(false));
+    renderWithTheme(<SegmentControl segments={segments} selected="log" onChange={jest.fn()} />);
+    const flat = StyleSheet.flatten(
+      screen.getByLabelText('기록 3').props.style,
+    ) as Record<string, unknown>;
+    expect(flat.transform).toBeUndefined();
   });
 });

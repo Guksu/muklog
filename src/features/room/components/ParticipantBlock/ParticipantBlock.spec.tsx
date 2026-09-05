@@ -3,7 +3,8 @@
 //   "참여자 N · 최대 5명" 헤더 + 멤버 행(아바타46·i0/meId=나 ring·닉 ellipsis) + members<5면 dashed 초대 버튼.
 //   presentational — 데이터는 props 주입(useRoomMembers 호출 없음). 배선은 developer 2단계.
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 import { defaultNickname } from '@/features/profile/defaultNickname';
@@ -117,5 +118,43 @@ describe('ParticipantBlock — 킷 mk-log:79-103', () => {
     expect(s.paddingHorizontal).toBe(20);
     expect(s.paddingTop).toBe(12);
     expect(s.paddingBottom).toBe(2);
+  });
+});
+
+// ── 프레스 부여 C7(motion-press-c T3 / ui-spec §2) ────────────────────────
+//   seam = testID `participant-invite` 노드의 flatten style transform/opacity 키 유무.
+//   pressedOpacity 실값·Animated 궤적은 검증하지 않는다(plan §8-2).
+describe('ParticipantBlock — 초대 버튼 눌림 피드백(motion-press-c C7)', () => {
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flattenInvite = () =>
+    StyleSheet.flatten(screen.getByTestId('participant-invite').props.style) as Record<
+      string,
+      unknown
+    >;
+
+  it('C7 초대 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderBlock({ canInvite: true });
+    await waitFor(() => expect(flattenInvite().transform).toBeDefined());
+  });
+
+  it('C7 초대 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderBlock({ canInvite: true });
+    await waitFor(() => expect(flattenInvite().opacity).toBeDefined());
+    expect(flattenInvite().transform).toBeUndefined();
+  });
+
+  it('렌더 시 console.warn 0건(정적 opacity 계약 위반 없음)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderBlock({ canInvite: true });
+    expect(warn).not.toHaveBeenCalled();
   });
 });

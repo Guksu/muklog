@@ -10,7 +10,7 @@
 //   · 날짜 계산(그리드·미래·오늘·월이동·ISO)은 calendarGrid 순수 유틸에 위임(plan §4.3, developer 소유).
 //   · today는 new Date() 로컬 자정 절삭(킷 today.setHours(0,0,0,0)) — UTC 시프트 없음(plan §6/§7).
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useTheme } from '@/theme';
 import type { ColorToken } from '@/theme';
@@ -24,10 +24,16 @@ import {
   toISODate,
 } from '../calendarGrid';
 import { Icon, IconName } from '../Icon';
+import { MotionPressable } from '../MotionPressable';
 import { Sheet } from '../Sheet';
 import { Text } from '../Text';
 
 const SHEET_TITLE = '방문일 선택';
+
+// 부여 판정: IconButton sm/0.6 승계(motion-press-c §2 C1·C2)
+const NAV_ARROW_PRESSED_OPACITY = 0.6;
+// 부여 판정: 46 아바타 sm/0.6 승계(motion-press-c §2 C3)
+const DAY_CELL_PRESSED_OPACITY = 0.6;
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
 const GRID_COLUMNS = 7;
 
@@ -105,27 +111,31 @@ export const DatePickerSheet = ({ visible, value, onClose, onSelect }: DatePicke
     <Sheet visible={visible} onClose={onClose} title={SHEET_TITLE}>
       {/* 월 네비 — ‹ {YYYY년 M월} › */}
       <View style={styles.navRow}>
-        <Pressable
+        <MotionPressable
           testID="date-prev"
           accessibilityRole="button"
           accessibilityLabel="이전 달"
           onPress={goPrevMonth}
+          pressSize="sm"
+          pressedOpacity={NAV_ARROW_PRESSED_OPACITY}
           style={[styles.navArrow, { backgroundColor: theme.color.fillAlt }]}
         >
           <Icon name={IconName.ChevronLeft} size={CAL_LAYOUT.navIcon} color="fgWeak" />
-        </Pressable>
+        </MotionPressable>
         <Text variant="calendarMonth" color="fg">
           {monthLabel}
         </Text>
-        <Pressable
+        <MotionPressable
           testID="date-next"
           accessibilityRole="button"
           accessibilityLabel="다음 달"
           onPress={goNextMonth}
+          pressSize="sm"
+          pressedOpacity={NAV_ARROW_PRESSED_OPACITY}
           style={[styles.navArrow, { backgroundColor: theme.color.fillAlt }]}
         >
           <Icon name={IconName.ChevronRight} size={CAL_LAYOUT.navIcon} color="fgWeak" />
-        </Pressable>
+        </MotionPressable>
       </View>
 
       {/* 요일 헤더 — 일(빨강)·토(파랑)·평일(muted) */}
@@ -158,13 +168,15 @@ export const DatePickerSheet = ({ visible, value, onClose, onSelect }: DatePicke
               const dayColor: ColorToken = future ? 'fgDisabled' : selected ? 'primaryFg' : 'fg';
               return (
                 <View key={date} style={styles.cell}>
-                  <Pressable
+                  <MotionPressable
                     testID={`date-cell-${day}`}
                     accessibilityRole="button"
                     accessibilityLabel={`${monthLabel} ${day}일`}
                     accessibilityState={{ selected, disabled: future }}
                     disabled={future}
                     onPress={() => selectDay({ day })}
+                    pressSize="sm"
+                    pressedOpacity={DAY_CELL_PRESSED_OPACITY}
                     style={[styles.dayButton, selected ? { backgroundColor: theme.color.primary } : null]}
                   >
                     <Text variant={strong ? 'calendarDayStrong' : 'calendarDay'} color={dayColor}>
@@ -176,7 +188,7 @@ export const DatePickerSheet = ({ visible, value, onClose, onSelect }: DatePicke
                         style={[styles.todayDot, { backgroundColor: theme.color.primary }]}
                       />
                     ) : null}
-                  </Pressable>
+                  </MotionPressable>
                 </View>
               );
             })}

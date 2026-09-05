@@ -33,6 +33,10 @@ const BACKDROP_OPACITY = 0.34;
 // 눌림 불투명도 — 치환 전 로컬 styles.pressed 실값 승계(비주얼 회귀 0). 등급은 md(라벨 버튼). ui-spec §2-2 A1·A2.
 const DIALOG_ACTION_PRESSED_OPACITY = 0.6;
 
+// 부여 판정: IconButton sm/0.6 승계(motion-press-c §2 C9)
+//   값은 같지만 역할·등급(md 라벨 행)이 달라 DIALOG_ACTION_PRESSED_OPACITY를 재사용하지 않는다.
+const CLEAR_PRESSED_OPACITY = 0.6;
+
 // 컨트롤 내부 레이아웃 수치(킷 verbatim) — 4px 그리드 밖이라 토큰화하지 않는다(Button.BUTTON_SIZE 선례).
 const DIALOG_LAYOUT = {
   topOffset: 70, // 킷 ESP+70 (상단~중앙 배치, 키보드 미가림)
@@ -195,15 +199,17 @@ export const RenameDialog = ({
                 style={[styles.input, inputStyle]}
               />
               {value ? (
-                <Pressable
+                <MotionPressable
                   testID="rename-dialog-clear"
                   accessibilityRole="button"
                   accessibilityLabel="지우기"
                   onPress={() => onChange('')}
+                  pressSize="sm"
+                  pressedOpacity={CLEAR_PRESSED_OPACITY}
                   style={[styles.clear, clearStyle]}
                 >
                   <Icon name={IconName.Close} size={DIALOG_LAYOUT.clearIconSize} color="fgMuted" />
-                </Pressable>
+                </MotionPressable>
               ) : null}
             </View>
 
