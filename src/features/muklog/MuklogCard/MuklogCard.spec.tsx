@@ -2,8 +2,8 @@
 // 맛집 카드 — placeName·별점·카테고리 칩·위치줄(area·날짜)·메모 2줄 클램프·작성자 라벨
 //   (plan §6.2 / §5 T8, AC9·AC10) + 데이터 결측(category/area/memo null) 안전 처리(§9).
 import React from 'react';
-import { StyleSheet } from 'react-native';
-import { act, fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 import { MOTION_DURATION } from '@/theme';
@@ -184,5 +184,50 @@ describe('MuklogCard — 커버 사진 페이드인 (motion-pass-1 D2)', () => {
     fireEvent(screen.getByTestId('muklog-card-cover-image'), 'error');
     settleFade();
     expect(coverOpacity()).toBe(1);
+  });
+});
+
+// ── 프레스 부여 C8(motion-press-c T4 / ui-spec §2) ────────────────────────
+//   seam = testID `muklog-card` 노드의 flatten style transform/opacity 키 유무.
+//   onPress 없는 분기는 View(모션 없음)라 분기별로 별도 render 한다(plan E7).
+describe('MuklogCard — 카드 눌림 피드백(motion-press-c C8)', () => {
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flattenCard = () =>
+    StyleSheet.flatten(screen.getByTestId('muklog-card').props.style) as Record<string, unknown>;
+
+  const renderPressableCard = ({ onPress = () => {} }: { onPress?: () => void } = {}) => {
+    renderWithTheme(<MuklogCard muklog={base} meId="me-uid" onPress={onPress} />);
+  };
+
+  it('C8 카드 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderPressableCard();
+    await waitFor(() => expect(flattenCard().transform).toBeDefined());
+  });
+
+  it('C8 카드 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderPressableCard();
+    await waitFor(() => expect(flattenCard().opacity).toBeDefined());
+    expect(flattenCard().transform).toBeUndefined();
+  });
+
+  it('C8 onPress 없는 분기 — View 경로라 transform이 부착되지 않는다(E7)', () => {
+    mockReduceMotion({ enabled: false });
+    renderWithTheme(<MuklogCard muklog={base} meId="me-uid" />);
+    expect(flattenCard().transform).toBeUndefined();
+  });
+
+  it('렌더 시 console.warn 0건(정적 opacity 계약 위반 없음)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderPressableCard();
+    expect(warn).not.toHaveBeenCalled();
   });
 });

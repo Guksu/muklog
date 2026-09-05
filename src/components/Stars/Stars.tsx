@@ -249,6 +249,7 @@ export const Stars = ({ value, size = 15, editable = false, onChange }: StarsPro
         // 별1은 클램프로 좌/우 방출값이 동일(1) → 반 분할 없이 단일 풀사이즈 Pressable(동일 라벨 인접 버튼 방지).
         if (leftValue === position) {
           return (
+            // 눌림 피드백 미부여(motion-press-c 판정): 별1만 반응하면 한 컨트롤 안에서 별1↔별2~5 반응이 갈리고, PanResponder 캡처가 드래그 중 responder를 뺏어 점멸한다. 별 채움 전환이 이미 즉각 피드백이다(원칙 3·4).
             <Pressable
               key={position}
               testID={testID}
@@ -266,6 +267,7 @@ export const Stars = ({ value, size = 15, editable = false, onChange }: StarsPro
           <View key={position} testID={testID} style={styles.starEditable}>
             {renderStar({ state })}
             <View style={styles.editOverlay}>
+              {/* 눌림 피드백 미부여(motion-press-c 판정): 자식 없는 투명 flex:1 오버레이라 축소·흐림의 보이는 픽셀이 0이다(별 그래픽은 형제 노드). */}
               <Pressable
                 style={styles.editHalf}
                 accessibilityRole="button"
@@ -273,6 +275,7 @@ export const Stars = ({ value, size = 15, editable = false, onChange }: StarsPro
                 onPressIn={(evt) => recordDragStart({ index, isRightHalf: false, evt })}
                 onPress={() => onChange?.(leftValue)}
               />
+              {/* 눌림 피드백 미부여(motion-press-c 판정): 좌측 반과 동일 — 자식 없는 투명 오버레이라 보이는 변화가 0이다. */}
               <Pressable
                 style={styles.editHalf}
                 accessibilityRole="button"

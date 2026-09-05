@@ -3,7 +3,8 @@
 //   프리젠테이션/상호작용 검증(plan §6 T3): 월 헤더·요일·선택 강조·월 이동·미래 disable·오늘 dot·선택/취소 콜백·방어/리셋.
 //   today는 fake timer로 2026-06-16 고정 → 미래·오늘 판정 결정적. 날짜 계산은 calendarGrid(실제) 경유.
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -154,5 +155,89 @@ describe('DatePickerSheet', () => {
     rerender(<DatePickerSheet visible={false} value="2026-02-14" onClose={noop} onSelect={noop} />);
     rerender(<DatePickerSheet visible value="2026-02-14" onClose={noop} onSelect={noop} />);
     expect(screen.getByText('2026년 2월')).toBeTruthy();
+  });
+});
+
+// ── 프레스 부여 C1·C2·C3(motion-press-c T2 / ui-spec §2) ────────────────────────
+//   seam = testID로 조회한 노드의 (a) flatten style의 transform/opacity 키 유무 (b) onSelect 발화.
+//   pressedOpacity 실값·Animated 궤적은 검증하지 않는다(plan §8-2 — 실값은 motion.spec가 잠갔다).
+describe('DatePickerSheet — 월 네비·날짜 셀 눌림 피드백(motion-press-c C1·C2·C3)', () => {
+  beforeAll(() => {
+    // 오늘 = 2026-06-16(로컬) — 미래 셀(C3 P5) 판정을 결정적으로 만든다.
+    jest.useFakeTimers({ now: new Date(2026, 5, 16, 9, 0, 0) });
+  });
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flatten = ({ testId }: { testId: string }) =>
+    StyleSheet.flatten(screen.getByTestId(testId).props.style) as Record<string, unknown>;
+
+  const renderSheet = ({ onSelect = noop }: { onSelect?: (arg: { date: string }) => void } = {}) => {
+    renderWithTheme(
+      <DatePickerSheet visible value="2026-06-16" onClose={noop} onSelect={onSelect} />,
+    );
+  };
+
+  it('C1 이전 달 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderSheet();
+    await waitFor(() => expect(flatten({ testId: 'date-prev' }).transform).toBeDefined());
+  });
+
+  it('C1 이전 달 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderSheet();
+    await waitFor(() => expect(flatten({ testId: 'date-prev' }).opacity).toBeDefined());
+    expect(flatten({ testId: 'date-prev' }).transform).toBeUndefined();
+  });
+
+  it('C2 다음 달 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderSheet();
+    await waitFor(() => expect(flatten({ testId: 'date-next' }).transform).toBeDefined());
+  });
+
+  it('C2 다음 달 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderSheet();
+    await waitFor(() => expect(flatten({ testId: 'date-next' }).opacity).toBeDefined());
+    expect(flatten({ testId: 'date-next' }).transform).toBeUndefined();
+  });
+
+  it('C3 날짜 셀(과거) — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderSheet();
+    await waitFor(() => expect(flatten({ testId: 'date-cell-10' }).transform).toBeDefined());
+  });
+
+  it('C3 날짜 셀(과거) — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderSheet();
+    await waitFor(() => expect(flatten({ testId: 'date-cell-10' }).opacity).toBeDefined());
+    expect(flatten({ testId: 'date-cell-10' }).transform).toBeUndefined();
+  });
+
+  it('C3 미래 셀(disabled) — transform이 부착되지 않고 onSelect도 발화하지 않는다', () => {
+    mockReduceMotion({ enabled: false });
+    const onSelect = jest.fn();
+    renderSheet({ onSelect });
+    expect(flatten({ testId: 'date-cell-30' }).transform).toBeUndefined();
+    fireEvent.press(screen.getByTestId('date-cell-30'));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('렌더 시 console.warn 0건(정적 opacity 계약 위반 없음)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderSheet();
+    expect(warn).not.toHaveBeenCalled();
   });
 });

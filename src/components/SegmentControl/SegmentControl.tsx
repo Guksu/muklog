@@ -55,6 +55,7 @@ export const SegmentControl = ({ segments, selected, onChange }: SegmentControlP
           ...(on ? theme.shadow.seg : null),
         };
         return (
+          // 눌림 피드백 미부여(motion-press-c 판정): 선택 전환(surface 배경 + shadow.seg + 굵기 800)이 이미 즉각 피드백이고, padding 4 트랙 위에 떠 있는 칸을 축소하면 덜컹거린다(원칙 4 · fe-craft #1·#5).
           <Pressable
             key={seg.key}
             accessibilityRole="tab"

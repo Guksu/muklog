@@ -28,6 +28,7 @@ export const CodeInput = ({ value, onChangeText }: CodeInputProps) => {
   const cells = Array.from({ length: INVITE_CODE_LENGTH });
 
   return (
+    // 눌림 피드백 미부여(motion-press-c 판정): 버튼이 아니라 숨김 TextInput에 포커스를 주는 캐처(role·라벨 없음)이고, 6셀 전체를 감싸 축소하면 코드 입력줄이 들썩인다(원칙 4 · fe-craft #1·#5).
     <Pressable onPress={() => inputRef.current?.focus()}>
       {/* 숨김 실 입력 — 정규화 후 부모에 전달. autoCapitalize/autoCorrect로 입력 품질 보강. */}
       <TextInput

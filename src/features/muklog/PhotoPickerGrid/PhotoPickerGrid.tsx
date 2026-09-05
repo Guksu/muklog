@@ -7,9 +7,9 @@
 //   developer가 onAdd/onRemove에 연결한다(이 컴포넌트는 프레젠테이션·콜백 트리거만).
 //   썸네일 source는 로컬 자산 uri(업로드 전 미리보기). signed URL 주입은 카드(MuklogCard) 몫.
 import React from 'react';
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 
-import { Icon, IconName, Text } from '@/components';
+import { Icon, IconName, MotionPressable, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 import { type PickedPhoto } from '../types';
@@ -34,6 +34,11 @@ const THUMB_SIZE = 72;
 const REMOVE_SIZE = 22;
 const REMOVE_OFFSET = -6;
 const PHOTO_MAX_DEFAULT = 5;
+
+// 부여 판정: IconButton sm/0.6 승계(motion-press-c §2 C10)
+const PHOTO_REMOVE_PRESSED_OPACITY = 0.6;
+// 부여 판정: Button md/0.85 승계 — 라벨 가진 블록 버튼(motion-press-c §2 C11)
+const PHOTO_ADD_PRESSED_OPACITY = 0.85;
 
 export const PhotoPickerGrid = ({
   photos,
@@ -70,12 +75,14 @@ export const PhotoPickerGrid = ({
             accessibilityLabel={`선택한 사진 ${index + 1}`}
             style={[styles.thumb, { borderRadius: theme.radius.control }]}
           />
-          <Pressable
+          <MotionPressable
             testID={`photo-remove-${index}`}
             accessibilityRole="button"
             accessibilityLabel={`사진 ${index + 1} 삭제`}
             disabled={uploading}
             onPress={() => onRemove({ index })}
+            pressSize="sm"
+            pressedOpacity={PHOTO_REMOVE_PRESSED_OPACITY}
             style={[
               styles.remove,
               {
@@ -87,18 +94,20 @@ export const PhotoPickerGrid = ({
             ]}
           >
             <Icon name={IconName.Close} size={12} color="primaryFg" />
-          </Pressable>
+          </MotionPressable>
         </View>
       ))}
 
       {canAdd ? (
-        <Pressable
+        <MotionPressable
           testID="photo-add-tile"
           accessibilityRole="button"
           accessibilityLabel="사진 추가"
           accessibilityState={{ disabled: uploading }}
           disabled={uploading}
           onPress={onAdd}
+          pressSize="md"
+          pressedOpacity={PHOTO_ADD_PRESSED_OPACITY}
           style={[
             styles.addTile,
             {
@@ -113,7 +122,7 @@ export const PhotoPickerGrid = ({
           <Text variant="caption" color="accentStrong" style={styles.addLabel}>
             추가
           </Text>
-        </Pressable>
+        </MotionPressable>
       ) : null}
       </View>
     </View>

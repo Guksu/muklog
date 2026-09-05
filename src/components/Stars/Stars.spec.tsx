@@ -1,7 +1,7 @@
 // src/components/Stars/Stars.spec.tsx
 // 별점 표시/입력 컴포넌트 — value만큼 채운 별, editable 시 탭→onChange, 0/null=빈 별 (plan §6.2 / §5 T7, AC4).
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
 import { fireEvent, screen } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
@@ -439,5 +439,23 @@ describe('Stars — 드래그 입력 (T4·T5)', () => {
   it('AC8: 신규 stars-row testID가 star- 개수 단언을 깨지 않는다', () => {
     renderWithTheme(<Stars value={3} editable size={EDITOR_SIZE} />);
     expect(screen.getAllByTestId(/^star-/)).toHaveLength(STAR_COUNT);
+  });
+});
+
+// ── 미부여 회귀 가드 N1(motion-press-c T6 / ui-spec §5-3) ────────────────────────
+//   별1은 라벨을 가진 명백한 탭 타깃이라 다음 패스가 "눌림 피드백을 빠뜨렸다"고 오인하기 쉽다.
+//   미부여가 판정 결과임을 코드로 잠근다 — 감소 모션 OFF에서도 transform이 없어야 한다.
+describe('Stars — 별1 눌림 피드백 미부여 가드(motion-press-c N1)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('N1: 감소 모션 OFF에서도 별1 탭 영역의 flatten style에 transform이 없다', () => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(false));
+    renderWithTheme(<Stars value={3} editable />);
+    const flat = StyleSheet.flatten(
+      screen.getByLabelText('별점 1점').props.style,
+    ) as Record<string, unknown>;
+    expect(flat.transform).toBeUndefined();
   });
 });

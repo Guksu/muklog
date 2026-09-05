@@ -7,9 +7,9 @@
 // 소비: useMuklogs → Muklog. 작성자 라벨/아바타는 카드에서 제거(멤버 실명 매핑은 MuklogDetail 소관, plan §3.3).
 //   meId 는 리스트 배선 계약 유지를 위해 props 로 받되 카드는 소비하지 않는다(작성자 줄 제거).
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { FadeInImage, FoodCover, Icon, IconName, Stars, Text } from '@/components';
+import { FadeInImage, FoodCover, Icon, IconName, MotionPressable, Stars, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 import { categoryLabel } from '../categories';
@@ -27,6 +27,9 @@ export type MuklogCardProps = {
 
 // 킷 FC2 커버 이모지 56.
 const COVER_EMOJI_SIZE = 56;
+
+// 부여 판정: 공용 Card lg/0.7 승계(motion-press-c §2 C8)
+const CARD_PRESSED_OPACITY = 0.7;
 
 export const MuklogCard = ({ muklog, onPress }: MuklogCardProps) => {
   const theme = useTheme();
@@ -150,15 +153,17 @@ export const MuklogCard = ({ muklog, onPress }: MuklogCardProps) => {
   // onPress가 있으면 Pressable로 감싸 상세 진입(접근성 라벨 = "장소명 상세 보기"). 없으면 비활성 View(기존 사용처 안전).
   if (onPress) {
     return (
-      <Pressable
+      <MotionPressable
         testID="muklog-card"
         accessibilityRole="button"
         accessibilityLabel={`${muklog.placeName} 상세 보기`}
         onPress={onPress}
+        pressSize="lg"
+        pressedOpacity={CARD_PRESSED_OPACITY}
         style={cardStyle}
       >
         {cardBody}
-      </Pressable>
+      </MotionPressable>
     );
   }
 

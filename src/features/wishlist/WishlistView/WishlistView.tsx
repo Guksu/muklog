@@ -5,10 +5,10 @@
 //   addedByMe(파생)·meNickname·meAvatarUrl을 props로 받아 라벨/아바타만 조립(데이터 계산 없음).
 //   "짝꿍" 익명 라벨은 킷 정합 표시 카피(파트너 실프로필 RLS 비노출 — MuklogCard "짝꿍이 기록"과 동일 선례).
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
+import { ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Avatar, Button, FoodCover, Icon, IconName, Text } from '@/components';
+import { Avatar, Button, FoodCover, Icon, IconName, MotionPressable, Text } from '@/components';
 import { useTheme } from '@/theme';
 
 import { type WishlistItem } from '../types';
@@ -34,6 +34,13 @@ const COVER_RADIUS = 14;
 const COVER_EMOJI = 26;
 // 파트너 익명 표시 라벨(킷 정합 카피, RLS 제약).
 const PARTNER_LABEL = '짝꿍';
+
+// 부여 판정: AddSheet 전폭 행 lg/0.6 승계(motion-press-c §2 C4)
+const ADD_WISH_PRESSED_OPACITY = 0.6;
+// 부여 판정: Chip·Button md/0.85 승계(motion-press-c §2 C5)
+const VISIT_BTN_PRESSED_OPACITY = 0.85;
+// 부여 판정: IconButton sm/0.6 승계(motion-press-c §2 C6)
+const REMOVE_BTN_PRESSED_OPACITY = 0.6;
 
 export const WishlistView = ({
   items,
@@ -81,17 +88,19 @@ export const WishlistView = ({
   return (
     <ScrollView contentContainerStyle={[styles.listContainer, { paddingBottom: 24 + insets.bottom }]}>
       {/* 상단 점선 추가 버튼 — 킷 ex.addWish(231): 2px dashed accent-line, radius 16, plus + accent-strong. */}
-      <Pressable
+      <MotionPressable
         accessibilityRole="button"
         accessibilityLabel="가보고 싶은 곳 추가"
         onPress={onAdd}
+        pressSize="lg"
+        pressedOpacity={ADD_WISH_PRESSED_OPACITY}
         style={[styles.addWish, { borderColor: theme.color.accentLine, borderRadius: theme.radius.xl }]}
       >
         <Icon name={IconName.Plus} size={19} color="accentStrong" />
         <Text variant="cardTitle" color="accentStrong" style={styles.addWishText}>
           가보고 싶은 곳 추가
         </Text>
-      </Pressable>
+      </MotionPressable>
 
       <View style={{ gap: theme.spacing[12], marginTop: theme.spacing[14] }}>
         {items.map((wish) => {
@@ -156,10 +165,12 @@ export const WishlistView = ({
                   <Text variant="caption" color="fgMuted" numberOfLines={1} style={styles.authorLabel}>
                     {authorName}님이 담았어요
                   </Text>
-                  <Pressable
+                  <MotionPressable
                     accessibilityRole="button"
                     accessibilityLabel={`${wish.placeName} 다녀왔어요`}
                     onPress={() => onVisit({ id: wish.id })}
+                    pressSize="md"
+                    pressedOpacity={VISIT_BTN_PRESSED_OPACITY}
                     style={[
                       styles.visitBtn,
                       { backgroundColor: theme.color.primaryWeak, borderRadius: theme.radius.full },
@@ -168,15 +179,17 @@ export const WishlistView = ({
                     <Text variant="cardTitle" color="accentStrong" style={styles.visitText}>
                       다녀왔어요
                     </Text>
-                  </Pressable>
-                  <Pressable
+                  </MotionPressable>
+                  <MotionPressable
                     accessibilityRole="button"
                     accessibilityLabel={`${wish.placeName} 삭제`}
                     onPress={() => onRemove({ id: wish.id })}
+                    pressSize="sm"
+                    pressedOpacity={REMOVE_BTN_PRESSED_OPACITY}
                     style={styles.removeBtn}
                   >
                     <Icon name={IconName.Close} size={15} color="fgAssistive" />
-                  </Pressable>
+                  </MotionPressable>
                 </View>
               </View>
             </View>

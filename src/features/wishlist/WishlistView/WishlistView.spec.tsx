@@ -3,7 +3,8 @@
 //   빈 상태(TC-1) / 리스트·addedBy 매핑·note·area 분기(TC-3) / 핸들러(onAdd·onVisit·onRemove).
 //   데이터·삭제·prefill 배선은 developer. 여기선 props만 검증.
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -125,5 +126,68 @@ describe('WishlistView — 리스트 / addedBy 매핑 (TC-3)', () => {
       ...[].concat(emoji.props.style as never).filter(Boolean),
     ) as { fontSize: number; lineHeight: number };
     expect(flat.lineHeight).toBeGreaterThan(flat.fontSize);
+  });
+});
+
+// ── 프레스 부여 C4·C5·C6(motion-press-c T3 / ui-spec §2) ────────────────────────
+//   seam = a11yLabel로 조회한 노드의 flatten style transform/opacity 키 유무(테스트 전용 testID 증설 금지).
+//   pressedOpacity 실값·Animated 궤적은 검증하지 않는다(plan §8-2).
+describe('WishlistView — 추가·다녀왔어요·삭제 눌림 피드백(motion-press-c C4·C5·C6)', () => {
+  const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockReturnValue(Promise.resolve(enabled));
+  };
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const flatten = ({ label }: { label: string }) =>
+    StyleSheet.flatten(screen.getByLabelText(label).props.style) as Record<string, unknown>;
+
+  const renderList = () => renderView({ items: [item()] });
+
+  it('C4 점선 추가 행 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderList();
+    await waitFor(() => expect(flatten({ label: '가보고 싶은 곳 추가' }).transform).toBeDefined());
+  });
+
+  it('C4 점선 추가 행 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderList();
+    await waitFor(() => expect(flatten({ label: '가보고 싶은 곳 추가' }).opacity).toBeDefined());
+    expect(flatten({ label: '가보고 싶은 곳 추가' }).transform).toBeUndefined();
+  });
+
+  it('C5 다녀왔어요 — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderList();
+    await waitFor(() => expect(flatten({ label: '연남 파스타 다녀왔어요' }).transform).toBeDefined());
+  });
+
+  it('C5 다녀왔어요 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderList();
+    await waitFor(() => expect(flatten({ label: '연남 파스타 다녀왔어요' }).opacity).toBeDefined());
+    expect(flatten({ label: '연남 파스타 다녀왔어요' }).transform).toBeUndefined();
+  });
+
+  it('C6 삭제 ✕ — 감소 모션 OFF: transform이 부착된다', async () => {
+    mockReduceMotion({ enabled: false });
+    renderList();
+    await waitFor(() => expect(flatten({ label: '연남 파스타 삭제' }).transform).toBeDefined());
+  });
+
+  it('C6 삭제 ✕ — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+    mockReduceMotion({ enabled: true });
+    renderList();
+    await waitFor(() => expect(flatten({ label: '연남 파스타 삭제' }).opacity).toBeDefined());
+    expect(flatten({ label: '연남 파스타 삭제' }).transform).toBeUndefined();
+  });
+
+  it('렌더 시 console.warn 0건(정적 opacity 계약 위반 없음)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderList();
+    expect(warn).not.toHaveBeenCalled();
   });
 });
