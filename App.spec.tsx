@@ -54,9 +54,20 @@ jest.mock('@/features/ota', () => ({
     return <RnView testID="ota-update-gate">{children}</RnView>;
   },
 }));
+// AuthGate 스텁 — 자기 자리에서 useQueryClient()가 해결되는지까지 관찰한다(query-cache T1 AC1-3).
+//   Provider가 AuthGate를 감싸지 않으면 useQueryClient()가 throw → query-client-ok 미렌더로 드러난다.
 jest.mock('@/navigation', () => {
   const { View: RnView } = require('react-native');
-  return { AuthGate: () => <RnView testID="auth-gate" /> };
+  const { useQueryClient } = require('@tanstack/react-query');
+  const AuthGate = () => {
+    useQueryClient();
+    return (
+      <RnView testID="auth-gate">
+        <RnView testID="query-client-ok" />
+      </RnView>
+    );
+  };
+  return { AuthGate };
 });
 
 import App from './App';
@@ -81,6 +92,15 @@ describe('App 루트 배선 (T7)', () => {
     const versionGate = screen.getByTestId('app-version-gate');
     const otaGate = within(versionGate).getByTestId('ota-update-gate');
     expect(within(otaGate).getByTestId('auth-gate')).toBeTruthy();
+  });
+
+  it('AC1-3(query-cache): AuthGate 자리에서 useQueryClient()가 해결된다(QueryClientProvider가 게이트를 감싼다)', async () => {
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('app-version-gate')).toBeTruthy());
+
+    // 스텁 AuthGate가 useQueryClient()를 호출하고도 렌더에 성공해야 한다 = Provider가 상위에 있다.
+    const gate = screen.getByTestId('auth-gate');
+    expect(within(gate).getByTestId('query-client-ok')).toBeTruthy();
   });
 
   it('AC21: 앱 부팅 시 usePushReceive를 1회 구동한다(전역 수신 UX 배선)', async () => {

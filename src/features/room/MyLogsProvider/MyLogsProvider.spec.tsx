@@ -8,6 +8,8 @@ jest.mock('@/lib/supabase', () => ({
   supabase: { rpc: jest.fn().mockResolvedValue({ data: [], error: null }) },
 }));
 
+import { createQueryWrapper } from '@/lib/queryClient/testQueryWrapper';
+
 import { MyLogsProvider, useMyLogsContext } from './MyLogsProvider';
 
 describe('useMyLogsContext', () => {
@@ -18,9 +20,12 @@ describe('useMyLogsContext', () => {
   });
 
   it('Provider 안에서 호출하면 state/refresh를 반환한다', () => {
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
-      <MyLogsProvider userId="u1">{children}</MyLogsProvider>
-    );
+    // useMyLogs가 공유 캐시를 경유하므로(query-cache T4) 앱과 같은 순서로 QueryClientProvider가 상위에 있어야 한다.
+    const { wrapper: queryWrapper } = createQueryWrapper();
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      queryWrapper({
+        children: <MyLogsProvider userId="u1">{children}</MyLogsProvider>,
+      });
     const { result } = renderHook(() => useMyLogsContext(), { wrapper });
     expect(result.current).toHaveProperty('state');
     expect(typeof result.current.refresh).toBe('function');

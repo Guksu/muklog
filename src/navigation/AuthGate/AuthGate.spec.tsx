@@ -8,7 +8,8 @@ import { fireEvent, screen } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
-jest.mock('@/features/auth', () => ({ useAuth: jest.fn() }));
+// 캐시 비움 훅(query-cache T6) — 마운트 여부와 주입 status만 관찰(비움 로직은 자체 유닛에서 검증).
+jest.mock('@/features/auth', () => ({ useAuth: jest.fn(), useClearCachesOnSignOut: jest.fn() }));
 
 // LoginScreen: 마커 + 주입 props(authenticating/loginError) 캡처(게이트 배선 검증).
 const mockLoginScreen = jest.fn();
@@ -79,10 +80,11 @@ jest.mock('@/features/map/LocationPrewarm', () => ({
   },
 }));
 
-import { useAuth } from '@/features/auth';
+import { useAuth, useClearCachesOnSignOut } from '@/features/auth';
 import { AuthGate } from './AuthGate';
 
 const useAuthMock = useAuth as jest.Mock;
+const useClearCachesOnSignOutMock = useClearCachesOnSignOut as jest.Mock;
 
 // useAuth 모킹 헬퍼 — 신규 메서드/필드 stub 포함(plan §3.2 표면).
 const authValue = (state: unknown, overrides?: Record<string, unknown>) => ({
@@ -102,6 +104,7 @@ beforeEach(() => {
   mockLoginScreen.mockReset();
   mockNavContainer.mockReset();
   consumePendingMock.mockReset();
+  useClearCachesOnSignOutMock.mockReset();
 });
 
 describe('AuthGate', () => {
@@ -214,5 +217,18 @@ describe('AuthGate', () => {
     props.onApple();
     expect(signInWithGoogle).toHaveBeenCalled();
     expect(signInWithApple).toHaveBeenCalled();
+  });
+
+  // ── 캐시 비움 배선 (query-cache T6 / W2) ──────────────────────────────────────
+  it('W2: 인증 상태와 무관하게 useClearCachesOnSignOut을 마운트하고 현재 status를 주입한다', () => {
+    useAuthMock.mockReturnValue(authValue({ status: 'authenticated', userId: 'u1' }));
+    renderWithTheme(<AuthGate />);
+    expect(useClearCachesOnSignOutMock).toHaveBeenCalledWith({ status: 'authenticated' });
+
+    // 로그아웃 화면에서도 계속 마운트돼야 전이(authenticated → unauthenticated)를 볼 수 있다.
+    useClearCachesOnSignOutMock.mockClear();
+    useAuthMock.mockReturnValue(authValue({ status: 'unauthenticated' }));
+    renderWithTheme(<AuthGate />);
+    expect(useClearCachesOnSignOutMock).toHaveBeenCalledWith({ status: 'unauthenticated' });
   });
 });
