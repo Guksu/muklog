@@ -52,7 +52,11 @@ export const UpdateSuggestModal = ({
   };
 
   return (
-    <Modal visible transparent animationType="none" onRequestClose={onDismiss}>
+    // statusBarTranslucent: Android에서 딤이 상태바까지 덮는다(U57). 카드는 수직 정중앙이라 보정 불요 —
+    //   컨테이너가 위로만 커지므로(RN WindowUtil이 top inset만 0으로) 카드 중심은 위로 ~12dp 이동,
+    //   인지 임계(화면 높이 1.5%) 아래 + 광학 중심 방향이라 보정하지 않음(plan §4.1 M4, qa-visual 수용).
+    //   하단 시스템 내비바는 RN 0.76.9에 수단이 없어 미커버(리더 결정 D2-A, Sheet.tsx 주석 참조).
+    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onDismiss}>
       {/* 딤 배경 — 탭하면 닫힘(권유는 닫기 가능) */}
       <Pressable
         testID="update-suggest-backdrop"

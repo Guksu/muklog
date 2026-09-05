@@ -7,7 +7,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 import React from 'react';
-import { AccessibilityInfo, StyleSheet, Text } from 'react-native';
+import { AccessibilityInfo, Modal, StyleSheet, Text } from 'react-native';
 import { State, type NativeGesture, type PanGesture } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
@@ -691,5 +691,19 @@ describe('Sheet 진입 애니메이션 — 감소 모션 토글 (E6~E7)', () => 
     expect(enterLayerOpacity()).toBe(0); // 진입 시작점
     act(() => jest.advanceTimersByTime(SHEET_ENTER_DURATION + 50));
     expect(enterLayerOpacity()).toBe(1);
+  });
+});
+
+// 딤이 상태바까지 덮는지는 네이티브 Dialog 윈도우 동작이라 렌더 결과로 관측되지 않는다
+//   → OS와 맺는 계약인 Modal props에 못 박는다(dim-full-cover plan §6 S1).
+describe('Sheet — 딤 전체 화면 커버 (dim-full-cover)', () => {
+  // TC-A1
+  it('A1 — Modal이 statusBarTranslucent를 켠다(딤이 상태바까지 확장)', () => {
+    renderWithTheme(
+      <Sheet visible onClose={jest.fn()} title="무엇을 할까요?">
+        <Text>액션</Text>
+      </Sheet>,
+    );
+    expect(screen.UNSAFE_getByType(Modal).props.statusBarTranslucent).toBe(true);
   });
 });
