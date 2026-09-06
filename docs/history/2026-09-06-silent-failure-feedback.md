@@ -3,8 +3,8 @@
 | 항목 | 내용 |
 |------|------|
 | 날짜 | 2026-09-06 |
-| 브랜치 | claude/wishlist-ui-improvements-w8rirm (세션 지정 — squash merge 권장) |
-| PR | (생성 후 갱신) |
+| 브랜치 | feat/ux-silent-failure-feedback (PR #27 squash 머지로 세션 브랜치 오염 → main 기준 재적재) |
+| PR | https://github.com/Guksu/muklog/pull/28 |
 | 관련 경로 | `src/navigation/screens/LogScreen/` · `src/features/muklog/{MuklogEditor,PlaceSearchView,PlaceResultRow}/` |
 
 ## 1. 개요
