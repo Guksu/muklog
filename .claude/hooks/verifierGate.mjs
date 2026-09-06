@@ -44,7 +44,9 @@ export const runChecks = ({ checks, cwd }) => {
   const failures = [];
   for (const check of checks) {
     try {
-      execSync(check.command, { stdio: 'pipe', timeout: 300000, cwd });
+      // maxBuffer 명시(64MB) — 기본 1MB로는 테스트 스위트 출력(2026-09-05 실측 1.4MB)이 넘쳐
+      //   전부 통과해도 ENOBUFS로 실패 오판된다(status null). guksu-harness 정본 역반영 필요.
+      execSync(check.command, { stdio: 'pipe', timeout: 300000, cwd, maxBuffer: 64 * 1024 * 1024 });
     } catch (error) {
       failures.push({
         name: check.name,

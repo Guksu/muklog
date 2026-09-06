@@ -49,8 +49,11 @@ import { Text } from '../Text';
 const SHEET_TOP_RADIUS = 26; // mk-ui Sheet: 26px 26px 0 0 (상단 라운드)
 const HANDLE_WIDTH = 40;
 const HANDLE_HEIGHT = 5;
-// 패널 상단 캡 — 내용(로그 목록 등)이 길어져도 상태바를 침범하지 않게 화면의 88%까지만(나머지는 내부 스크롤).
+// 패널 상단 캡 — 내용(로그 목록 등)이 길어져도 상태바를 침범하지 않게 88%까지만(나머지는 내부 스크롤).
 //   킷 Sheet는 디바이스 프레임 inset:0 안에서 자라므로 RN에선 maxHeight + 하단 safe-area inset으로 번역.
+//   ⚠️ statusBarTranslucent 도입(dim-full-cover) 이후 기준면이 "상태바를 뺀 영역"이 아니라 **화면 전체**다 —
+//      컨테이너가 상태바 높이만큼 커진 만큼 상한도 커져 패널 상단이 최대 ~21~42px 더 올라갈 수 있다.
+//      88%면 그래도 상태바 아래에 머무르므로 값은 그대로 둔다(킷 inset:0 의도에 오히려 가까워진다).
 const PANEL_MAX_HEIGHT_RATIO = '88%';
 
 /** 드래그로 인식하기 시작하는 최소 아래 방향 이동(px). 탭·가로 제스처 보존. */
@@ -339,7 +342,13 @@ export const Sheet = ({ visible, onClose, title, children }: SheetProps) => {
   return (
     // animationType="none": fade면 닫히는 모달이 페이드아웃되는 동안 이전 시트 내용이 잔상으로 보임
     //   (시트→다른 시트 전환 시). none으로 즉시 마운트/언마운트해 잔상 제거(딤=즉시 피드백, 드래그 슬라이드는 유지).
-    <Modal visible transparent animationType="none" onRequestClose={requestClose}>
+    // statusBarTranslucent: Android에서 Modal 윈도우가 상태바 아래로 확장돼 딤이 화면 위쪽 끝까지 덮는다.
+    //   없으면 RN이 감싸는 FrameLayout에 fitsSystemWindows=true를 걸어 내용이 시스템 바만큼 안으로 밀리고,
+    //   딤(absoluteFill)은 "밀린 영역"만 덮어 상태바 띠만 원래 밝기로 남는다(U57, ReactModalHostView.kt:299-305).
+    //   ⚠️ 하단 시스템 내비바는 여전히 안 덮인다 — RN이 top만 0으로 바꾸고 bottom은 유지하기 때문(WindowUtil.kt:16-31).
+    //      RN 0.77+에 생기는 navigationBarTranslucent(이 prop을 선행 조건으로 요구)를 한 줄 더 넣으면 완결된다.
+    //      RN 0.76.9에는 그 prop이 존재하지 않아 이번 범위 밖(리더 결정 D2-A).
+    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={requestClose}>
       {/* Android에서 Modal은 별도 네이티브 윈도우라 앱 루트의 제스처 컨텍스트가 닿지 않는다 — 여기서 다시 루트를 연다. */}
       <GestureHandlerRootView style={styles.gestureRoot}>
         {/* 진입 페이드 레이어 — 딤과 패널이 함께 스며든다(드래그 연동 딤 계산은 아래에서 그대로 유지). */}

@@ -53,6 +53,12 @@ describe('WishlistView — 빈 상태 (TC-1)', () => {
     expect(screen.queryByText('연남 파스타')).toBeNull();
   });
 
+  it('빈 상태에는 "기록하기" pill이 없다(TC-5, 빈 상태 CTA만 존재)', () => {
+    renderView({ items: [] });
+    expect(screen.queryByText('기록하기')).toBeNull();
+    expect(screen.queryByLabelText(/기록하기/)).toBeNull();
+  });
+
   it('빈 상태 CTA 탭 시 onAdd를 호출한다', () => {
     const onAdd = jest.fn();
     renderView({ items: [], onAdd });
@@ -97,11 +103,36 @@ describe('WishlistView — 리스트 / addedBy 매핑 (TC-3)', () => {
     expect(screen.queryByText('연남동')).toBeNull();
   });
 
-  it('"다녀왔어요" 탭 시 onVisit({ id })를 호출한다', () => {
+  it('항목 카드에 액션 pill "기록하기"를 표시한다(TC-1)', () => {
+    renderView({ items: [item()] });
+    expect(screen.getByText('기록하기')).toBeTruthy();
+  });
+
+  it('상태 서술 카피 "다녀왔어요"는 렌더 트리·접근성 라벨 어디에도 없다(TC-2)', () => {
+    renderView({ items: [item()] });
+    expect(screen.queryByText('다녀왔어요')).toBeNull();
+    expect(screen.queryByLabelText('연남 파스타 다녀왔어요')).toBeNull();
+  });
+
+  it('"기록하기" 탭 시 onVisit({ id })를 호출한다(TC-3)', () => {
     const onVisit = jest.fn();
     renderView({ items: [item({ id: 'w-target' })], onVisit });
-    fireEvent.press(screen.getByLabelText('연남 파스타 다녀왔어요'));
+    fireEvent.press(screen.getByLabelText('연남 파스타 기록하기'));
     expect(onVisit).toHaveBeenCalledWith({ id: 'w-target' });
+  });
+
+  it('항목이 여러 개면 "{장소명} 기록하기" 라벨로 각각 개별 조회된다(TC-4, 라벨 충돌 없음)', () => {
+    const onVisit = jest.fn();
+    renderView({
+      items: [
+        item({ id: 'w-a', placeName: '연남 파스타' }),
+        item({ id: 'w-b', placeName: '망원 우동' }),
+      ],
+      onVisit,
+    });
+    expect(screen.getByLabelText('연남 파스타 기록하기')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('망원 우동 기록하기'));
+    expect(onVisit).toHaveBeenCalledWith({ id: 'w-b' });
   });
 
   it('삭제(✕) 탭 시 onRemove({ id })를 호출한다', () => {
@@ -132,7 +163,7 @@ describe('WishlistView — 리스트 / addedBy 매핑 (TC-3)', () => {
 // ── 프레스 부여 C4·C5·C6(motion-press-c T3 / ui-spec §2) ────────────────────────
 //   seam = a11yLabel로 조회한 노드의 flatten style transform/opacity 키 유무(테스트 전용 testID 증설 금지).
 //   pressedOpacity 실값·Animated 궤적은 검증하지 않는다(plan §8-2).
-describe('WishlistView — 추가·다녀왔어요·삭제 눌림 피드백(motion-press-c C4·C5·C6)', () => {
+describe('WishlistView — 추가·기록하기·삭제 눌림 피드백(motion-press-c C4·C5·C6)', () => {
   const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
     jest
       .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
@@ -159,17 +190,17 @@ describe('WishlistView — 추가·다녀왔어요·삭제 눌림 피드백(moti
     expect(flatten({ label: '가보고 싶은 곳 추가' }).transform).toBeUndefined();
   });
 
-  it('C5 다녀왔어요 — 감소 모션 OFF: transform이 부착된다', async () => {
+  it('C5 기록하기 — 감소 모션 OFF: transform이 부착된다', async () => {
     mockReduceMotion({ enabled: false });
     renderList();
-    await waitFor(() => expect(flatten({ label: '연남 파스타 다녀왔어요' }).transform).toBeDefined());
+    await waitFor(() => expect(flatten({ label: '연남 파스타 기록하기' }).transform).toBeDefined());
   });
 
-  it('C5 다녀왔어요 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
+  it('C5 기록하기 — 감소 모션 ON: transform 없이 opacity만 남는다', async () => {
     mockReduceMotion({ enabled: true });
     renderList();
-    await waitFor(() => expect(flatten({ label: '연남 파스타 다녀왔어요' }).opacity).toBeDefined());
-    expect(flatten({ label: '연남 파스타 다녀왔어요' }).transform).toBeUndefined();
+    await waitFor(() => expect(flatten({ label: '연남 파스타 기록하기' }).opacity).toBeDefined());
+    expect(flatten({ label: '연남 파스타 기록하기' }).transform).toBeUndefined();
   });
 
   it('C6 삭제 ✕ — 감소 모션 OFF: transform이 부착된다', async () => {

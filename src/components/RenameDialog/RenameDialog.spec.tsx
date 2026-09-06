@@ -3,12 +3,14 @@
 //   프리젠테이션 단위 검증: open 토글·controlled value·취소/저장 콜백·X클리어·maxLength·error/extra 슬롯.
 //   배선(정규화·RPC·검증)은 developer 몫 — 여기선 콜백 호출과 슬롯 렌더만 본다(plan §4.2 동작 계약 / T1 AC1.1~1.8).
 import React from 'react';
-import { AccessibilityInfo, StyleSheet, Text } from 'react-native';
+import { AccessibilityInfo, Modal, StatusBar, StyleSheet, Text } from 'react-native';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
-import { RenameDialog } from './RenameDialog';
+import { resolveModalTopInset } from '../modalInsets';
+
+import { RENAME_DIALOG_TOP_OFFSET, RenameDialog } from './RenameDialog';
 
 const noop = () => {};
 
@@ -320,5 +322,43 @@ describe('RenameDialog — 입력 지우기 ✕ 눌림 피드백(motion-press-c 
     renderWithValue();
     await waitFor(() => expect(flattenClear().opacity).toBeDefined());
     expect(flattenClear().transform).toBeUndefined();
+  });
+});
+
+// 딤이 상태바까지 덮으면 Modal 컨테이너의 위쪽 inset이 0이 된다 — 그러면 카드가 상태바 높이만큼 위로 밀린다.
+//   "카드는 상태바 아래 70px에서 시작한다"는 킷 계약(ESP+70)을 합성값으로 고정한다(dim-full-cover plan §6 S1·S2).
+describe('RenameDialog — 딤 전체 화면 커버 + 상단 위치 보정 (dim-full-cover)', () => {
+  const renderOpen = () =>
+    renderWithTheme(
+      <RenameDialog open title="로그 이름" value="" onChange={noop} onCancel={noop} onSave={noop} />,
+    );
+  const wrapPaddingTop = () =>
+    StyleSheet.flatten(screen.getByTestId('rename-dialog-wrap').props.style).paddingTop;
+
+  // TC-A2
+  it('A2 — Modal이 statusBarTranslucent를 켠다', () => {
+    renderOpen();
+    expect(screen.UNSAFE_getByType(Modal).props.statusBarTranslucent).toBe(true);
+  });
+
+  // TC-C1 — renderWithTheme의 insets.top은 0, 테스트 환경의 currentHeight는 undefined.
+  it('C1 — 상단 여백이 resolveModalTopInset + RENAME_DIALOG_TOP_OFFSET과 같다', () => {
+    renderOpen();
+    expect(wrapPaddingTop()).toBe(
+      resolveModalTopInset({ insetTop: 0, statusBarHeight: StatusBar.currentHeight }) +
+        RENAME_DIALOG_TOP_OFFSET,
+    );
+  });
+
+  // TC-C2
+  it('C2 — 상태바 높이가 24여도 카드는 상태바 아래 70에서 시작한다', () => {
+    const original = StatusBar.currentHeight;
+    StatusBar.currentHeight = 24;
+    try {
+      renderOpen();
+      expect(wrapPaddingTop()).toBe(24 + RENAME_DIALOG_TOP_OFFSET);
+    } finally {
+      StatusBar.currentHeight = original;
+    }
   });
 });

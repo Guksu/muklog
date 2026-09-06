@@ -7,7 +7,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 
-import { useAuth } from '@/features/auth';
+import { useAuth, useClearCachesOnSignOut } from '@/features/auth';
 import { LocationPrewarm } from '@/features/map/LocationPrewarm';
 import { MapPrewarm } from '@/features/map/MapPrewarm';
 import { ProfileProvider } from '@/features/profile';
@@ -23,6 +23,11 @@ import { SplashView } from '../screens/SplashView';
 
 export const AuthGate = () => {
   const { state, retry, loginError, signInWithGoogle, signInWithApple } = useAuth();
+
+  // 로그아웃(authenticated → unauthenticated) 시 조회·서명 URL 캐시를 비운다(query-cache §3.8).
+  //   여기가 QueryClientProvider 안쪽이면서 인증 상태를 아는 유일한 지점이라 두 세계를 잇는 자리다.
+  //   분기 전에 무조건 호출 — 로그인 화면으로 넘어간 뒤에도 마운트가 유지돼야 전이를 관찰할 수 있다.
+  useClearCachesOnSignOut({ status: state.status });
 
   // NavigationContainer 준비 완료 시점 — 콜드스타트/로그인 전 도착해 대기 중이던 알림 딥링크를 소비한다(§3.4 D4).
   const handleNavReady = () => consumePendingDeepLink();
