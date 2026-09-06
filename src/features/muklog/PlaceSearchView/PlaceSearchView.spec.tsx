@@ -130,6 +130,80 @@ describe('PlaceSearchView', () => {
     expect(screen.getByText(/^고기 ·|^고기$|고기 ·/)).toBeTruthy();
   });
 
+  // ── 제출 중 진행 표시·비활성(U6-b, silent-failure-feedback T2) ─────────────────────────
+  //   seam = props(submitting/submittingLabel) + 화면 쿼리. 진행 행 마크업은 기존 '검색 중…' 행 승계(신규 실값 0).
+  describe('submitting(U6-b)', () => {
+    const readyWithResult = {
+      ...baseProps,
+      status: 'ready' as const,
+      query: '보나',
+      results: [item()],
+    };
+
+    it('submitting=true면 결과행 탭이 onSelectResult를 호출하지 않는다', () => {
+      const onSelectResult = jest.fn();
+      renderWithTheme(
+        <PlaceSearchView {...readyWithResult} onSelectResult={onSelectResult} submitting />,
+      );
+      fireEvent.press(screen.getByTestId('place-result-0'));
+      expect(onSelectResult).not.toHaveBeenCalled();
+    });
+
+    it('submitting=true면 "직접 입력" 행 탭이 onUseManualInput을 호출하지 않는다', () => {
+      const onUseManualInput = jest.fn();
+      renderWithTheme(
+        <PlaceSearchView
+          {...baseProps}
+          status="ready"
+          query="없는가게"
+          results={[]}
+          onUseManualInput={onUseManualInput}
+          submitting
+        />,
+      );
+      fireEvent.press(screen.getByLabelText('직접 입력'));
+      expect(onUseManualInput).not.toHaveBeenCalled();
+    });
+
+    it('submitting=true면 진행 스피너 + submittingLabel 문구를 표시한다', () => {
+      renderWithTheme(
+        <PlaceSearchView {...readyWithResult} submitting submittingLabel="담는 중…" />,
+      );
+      expect(screen.getByTestId('place-search-submitting-spinner')).toBeTruthy();
+      expect(screen.getByText('담는 중…')).toBeTruthy();
+    });
+
+    it('submittingLabel 미전달 시 기본 문구 "처리 중…"을 쓴다', () => {
+      renderWithTheme(<PlaceSearchView {...readyWithResult} submitting />);
+      expect(screen.getByText('처리 중…')).toBeTruthy();
+    });
+
+    it('submitting 미전달이면 진행 표시 없음 + 결과행·직접입력행 모두 활성이다(에디터 회귀 0)', () => {
+      const onSelectResult = jest.fn();
+      const onUseManualInput = jest.fn();
+      renderWithTheme(
+        <PlaceSearchView {...readyWithResult} onSelectResult={onSelectResult} />,
+      );
+      expect(screen.queryByTestId('place-search-submitting-spinner')).toBeNull();
+      expect(screen.queryByText('처리 중…')).toBeNull();
+      fireEvent.press(screen.getByTestId('place-result-0'));
+      expect(onSelectResult).toHaveBeenCalledTimes(1);
+
+      screen.unmount();
+      renderWithTheme(
+        <PlaceSearchView
+          {...baseProps}
+          status="ready"
+          query="없는가게"
+          results={[]}
+          onUseManualInput={onUseManualInput}
+        />,
+      );
+      fireEvent.press(screen.getByLabelText('직접 입력'));
+      expect(onUseManualInput).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('error + onUseManualInput 주입 시에도 "직접 입력" 폴백을 노출한다 (§4.2)', () => {
     renderWithTheme(
       <PlaceSearchView
