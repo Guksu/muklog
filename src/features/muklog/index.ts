@@ -28,6 +28,7 @@ export { MuklogList, type MuklogListProps } from './MuklogList';
 export {
   MuklogEditor,
   type MuklogEditorProps,
+  type MuklogEditorExitGuardProps,
   type MuklogEditSubmitInput,
 } from './MuklogEditor';
 export { PhotoPickerGrid, type PhotoPickerGridProps } from './PhotoPickerGrid';

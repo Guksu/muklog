@@ -57,9 +57,8 @@ describe('normalizeMuklogInput', () => {
     );
   });
 
-  it('rating 0/null은 미평가로 허용하고 null로 정규화한다 (AC4)', () => {
-    expect(normalizeMuklogInput({ input: { ...baseInput, rating: 0 } }).rating).toBeNull();
-    expect(normalizeMuklogInput({ input: { ...baseInput, rating: null } }).rating).toBeNull();
+  it.each([0, null, undefined, NaN, Infinity, 0.5, 5.5, 4.3])('유효한 별점이 아니면 저장을 거부한다: %s', (rating) => {
+    expect(() => normalizeMuklogInput({ input: { ...baseInput, rating } })).toThrow(MuklogErrorToken.RatingOutOfRange);
   });
 
   it('미래 방문일이면 VISITED_AT_IN_FUTURE를 throw한다 (AC5)', () => {
@@ -81,21 +80,12 @@ describe('normalizeMuklogInput', () => {
     expect(result.area).toBeNull();
   });
 
-  it('메모가 없거나 공백/5자 미만이면 MEMO_TOO_SHORT를 throw한다(메모 필수·최소 5자)', () => {
-    expect(() => normalizeMuklogInput({ input: { ...baseInput, memo: '   ' } })).toThrow(
-      MuklogErrorToken.MemoTooShort,
-    );
-    expect(() => normalizeMuklogInput({ input: { ...baseInput, memo: '맛' } })).toThrow(
-      MuklogErrorToken.MemoTooShort,
-    );
-    expect(() => normalizeMuklogInput({ input: { ...baseInput, memo: null } })).toThrow(
-      MuklogErrorToken.MemoTooShort,
-    );
+  it.each([null, undefined, '', '   '])('빈 메모는 선택 입력으로 null 저장한다: %s', (memo) => {
+    expect(normalizeMuklogInput({ input: { ...baseInput, memo } }).memo).toBeNull();
   });
 
-  it('메모 5자 이상이면 trim해서 통과한다', () => {
-    const result = normalizeMuklogInput({ input: { ...baseInput, memo: '  맛있었어요  ' } });
-    expect(result.memo).toBe('맛있었어요');
+  it('한 글자 메모도 허용하고 공백을 정규화한다', () => {
+    expect(normalizeMuklogInput({ input: { ...baseInput, memo: '  맛  ' } }).memo).toBe('맛');
   });
 
   // 장소검색(muklog-place) — place 필드 통과/정규화 (plan §3.8 / T8·T9).

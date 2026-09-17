@@ -14,11 +14,13 @@
 //     킷 mk-log:383-414)로 스왑, 결과 선택/직접입력(§4.2 0건 폴백) 시 폼 복귀. usePlaceSearch 계약·자동채움·payload 불변.
 //   ⚠️ 비주얼 폴리시 대기(ui-publisher): searchBtn(mk-log:312)·placeChosen "변경"(mk-log:309). 검색뷰=PlaceSearchView(완료),
 //     저장버튼(mk-log:296, 적용완료). 본 패스는 구조/배선(상태머신)만 — accessibilityLabel/계약은 테스트 의존.
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  Button,
+  Sheet,
   DatePickerSheet,
   Icon,
   IconName,
@@ -51,9 +53,11 @@ import {
 } from '../types';
 import { useCreateMuklog } from '../useCreateMuklog';
 import { useMuklogPhotoPicker } from '../useMuklogPhotoPicker';
-import { MEMO_MIN_LENGTH, todayLocalDate } from '../validate';
+import { isValidMuklogRating, todayLocalDate } from '../validate';
 
 // 한 화면 안에서 교체되는 두 뷰의 식별자(SwapTransition swapKey) — motion-pass-1 D1.
+const SaveStatus = { Idle: 'idle', Saving: 'saving', Saved: 'saved' } as const;
+
 const EditorView = { Form: 'form', Search: 'search' } as const;
 
 // 눌림 불투명도(motion-coverage B1~B4, ui-spec §1-2) — 새 값 발명 없이 기존 소비처 실값을 승계한다.
@@ -140,9 +144,20 @@ export type MuklogSelectedPlace = {
   lng?: number | null;
 };
 
+/** 라우트 제거 방지와 에디터의 공개 경계. 저장 성공 후 모든 보호 상태가 해제된다. */
+export type MuklogEditorExitGuardProps = {
+  dirty: boolean;
+  isSaving: boolean;
+  isSearching: boolean;
+  onRequestExit: ({ exit }: { exit: () => void }) => void;
+  onSearchBack: () => void;
+};
+
 export type MuklogEditorProps = {
   /** 저장 대상 로그 id. */
   roomId: string;
+  /** native-stack 제거/제스처 보호를 제공하는 라우트 어댑터. */
+  ExitGuard?: React.ComponentType<MuklogEditorExitGuardProps>;
   /** SubBar 뒤로/취소 — 컨테이너가 navigation.goBack 연결. */
   onBack: () => void;
   /** 저장 성공 시 호출(컨테이너가 goBack + 복귀 화면 refresh). */
@@ -176,6 +191,7 @@ export type MuklogEditorProps = {
 
 export const MuklogEditor = ({
   roomId,
+  ExitGuard,
   onBack,
   onSaved,
   initial,
@@ -202,9 +218,9 @@ export const MuklogEditor = ({
   const { showToast } = useToastController();
 
   // 필드 초기값 — 편집이면 initial 프리필, 작성이면 빈값(킷 mk-log:283-288).
-  const [placeName, setPlaceName] = useState(initial?.placeName ?? '');
+  const [placeName, setPlaceName] = useState((selectedPlace?.placeName ?? initial?.placeName ?? '').slice(0, PLACE_NAME_MAX));
   const [category, setCategory] = useState<MuklogCategoryKey | null>(
-    (initial?.category as MuklogCategoryKey | null) ?? null,
+    ((selectedPlace?.category ?? initial?.category) as MuklogCategoryKey | null) ?? null,
   );
   const [rating, setRating] = useState(initial?.rating ?? 0);
   const [memo, setMemo] = useState(initial?.memo ?? '');
@@ -232,12 +248,12 @@ export const MuklogEditor = ({
   //     · selectedPlace 주입(검색 선택) 시 sync effect가 갱신(자동채움 §5.4·D1).
   //     · 선택 해제(handleClearPlace) 시 좌표/주소/kakaoPlaceId NULL 리셋(D2, area는 유지).
   const [placeData, setPlaceData] = useState<SheetPlaceData>(() => ({
-    area: initial?.area ?? null,
-    address: initial?.address ?? null,
-    roadAddress: initial?.roadAddress ?? null,
-    kakaoPlaceId: initial?.kakaoPlaceId ?? null,
-    lat: initial?.lat ?? null,
-    lng: initial?.lng ?? null,
+    area: (selectedPlace ? selectedPlace.area : initial?.area) ?? null,
+    address: (selectedPlace ? selectedPlace.address : initial?.address) ?? null,
+    roadAddress: (selectedPlace ? selectedPlace.roadAddress : initial?.roadAddress) ?? null,
+    kakaoPlaceId: (selectedPlace ? selectedPlace.kakaoPlaceId : initial?.kakaoPlaceId) ?? null,
+    lat: (selectedPlace ? selectedPlace.lat : initial?.lat) ?? null,
+    lng: (selectedPlace ? selectedPlace.lng : initial?.lng) ?? null,
   }));
 
   // selectedPlace(컨테이너 선택) → 장소명/카테고리 칩/placeData 자동채움(§5.4·D1). 선택 식별값 변화 시 1회.
@@ -264,6 +280,9 @@ export const MuklogEditor = ({
       selectedPlace?.kakaoPlaceId,
       selectedPlace?.lat,
       selectedPlace?.lng,
+      selectedPlace?.area,
+      selectedPlace?.address,
+      selectedPlace?.roadAddress,
     ],
   );
 
@@ -294,7 +313,50 @@ export const MuklogEditor = ({
     ? editorPhotos.map((p) => ({ uri: p.uri }))
     : createPhotos;
 
-  const loading = isEdit ? submitting : createLoading;
+  const [saveStatus, setSaveStatus] = useState<(typeof SaveStatus)[keyof typeof SaveStatus]>(SaveStatus.Idle);
+  const saveLocked = useRef(false);
+  const savedNotified = useRef(false);
+  const loading = (isEdit ? submitting : createLoading) || saveStatus === SaveStatus.Saving;
+  const saved = saveStatus === SaveStatus.Saved;
+  // 저장 대상만 비교한다. remote URI는 갱신되어도 storagePath가 같으면 같은 사진이다.
+  const snapshot = JSON.stringify({
+    placeName, category, rating, memo, visitedAt, ...placeData,
+    photos: isEdit
+      ? editorPhotos.map((photo) => photo.kind === 'existing' ? { storagePath: photo.storagePath } : { uri: photo.uri })
+      : createPhotos.map((photo) => ({ uri: photo.uri })),
+  });
+  const [initialSnapshot] = useState(snapshot);
+  const dirty = snapshot !== initialSnapshot;
+  const [leaving, setLeaving] = useState(false);
+  const [exitOpen, setExitOpen] = useState(false);
+  const pendingExit = useRef<(() => void) | null>(null);
+  const handleRequestExit = ({ exit }: { exit: () => void }) => {
+    if (saveLocked.current || loading || saved || leaving) return;
+    if (!dirty) { exit(); return; }
+    if (pendingExit.current) return;
+    pendingExit.current = exit;
+    setExitOpen(true);
+  };
+  const handleContinue = () => {
+    pendingExit.current = null;
+    setExitOpen(false);
+  };
+  const handleLeave = () => {
+    setExitOpen(false);
+    setLeaving(true);
+  };
+  useEffect(function finishConfirmedExit() {
+    if (!leaving) return;
+    const exit = pendingExit.current;
+    pendingExit.current = null;
+    exit?.();
+  }, [leaving]);
+  // 저장 성공 렌더에서 ExitGuard가 먼저 보호 해제를 반영한 뒤 복귀한다.
+  useEffect(function finishSavedNavigation() {
+    if (!saved || savedNotified.current) return;
+    savedNotified.current = true;
+    onSaved();
+  }, [saved, onSaved]);
   const error = isEdit ? submitError : createError;
 
   const handleAddPhoto = async () => {
@@ -337,11 +399,13 @@ export const MuklogEditor = ({
     picker.removePhoto({ index });
   };
 
-  // 저장 가능: 장소명 + 메모 최소 5자(필수, 사용자 요청) + 저장 중 아님.
-  const memoLongEnough = memo.trim().length >= MEMO_MIN_LENGTH;
-  const canSave = placeName.trim().length > 0 && memoLongEnough && !loading;
+  const canSave = placeName.trim().length > 0 && isValidMuklogRating({ rating }) && !loading && !saved;
 
   const handleSave = async () => {
+    if (!canSave || saveLocked.current || (isEdit && !onSubmit)) return;
+    Keyboard.dismiss();
+    saveLocked.current = true;
+    setSaveStatus(SaveStatus.Saving);
     if (isEdit) {
       // 편집 — developer onSubmit(useUpdateMuklog). initial 보장(isEdit). 검증/reconcile은 훅.
       if (!onSubmit || !initial) return;
@@ -367,9 +431,11 @@ export const MuklogEditor = ({
         });
         // 성공 시에만 토스트(킷 mk-log:400). onSaved(goBack)와 겹쳐도 직전 화면에서 보이도록 show 후 onSaved.
         showToast({ message: SAVE_TOAST_EDIT, tone: 'positive' });
-        onSaved();
-      } catch {
-        // 에러는 submitError(부모 useUpdateMuklog.error)로 인라인 표시. 화면 유지(입력 보존).
+        setSaveStatus(SaveStatus.Saved);
+      } catch (saveError) {
+        saveLocked.current = false;
+        setSaveStatus(SaveStatus.Idle);
+        showToast({ message: mapMuklogError({ error: saveError }), tone: 'neutral' });
       }
       return;
     }
@@ -395,9 +461,11 @@ export const MuklogEditor = ({
       if (!controlled) picker.reset();
       // 성공 시에만 토스트(킷 mk-log:400). 실패 경로(catch)엔 토스트 없음 — 기존 에러 인라인 유지.
       showToast({ message: SAVE_TOAST_CREATE, tone: 'positive' });
-      onSaved();
-    } catch {
-      // 에러는 useCreateMuklog가 error 상태로 노출 → 아래 인라인 표시. 화면 유지.
+      setSaveStatus(SaveStatus.Saved);
+    } catch (saveError) {
+      saveLocked.current = false;
+      setSaveStatus(SaveStatus.Idle);
+      showToast({ message: mapMuklogError({ error: saveError }), tone: 'neutral' });
     }
   };
 
@@ -456,6 +524,9 @@ export const MuklogEditor = ({
   //     placeSearch null 방어(searching && placeSearch)는 그대로 유지 — 검색 컨트롤이 없으면 언제나 폼이다.
 
   return (
+    <>
+      {ExitGuard ? <ExitGuard dirty={dirty && !saved && !leaving} isSaving={loading} isSearching={searching && !saved}
+        onRequestExit={handleRequestExit} onSearchBack={() => setSearching(false)} /> : null}
     <SwapTransition
       swapKey={searching && placeSearch ? EditorView.Search : EditorView.Form}
       direction={searching && placeSearch ? SwapDirection.Forward : SwapDirection.Back}
@@ -477,8 +548,14 @@ export const MuklogEditor = ({
         <Screen edges={['left', 'right']} style={styles.screen}>
           {/* 'top' 제외: SubBar가 insets.top을 직접 처리(LogScreen/Join/Profile/RoomCreated 동일 패턴). 포함 시 top inset 이중 적용.
               'bottom' 제외: 비-GNB 엣지투엣지에서 하단 빈 띠 방지 — 배경은 화면 끝까지, 콘텐츠는 contentContainer paddingBottom+insets.bottom으로 인디케이터 클리어. */}
-          <SubBar title={isEdit ? '먹로그 편집' : '새 먹로그'} onBack={onBack} right={saveAction} />
+          <SubBar title={isEdit ? '먹로그 편집' : '새 먹로그'} onBack={() => handleRequestExit({ exit: onBack })} right={saveAction} />
+          {loading || (!canSave && !saved) ? (
+            <Text variant="caption" color="fgMuted" style={{ paddingHorizontal: theme.spacing[20], marginBottom: theme.spacing[8] }}>
+              {loading ? '저장 중이에요' : '장소와 별점을 선택하면 저장할 수 있어요'}
+            </Text>
+          ) : null}
           <ScrollView
+            pointerEvents={loading || saved ? 'none' : 'auto'}
             keyboardShouldPersistTaps="handled"
             style={styles.scroll}
             contentContainerStyle={{
@@ -542,6 +619,7 @@ export const MuklogEditor = ({
             ) : (
               // placeSearch 미주입(방어/회귀 안전) — 수동 입력만.
               <TextInput
+                editable={!loading && !saved}
                 accessibilityLabel="장소 이름"
                 value={placeName}
                 onChangeText={setPlaceName}
@@ -605,11 +683,11 @@ export const MuklogEditor = ({
 
             {/* 별점 */}
             <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
-              별점
+              별점 <Text variant="fieldLabel" color="primary">*</Text>
             </Text>
             {/* 별점 + 보조 텍스트(킷 mk-log:449) — 선택 시 "n.0"(fg) / 미선택 시 "어땠어요?"(fgAssistive). 순수 표시. */}
             <View style={styles.ratingRow}>
-              <Stars value={rating} size={32} editable onChange={setRating} />
+              <Stars value={rating} size={32} editable={!loading && !saved} onChange={setRating} />
               <Text variant="ratingNum" color={rating > 0 ? 'fg' : 'fgAssistive'}>
                 {rating > 0 ? rating.toFixed(1) : '어땠어요?'}
               </Text>
@@ -617,9 +695,10 @@ export const MuklogEditor = ({
 
             {/* 메모 */}
             <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
-              메모
+              메모 (선택)
             </Text>
             <TextInput
+              editable={!loading && !saved}
               accessibilityLabel="메모"
               value={memo}
               onChangeText={setMemo}
@@ -629,16 +708,6 @@ export const MuklogEditor = ({
               placeholderTextColor={theme.color.fgMuted}
               style={[styles.input, styles.memo, fieldInput, memoBox]}
             />
-            {/* 메모 필수·최소 5자 안내(사용자 요청). 미달 시 강조 톤. */}
-            <Text
-              testID="memo-hint"
-              variant="caption"
-              color={memoLongEnough ? 'fgMuted' : 'accentStrong'}
-              style={{ marginTop: theme.spacing[6] }}
-            >
-              {`메모는 최소 ${MEMO_MIN_LENGTH}자 이상 입력해 주세요.`}
-            </Text>
-
             {/* 방문일 (기본 today, 미래 차단은 검증이 최종 방어) — 탭형 행→DatePickerSheet(킷 mk-log:416-420). */}
             <Text variant="fieldLabel" color="fg" style={[styles.label, { marginTop: theme.spacing[22] }]}>
               방문일
@@ -677,6 +746,16 @@ export const MuklogEditor = ({
         </Screen>
       )}
     </SwapTransition>
+      <Sheet visible={exitOpen} onClose={handleContinue} title="저장하지 않고 나갈까요?">
+        <Text variant="bodySm" color="fgMuted" style={{ textAlign: 'center', marginBottom: theme.spacing[18] }}>
+          작성한 내용은 저장되지 않아요.
+        </Text>
+        <View style={{ gap: theme.spacing[10] }}>
+          <Button title="계속 작성하기" accessibilityLabel="계속 작성하기" variant="primary" full onPress={handleContinue} />
+          <Button title="나가기" accessibilityLabel="나가기" variant="ghost" full onPress={handleLeave} />
+        </View>
+      </Sheet>
+    </>
   );
 };
 
