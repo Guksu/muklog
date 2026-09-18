@@ -56,6 +56,7 @@ import {
   usePlaceSearch,
 } from '@/features/muklog';
 import {
+  mapWishlistError,
   useAddWishlist,
   useRemoveWishlist,
   useWishlist,
@@ -78,6 +79,8 @@ const LogView = { Main: 'main', Search: 'search' } as const;
 const WISH_ADDED_TOAST = '위시리스트에 담았어요 📍';
 // 이미 담은 장소 안내 카피 — 지도 주변 담기(NEARBY_WISH_COPY.duplicate)와 동일 문구로 흐름 간 동작 통일.
 const WISH_DUPLICATE_TOAST = '이미 담은 곳이에요';
+// 담기 진행 중 카피(U6-b) — 같은 화면의 '검색 중…'(PlaceSearchView loading 행)과 같은 형태. 신규 어휘 0.
+const WISH_SUBMITTING_LABEL = '담는 중…';
 
 // 초대코드 복사 토스트 카피(킷 mk-log:94, tone positive). {code}는 배선 시 치환.
 const INVITE_COPIED_TOAST = (code: string) => `초대코드를 복사했어요 · ${code}`;
@@ -189,7 +192,11 @@ export const LogScreen = () => {
   // 위시 추가 in-flight 가드 — 연속 탭(검색 결과/직접 입력) 중복 insert 차단. state는 비동기 갱신이라
   //   레이스를 못 막으므로 ref로 동기 잠금(지도 주변 담기 useAddNearbyWish.submittingRef 선례).
   const submittingWishRef = React.useRef(false);
-  // 위시 추가 성공/예약취소 에러 토스트 — 전역 토스트 컨트롤러(루트 단일 <Toast>). 트리거만 호출(비주얼·타이머는 Toast 소유).
+  // 같은 in-flight의 "표시"용 상태(U6-b) — 리렌더를 유발해 검색뷰에 진행 표시·행 비활성을 그린다.
+  //   ⚠️ 위 ref를 이걸로 대체하지 않는다: 가드=ref(동기 잠금) / 표시=state 로 역할이 갈린다.
+  //   승격하면 연타 레이스가 돌아온다. 같은 조합의 선례가 useAddNearbyWish.ts:51-54(submittingRef + submitting).
+  const [wishSubmitting, setWishSubmitting] = React.useState(false);
+  // 위시 추가 성공/실패(U6)·예약취소 에러 토스트 — 전역 토스트 컨트롤러(루트 단일 <Toast>). 트리거만 호출(비주얼·타이머는 Toast 소유).
   const { showToast } = useToastController();
 
   // 재포커스(에디터/상세 복귀) 시 두 목록을 함께 1회 refresh(첫 포커스=마운트 로드와 겹쳐 가드). 폴링 아님(plan §6·§10).
@@ -223,7 +230,8 @@ export const LogScreen = () => {
   const muklogCount = muklogsState.status === 'ready' ? muklogsState.muklogs.length : 0;
   const wishCount = wishlistState.status === 'ready' ? wishlistState.items.length : 0;
 
-  // 추가: AddWishlistInput으로 insert → 성공 시 위시 목록 refresh + 토스트, 검색뷰 복귀. 실패 시 목록 불변(토스트 없음, TC-2).
+  // 추가: AddWishlistInput으로 insert → 성공 시 위시 목록 refresh + 토스트 + 검색뷰 복귀. 실패 시 목록 불변.
+  //   ⚠️ 실패 경로는 성공·중복과 달리 검색뷰를 닫지 않는다(D2) — 아래 catch 참고.
   const addWishFromInput = async ({
     input,
   }: {
@@ -231,6 +239,7 @@ export const LogScreen = () => {
   }) => {
     if (submittingWishRef.current) return; // 연타 중복 insert 차단(동기 잠금).
     submittingWishRef.current = true;
+    setWishSubmitting(true); // 표시용 — 검색뷰 진행 행 + 결과행 비활성(U6-b).
     try {
       // 중복 pre-check — 카카오 장소 id가 있는 검색 결과만(직접 입력은 id 없어 dedup 불가·스킵).
       //   이미 담은 곳이면 insert 스킵 + 안내 토스트(지도 주변 담기와 동작 통일, best-effort). 검색뷰는 복귀.
@@ -248,12 +257,20 @@ export const LogScreen = () => {
       await addWishlist({ input });
       await refreshWishlist();
       showToast({ message: WISH_ADDED_TOAST, tone: 'positive' });
-    } catch {
-      // addWishlist/pre-check가 error 상태로 노출 — 목록 불변, 토스트 없음(plan TC-2 실패).
+      setWishSearching(false); // 성공 경로만 닫는다(중복은 위 분기에서 닫음).
+    } catch (err) {
+      // 실패 토스트 — wishlist TC-2 실패 경로의 미구현분을 U6으로 완결한다.
+      //   TC-2 원 계약은 "한국어 메시지 세팅 + throw"였고 노출 수단을 금지한 적이 없다(wishlistExists.ts:6 주석이
+      //   오히려 "에러 토스트로 처리"라고 적어 뒀다). 지도 담기(useAddNearbyWish.ts:70)와 같은 문구·같은 톤으로 통일한다.
+      //   ⚠️ 렌더 클로저의 error 상태가 아니라 catch의 원본 err를 mapper에 넘긴다 — 상태는 setState 이전 값이라
+      //      직전 실패 문구나 null이 나온다.
+      showToast({ message: mapWishlistError({ error: err }), tone: 'neutral' });
+      // D2: 검색뷰를 닫지 않는다 — 닫으면 재시도가 재검색부터가 된다(원칙 10 복구 경로).
+      //   ref는 아래 finally에서 풀리므로 같은 행 재탭이 곧바로 동작한다.
     } finally {
       submittingWishRef.current = false;
+      setWishSubmitting(false);
     }
-    setWishSearching(false);
   };
 
   // WishlistView "추가"/빈상태 CTA → 풀스크린 장소검색 진입(검색어 초기화).
@@ -431,6 +448,8 @@ export const LogScreen = () => {
           onUseManualInput={handleWishManual}
           onBack={() => setWishSearching(false)}
           backLabel="검색 취소"
+          submitting={wishSubmitting}
+          submittingLabel={WISH_SUBMITTING_LABEL}
         />
       ) : (
         <Screen edges={['left', 'right']} style={styles.screen}>
@@ -571,7 +590,7 @@ export const LogScreen = () => {
             leaveError={leaveError}
           />
 
-          {/* 위시 추가 성공/예약취소 에러 토스트는 전역(ToastProvider 루트 <Toast>)에서 렌더 — 화면별 <Toast> 없음(이관). */}
+          {/* 위시 추가 성공/실패(U6)·예약취소 에러 토스트는 전역(ToastProvider 루트 <Toast>)에서 렌더 — 화면별 <Toast> 없음(이관). */}
         </Screen>
       )}
     </SwapTransition>

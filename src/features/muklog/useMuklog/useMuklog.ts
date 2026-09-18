@@ -10,9 +10,14 @@
 // 정책: 진입(muklogId 변경) 1회 조회 + 명시적 refresh()만. 폴링/Realtime 미도입(§3.5).
 //   maybeSingle null → notFound(삭제/권한 차단을 권한 노출 없이 동일 처리, §3.2).
 //   signed URL 부분/전체 실패는 해당 슬롯 제외(best-effort) — 사진 때문에 화면을 막지 않는다(§7 엣지).
-import { useEffect, useRef, useState } from 'react';
-
+//
+// 캐시(query-cache T4): 상태를 공유 캐시가 소유한다(useCachedQuery). 편집 저장 후 상세로 돌아오면 캐시된
+//   상세를 즉시 그리고(사진 URL도 재사용 캐시 덕에 동일 문자열) 뒤에서 조용히 갱신한다 — U58 원증상 경로.
+//   ⚠️ notFound는 도메인 상태라 공용 어댑터에 넣지 않는다. payload를 { muklog: MuklogDetail | null }로 두고
+//   여기서 매핑한다(어댑터가 도메인을 알게 되면 다음 훅들이 쓸 수 없다).
+import { queryKeys } from '@/lib/queryKeys';
 import { supabase } from '@/lib/supabase';
+import { useCachedQuery } from '@/lib/useCachedQuery';
 
 import { createSignedUrlMap } from '../signedUrlMap';
 
@@ -137,56 +142,49 @@ const toMuklogDetail = ({
  * @param muklogId 조회할 먹로그 id — 변경 시에만 재조회(폴링 방지). 빈 문자열이면 0행 → notFound.
  * @returns state(상세 상태)와 refresh(재조회 함수)
  */
-export const useMuklog = ({ muklogId }: { muklogId: string }) => {
-  const [state, setState] = useState<MuklogDetailState>({ status: 'loading' });
-  const mountedRef = useRef(true);
-
-  // 일반 함수로 정의(컨벤션상 useCallback 지양). effect는 [muklogId]에만 의존하므로
-  // 매 렌더 새 참조여도 재조회 루프가 생기지 않는다.
-  const fetchMuklog = async () => {
+export const useMuklog = ({ muklogId }: { muklogId: string }): {
+  state: MuklogDetailState;
+  refresh: () => Promise<void>;
+} => {
+  // 쿼리 + 사진 signed URL 매핑만 정의 — 로딩/에러/캐시/refresh 는 useCachedQuery 가 소유.
+  //   0행은 throw가 아니라 muklog:null로 반환한다(정상 결과라 캐시되어야 notFound 재진입에 로딩 플래시가 없다).
+  const fetchMuklog = async (): Promise<{ muklog: MuklogDetail | null }> => {
     const { data, error } = await supabase
       .from('muklogs')
       .select(MUKLOG_DETAIL_SELECT_COLUMNS)
       .eq('id', muklogId)
       .maybeSingle();
 
-    if (error) {
-      if (!mountedRef.current) return;
-      setState({ status: 'error', message: '먹로그를 불러오지 못했어요. 다시 시도해 주세요.' });
-      return;
-    }
+    if (error) throw error;
 
     // 0행(삭제됨/타 방 권한 차단) → notFound(권한 노출 없이 동일 처리, §3.2).
-    if (!data) {
-      if (!mountedRef.current) return;
-      setState({ status: 'notFound' });
-      return;
-    }
+    if (!data) return { muklog: null };
 
     const row = data as MuklogDetailRow;
 
     // 사진 path를 order_index 오름차순으로 모아 1회 배치 signed URL 발급(개별 N회 금지, §8).
+    //   같은 path는 재사용 캐시가 이전 URL을 그대로 돌려준다 → 편집 복귀 시 사진이 다시 내려받아지지 않는다.
     const orderedPaths = [...(row.muklog_photos ?? [])]
       .sort((a, b) => a.order_index - b.order_index)
       .map((p) => p.storage_path);
     const signedMap = await createSignedUrlMap({ paths: orderedPaths });
 
-    if (!mountedRef.current) return;
-    setState({ status: 'ready', muklog: toMuklogDetail({ row, signedMap }) });
+    return { muklog: toMuklogDetail({ row, signedMap }) };
   };
 
-  useEffect(
-    function loadMuklogOnId() {
-      mountedRef.current = true;
-      // 진입 1회(또는 muklogId 변경 시) 조회. fetchMuklog는 최신 렌더 클로저를 사용한다.
-      void fetchMuklog();
-      return function cleanupMuklog() {
-        mountedRef.current = false;
-      };
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- muklogId 변경 시에만 재조회(폴링 방지). fetchMuklog 의존 시 매 렌더 재조회됨.
-    [muklogId],
-  );
+  const { state, refresh } = useCachedQuery<{ muklog: MuklogDetail | null }>({
+    queryKey: queryKeys.muklog({ muklogId }),
+    queryFn: fetchMuklog,
+    mapError: () => '먹로그를 불러오지 못했어요. 다시 시도해 주세요.',
+  });
 
-  return { state, refresh: fetchMuklog };
+  // ready + payload null → notFound(도메인 매핑). loading·error는 그대로 통과한다.
+  if (state.status === 'ready') {
+    return {
+      state:
+        state.muklog === null ? { status: 'notFound' } : { status: 'ready', muklog: state.muklog },
+      refresh,
+    };
+  }
+  return { state, refresh };
 };

@@ -442,6 +442,116 @@ describe('MuklogDetailScreen — 작성자 실명 매핑 (S5b, T9)', () => {
   });
 });
 
+describe('MuklogDetailScreen — 사진 풀스크린 뷰어 배선 (photo-viewer D1~D4)', () => {
+  // 뷰어 진입 페이드가 도는 동안 Animated가 상태를 갱신한다 — 실제 타이머면 act() 밖 갱신 경고가 난다
+  //   (PhotoViewer.spec·Toast·Sheet 선례). 이 블록만 가짜 타이머로 감싼다.
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    act(() => jest.runOnlyPendingTimers());
+    jest.useRealTimers();
+  });
+
+  // order_index에 **구멍이 뚫린** 실데이터(사진을 지웠다 다시 올린 먹로그: 0·2·5).
+  //   뷰어의 위치는 order_index가 아니라 **배열 인덱스**로 센다(B2 — plan §7이 지목한 최대 위험).
+  //   구멍 없는 0·1·2 픽스처였다면 두 규약이 우연히 같은 값이라 오용이 초록으로 통과한다.
+  const threePhotos = [
+    photo({ orderIndex: 0, uri: 'u0' }),
+    photo({ orderIndex: 2, uri: 'u1' }),
+    photo({ orderIndex: 5, uri: 'u2' }),
+  ];
+
+  const pressPhoto = ({ index }: { index: number }) =>
+    fireEvent.press(screen.getAllByTestId('muklog-detail-photo-press')[index]);
+
+  // TC-S1
+  it('사진 수만큼 탭 래퍼를 렌더하고 라벨은 "{장소명} 사진 {n} 크게 보기"다 (D1)', () => {
+    renderReady({ photos: threePhotos });
+    expect(screen.getAllByTestId('muklog-detail-photo-press')).toHaveLength(3);
+    expect(screen.getByLabelText('트라토리아 보나 사진 1 크게 보기')).toBeTruthy();
+    expect(screen.getByLabelText('트라토리아 보나 사진 2 크게 보기')).toBeTruthy();
+    expect(screen.getByLabelText('트라토리아 보나 사진 3 크게 보기')).toBeTruthy();
+  });
+
+  // TC-S2
+  it('안쪽 이미지는 accessible=false다 — 같은 문구를 두 번 낭독하지 않는다 (D1, B6)', () => {
+    renderReady({ photos: threePhotos });
+    screen.getAllByTestId('muklog-detail-photo').forEach((image) => {
+      expect(image.props.accessible).toBe(false);
+    });
+  });
+
+  // TC-S3 — order_index 0·2·5 데이터에서 두 번째(orderIndex 2)를 탭한다.
+  //   orderIndex를 인덱스로 오용하면 세 번째가 열려 `3 / 3`이 된다.
+  it('두 번째 사진을 탭하면 뷰어가 그 사진에서 열린다(카운터 2 / 3) (D2, B2)', () => {
+    renderReady({ photos: threePhotos });
+    expect(screen.queryByTestId('photo-viewer-backdrop')).toBeNull();
+
+    pressPhoto({ index: 1 });
+
+    expect(screen.getByTestId('photo-viewer-backdrop')).toBeTruthy();
+    expect(screen.getByText('2 / 3')).toBeTruthy();
+    // 낭독 카운터도 같은 기준(배열 인덱스)을 쓴다.
+    expect(screen.getByLabelText('3장 중 2번째 사진')).toBeTruthy();
+  });
+
+  // B2 잠금 — 세 위치 전부에서 "탭한 자리 = 카운터 위치"임을 order_index 구멍 데이터로 단언한다.
+  //   라벨(사진 n)·카운터(n / 3)가 **같은 배열 인덱스**를 가리켜야 어긋남이 없다.
+  it.each([
+    { index: 0, counter: '1 / 3' },
+    { index: 1, counter: '2 / 3' },
+    { index: 2, counter: '3 / 3' },
+  ])(
+    'order_index가 0·2·5여도 $index번째 사진을 탭하면 카운터가 $counter다 (B2 인덱스 규약)',
+    ({ index, counter }) => {
+      renderReady({ photos: threePhotos });
+      // 탭 라벨의 위치 숫자도 배열 인덱스 기준이다(order_index 5 → "사진 3").
+      fireEvent.press(screen.getByLabelText(`트라토리아 보나 사진 ${index + 1} 크게 보기`));
+      expect(screen.getByText(counter)).toBeTruthy();
+    },
+  );
+
+  it('뷰어에 넘기는 사진은 상세가 가진 signed URL 순서 그대로다(신규 조회 0) (B2)', () => {
+    renderReady({ photos: threePhotos });
+    pressPhoto({ index: 0 });
+    expect(
+      screen.getAllByTestId('photo-viewer-photo').map((image) => image.props.source.uri),
+    ).toEqual(['u0', 'u1', 'u2']);
+  });
+
+  // TC-S4
+  it('뷰어 X를 탭하면 뷰어만 닫히고 상세는 그대로 남는다 (D3)', () => {
+    renderReady({ photos: threePhotos });
+    pressPhoto({ index: 1 });
+
+    fireEvent.press(screen.getByTestId('photo-viewer-close'));
+
+    expect(screen.queryByTestId('photo-viewer-backdrop')).toBeNull();
+    expect(screen.getByText('트라토리아 보나')).toBeTruthy();
+    expect(screen.getAllByTestId('muklog-detail-photo-press')).toHaveLength(3);
+  });
+
+  it('닫았다 다른 사진을 탭하면 이전 인덱스가 새어 나오지 않는다 (B8)', () => {
+    renderReady({ photos: threePhotos });
+    pressPhoto({ index: 2 });
+    expect(screen.getByText('3 / 3')).toBeTruthy();
+
+    fireEvent.press(screen.getByTestId('photo-viewer-close'));
+    pressPhoto({ index: 0 });
+
+    expect(screen.getByText('1 / 3')).toBeTruthy();
+  });
+
+  // TC-S5
+  it('사진 0장이면 탭 래퍼가 없고 FoodCover 폴백에도 press 핸들러가 없다 (D4, E1)', () => {
+    renderReady({ photos: [] });
+    expect(screen.queryAllByTestId('muklog-detail-photo-press')).toHaveLength(0);
+    const fallback = screen.getByTestId('muklog-detail-cover-fallback');
+    expect(fallback.props.onPress).toBeUndefined();
+    expect(fallback.props.accessibilityRole).toBeUndefined();
+    expect(screen.queryByTestId('photo-viewer-backdrop')).toBeNull();
+  });
+});
+
 describe('MuklogDetailScreen — 사진 페이드인 (motion-pass-1 D2)', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => {

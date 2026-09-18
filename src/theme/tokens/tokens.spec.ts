@@ -414,6 +414,20 @@ describe('tokens — scrimStrong (킷 정합)', () => {
   });
 });
 
+describe('tokens — viewerBg (풀스크린 사진 뷰어 배경, photo-viewer §3.4)', () => {
+  it('뷰어 배경이 사진만 남기는 어두운 톤 rgba(0,0,0,0.94)다', () => {
+    expect(themes.light.color.viewerBg).toBe('rgba(0,0,0,0.94)');
+  });
+
+  it('scrimStrong(.32 사진 위 글래스)과 의미·값이 분리된다 — 뷰어는 뒤 화면을 지운다', () => {
+    expect(themes.light.color.viewerBg).not.toBe(themes.light.color.scrimStrong);
+  });
+
+  it('라이트/다크 공통(사진 감상 표면이라 톤 고정 — toastBg·mapSurface 선례)', () => {
+    expect(themes.dark.color.viewerBg).toBe('rgba(0,0,0,0.94)');
+  });
+});
+
 describe('tokens — spacing 보강', () => {
   it('4px 그리드에 28이 포함된다', () => {
     // 동적 import로 spacing 참조 — 28 보강 확인.

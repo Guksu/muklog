@@ -1,17 +1,22 @@
 // App.tsx — 앱 루트.
 // 책임: (1) SUIT 폰트 로드 + SplashScreen 제어, (2) 프로바이더 트리 구성, (3) AuthGate 마운트.
 //
-// 프로바이더 순서(바깥→안): GestureHandlerRootView → SafeAreaProvider → ThemeProvider → ToastProvider → AuthProvider → AuthGate.
+// 프로바이더 순서(바깥→안): GestureHandlerRootView → SafeAreaProvider → ThemeProvider → ToastProvider
+//   → QueryClientProvider → AuthProvider → AuthGate.
 //   - ThemeProvider가 AuthProvider보다 바깥: AuthGate의 Splash/Error 화면도 테마 토큰을 쓴다.
 //   - ToastProvider가 AuthProvider/AuthGate(=네비게이터) 바깥: 화면 전환·언마운트와 무관히 루트 단일 <Toast>를 유지(언마운트 레이스 해소).
 //     SafeArea/Theme 안: 토큰·하단 inset 사용.
+//   - QueryClientProvider가 AuthProvider 바깥(query-cache §3.9): 조회 캐시가 인증 상태 전이·리렌더와 무관하게
+//     한 인스턴스로 살아 있어야 한다. 계정 전환 시의 비움은 useClearCachesOnSignOut이 명시적으로 한다.
 import React, { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as Font from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import { QueryClientProvider } from '@tanstack/react-query';
 
+import { queryClient } from '@/lib/queryClient';
 import { AppVersionGate } from '@/features/appVersion';
 import { AuthProvider } from '@/features/auth';
 import { usePushReceive } from '@/features/notif/usePushReceive';
@@ -82,16 +87,19 @@ const App = () => {
       <SafeAreaProvider>
         <ThemeProvider scheme="light">
           <ToastProvider>
-            <AuthProvider>
-              <StatusBar style="dark" />
-              {/* 버전 게이트 — AuthGate 상위(로그인 전에도 강제 차단 노출). checking/none→자식, force→차단, suggest→+모달. */}
-              <AppVersionGate>
-                {/* OTA 게이트 — 스토어 게이트 안쪽(force면 미마운트 = 확인·대역폭 0). children은 항상 렌더. */}
-                <OtaUpdateGate>
-                  <AuthGate />
-                </OtaUpdateGate>
-              </AppVersionGate>
-            </AuthProvider>
+            {/* 조회 캐시 — 모듈 스코프 싱글턴(리렌더로 캐시가 날아가지 않도록). query-cache §3.9 */}
+            <QueryClientProvider client={queryClient}>
+              <AuthProvider>
+                <StatusBar style="dark" />
+                {/* 버전 게이트 — AuthGate 상위(로그인 전에도 강제 차단 노출). checking/none→자식, force→차단, suggest→+모달. */}
+                <AppVersionGate>
+                  {/* OTA 게이트 — 스토어 게이트 안쪽(force면 미마운트 = 확인·대역폭 0). children은 항상 렌더. */}
+                  <OtaUpdateGate>
+                    <AuthGate />
+                  </OtaUpdateGate>
+                </AppVersionGate>
+              </AuthProvider>
+            </QueryClientProvider>
           </ToastProvider>
         </ThemeProvider>
       </SafeAreaProvider>

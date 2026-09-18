@@ -10,7 +10,8 @@ export { Card, type CardProps } from './Card';
 export { MemberBadge, type MemberBadgeProps } from './MemberBadge';
 export { Sheet, useSheetScrollGesture, type SheetProps } from './Sheet';
 export { DatePickerSheet, type DatePickerSheetProps } from './DatePickerSheet';
-export { RenameDialog, type RenameDialogProps } from './RenameDialog';
+export { RenameDialog, RENAME_DIALOG_TOP_OFFSET, type RenameDialogProps } from './RenameDialog';
+export { resolveModalTopInset } from './modalInsets';
 export { SubBar, type SubBarProps } from './SubBar';
 export { Stars, type StarsProps } from './Stars';
 export { MkSwitch, type MkSwitchProps } from './MkSwitch';
@@ -40,3 +41,9 @@ export {
 export { MotionPressable, type MotionPressableProps } from './MotionPressable';
 export { SwapTransition, SwapDirection, type SwapTransitionProps } from './SwapTransition';
 export { FadeInImage, type FadeInImageProps } from './FadeInImage';
+export {
+  PhotoViewer,
+  clampPhotoIndex,
+  type PhotoViewerProps,
+  type PhotoViewerPhoto,
+} from './PhotoViewer';

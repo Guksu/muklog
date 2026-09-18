@@ -11,6 +11,9 @@ jest.mock('@/lib/supabase', () => ({
 }));
 
 import { supabase } from '@/lib/supabase';
+import { createQueryWrapper } from '@/lib/queryClient/testQueryWrapper';
+
+import { resetSignedUrlCache } from '../signedUrlMap';
 import { useMuklog } from './useMuklog';
 
 const fromMock = supabase.from as jest.Mock;
@@ -58,7 +61,13 @@ const mockQueryResult = ({ data, error }: { data: unknown; error: unknown }) => 
   fromMock.mockReturnValueOnce(builder);
 };
 
+// 케이스마다 새 캐시(QueryClientProvider) — 같은 키라도 케이스 간 데이터가 새지 않게 격리한다.
+let wrapper: ReturnType<typeof createQueryWrapper>['wrapper'];
+
 beforeEach(() => {
+  wrapper = createQueryWrapper().wrapper;
+  // 서명 URL 재사용 캐시(모듈 싱글턴)도 케이스마다 비운다 — 아니면 다음 케이스가 캐시 히트로 발급을 건너뛴다.
+  resetSignedUrlCache();
   fromMock.mockReset();
   selectMock.mockReset();
   eqMock.mockReset();
@@ -73,7 +82,7 @@ beforeEach(() => {
 describe('useMuklog', () => {
   it('정상 행을 받으면 ready로 전이하고 snake→camel로 매핑한다 (사진 0장 → photos:[]) (AC a·b)', async () => {
     mockQueryResult({ data: row(), error: null });
-    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }));
+    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper });
 
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
     expect(result.current.state).toEqual({
@@ -105,7 +114,7 @@ describe('useMuklog', () => {
 
   it('select에 muklog_photos(storage_path, order_index) 임베드를 포함하고 eq(id)·maybeSingle 계약을 지킨다', async () => {
     mockQueryResult({ data: row(), error: null });
-    renderHook(() => useMuklog({ muklogId: 'm1' }));
+    renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper });
     await waitFor(() => expect(maybeSingleMock).toHaveBeenCalled());
     expect(fromMock).toHaveBeenCalledWith('muklogs');
     expect(selectMock.mock.calls[0][0]).toContain('muklog_photos(storage_path, order_index)');
@@ -132,7 +141,7 @@ describe('useMuklog', () => {
       error: null,
     });
 
-    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }));
+    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper });
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
 
     // 배치 1회, order_index 오름차순 path 순서로 발급.
@@ -167,7 +176,7 @@ describe('useMuklog', () => {
     // signed URL은 전부 실패시켜도 photoStoragePaths는 전체 path를 유지(삭제용).
     createSignedUrlsMock.mockResolvedValueOnce({ data: null, error: new Error('boom') });
 
-    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }));
+    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper });
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
     const state = result.current.state as {
       status: 'ready';
@@ -197,7 +206,7 @@ describe('useMuklog', () => {
       error: null,
     });
 
-    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }));
+    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper });
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
     const state = result.current.state as {
       status: 'ready';
@@ -225,7 +234,7 @@ describe('useMuklog', () => {
       error: null,
     });
 
-    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }));
+    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper });
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
     const state = result.current.state as {
       status: 'ready';
@@ -243,7 +252,7 @@ describe('useMuklog', () => {
     });
     createSignedUrlsMock.mockResolvedValueOnce({ data: null, error: new Error('signed boom') });
 
-    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }));
+    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper });
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
     const state = result.current.state as { status: 'ready'; muklog: { photos: unknown[] } };
     expect(state.muklog.photos).toEqual([]);
@@ -251,20 +260,23 @@ describe('useMuklog', () => {
 
   it('lat/lng 둘 다 있으면 hasCoords=true, 하나라도 없으면 false (AC d 좌표 분기)', async () => {
     mockQueryResult({ data: row({ lat: 37.5, lng: 127.0 }), error: null });
-    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }));
+    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper });
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
     expect((result.current.state as { muklog: { hasCoords: boolean } }).muklog.hasCoords).toBe(true);
 
     // lat만 있으면 false
     mockQueryResult({ data: row({ lat: 37.5, lng: null }), error: null });
-    const { result: r2 } = renderHook(() => useMuklog({ muklogId: 'm1' }));
+    // 같은 키를 한 케이스에서 두 번 마운트하므로 두 번째는 별도 캐시로 격리한다(첫 결과를 캐시 히트로 재사용하지 않게).
+    const { result: r2 } = renderHook(() => useMuklog({ muklogId: 'm1' }), {
+      wrapper: createQueryWrapper().wrapper,
+    });
     await waitFor(() => expect(r2.current.state.status).toBe('ready'));
     expect((r2.current.state as { muklog: { hasCoords: boolean } }).muklog.hasCoords).toBe(false);
   });
 
   it('maybeSingle null(0행=삭제됨/타 방 권한 차단)이면 notFound로 전이한다 (AC c)', async () => {
     mockQueryResult({ data: null, error: null });
-    const { result } = renderHook(() => useMuklog({ muklogId: 'gone' }));
+    const { result } = renderHook(() => useMuklog({ muklogId: 'gone' }), { wrapper });
     await waitFor(() => expect(result.current.state).toEqual({ status: 'notFound' }));
     // 0행이면 signed URL 발급 없음.
     expect(createSignedUrlsMock).not.toHaveBeenCalled();
@@ -272,7 +284,7 @@ describe('useMuklog', () => {
 
   it('select error면 error 상태와 한국어 메시지로 전이한다 (AC d)', async () => {
     mockQueryResult({ data: null, error: new Error('boom') });
-    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }));
+    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper });
     await waitFor(() => expect(result.current.state.status).toBe('error'));
     expect((result.current.state as { status: 'error'; message: string }).message).toMatch(/불러오지 못했어요/);
   });
@@ -283,13 +295,13 @@ describe('useMuklog', () => {
     builder.eq = () => builder;
     builder.maybeSingle = () => new Promise(() => {}); // 영원히 pending
     fromMock.mockReturnValueOnce(builder);
-    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }));
+    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper });
     expect(result.current.state.status).toBe('loading');
   });
 
   it('refresh() 명시 호출로만 재조회한다 (폴링 없음)', async () => {
     mockQueryResult({ data: row(), error: null });
-    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }));
+    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper });
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
 
     mockQueryResult({ data: row({ place_name: '어니언' }), error: null });
@@ -297,6 +309,72 @@ describe('useMuklog', () => {
       await result.current.refresh();
     });
     expect(fromMock).toHaveBeenCalledTimes(2);
-    expect((result.current.state as { muklog: { placeName: string } }).muklog.placeName).toBe('어니언');
+    // refetch promise resolve와 리렌더 커밋 사이에 한 틱이 있을 수 있다(라이브러리 스케줄링) → 상태로 기다린다.
+    await waitFor(() =>
+      expect((result.current.state as { muklog: { placeName: string } }).muklog.placeName).toBe('어니언'),
+    );
+  });
+
+  // ── 공유 캐시 (query-cache T4 / H15) ──────────────────────────────────────────
+  it('AC4-3: 언마운트 후 같은 muklogId로 재마운트하면 첫 렌더가 loading이 아니라 ready다 (편집 후 복귀 U58)', async () => {
+    const { wrapper: shared } = createQueryWrapper();
+    mockQueryResult({ data: row(), error: null });
+    const first = renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper: shared });
+    await waitFor(() => expect(first.result.current.state.status).toBe('ready'));
+    first.unmount();
+
+    mockQueryResult({ data: row(), error: null });
+    const second = renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper: shared });
+
+    expect(second.result.current.state.status).toBe('ready');
+    await waitFor(() => expect(fromMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('H15(AC4-5): 캐시된 notFound로 재진입해도 notFound가 유지된다(로딩 플래시 없음)', async () => {
+    const { wrapper: shared } = createQueryWrapper();
+    mockQueryResult({ data: null, error: null });
+    const first = renderHook(() => useMuklog({ muklogId: 'gone' }), { wrapper: shared });
+    await waitFor(() => expect(first.result.current.state).toEqual({ status: 'notFound' }));
+    first.unmount();
+
+    mockQueryResult({ data: null, error: null });
+    const second = renderHook(() => useMuklog({ muklogId: 'gone' }), { wrapper: shared });
+
+    expect(second.result.current.state).toEqual({ status: 'notFound' });
+  });
+
+  it('AC4-4: muklogId가 바뀌면 이전 먹로그 상세가 새 상세의 ready로 새지 않는다', async () => {
+    const { wrapper: shared } = createQueryWrapper();
+    mockQueryResult({ data: row({ id: 'm1', place_name: '첫 집' }), error: null });
+    const { result, rerender } = renderHook(
+      ({ muklogId }: { muklogId: string }) => useMuklog({ muklogId }),
+      { wrapper: shared, initialProps: { muklogId: 'm1' } },
+    );
+    await waitFor(() => expect(result.current.state.status).toBe('ready'));
+
+    mockQueryResult({ data: row({ id: 'm2', place_name: '둘째 집' }), error: null });
+    rerender({ muklogId: 'm2' });
+
+    expect(result.current.state.status).toBe('loading');
+    await waitFor(() => expect(result.current.state.status).toBe('ready'));
+    expect((result.current.state as { muklog: { placeName: string } }).muklog.placeName).toBe('둘째 집');
+  });
+
+  it('AC3-4: 캐시된 상세가 있을 때 재조회가 실패해도 ready를 유지한다(오프라인 복귀 E3)', async () => {
+    mockQueryResult({ data: row(), error: null });
+    const { result } = renderHook(() => useMuklog({ muklogId: 'm1' }), { wrapper });
+    await waitFor(() => expect(result.current.state.status).toBe('ready'));
+
+    mockQueryResult({ data: null, error: new Error('offline') });
+    await act(async () => {
+      await result.current.refresh();
+    });
+    // refresh() 반환 직후에는 옵저버가 아직 실패를 반영하지 않는다 —
+    //   한 틱 정착시켜야 error가 실제로 도착한 뒤의 판정(data 우선)을 단언하게 된다(qa-logic S2).
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(result.current.state.status).toBe('ready');
   });
 });

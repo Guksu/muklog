@@ -3,7 +3,7 @@
 //   RenameDialog 셸 패턴(딤·중앙카드·상단 hairline 2버튼 행) 재사용의 "입력 없는 확인형" 변형.
 //   배선(Linking·dismissal 저장)은 developer — 여기선 표시·콜백(나중에/업데이트·딤 탭·null=1버튼)만 본다.
 import React from 'react';
-import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { AccessibilityInfo, Modal, StyleSheet } from 'react-native';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
@@ -141,5 +141,16 @@ describe('UpdateSuggestModal — 액션 눌림 피드백(motion-press-sweep A3·
       <UpdateSuggestModal visible storeUrl="https://store" onUpdatePress={noop} onDismiss={noop} />,
     );
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+// 딤이 상태바까지 덮는지는 렌더 결과로 관측되지 않는다 → Modal props로 고정(dim-full-cover plan §6 S1).
+describe('UpdateSuggestModal — 딤 전체 화면 커버 (dim-full-cover)', () => {
+  // TC-A4
+  it('A4 — Modal이 statusBarTranslucent를 켠다', () => {
+    renderWithTheme(
+      <UpdateSuggestModal visible storeUrl="https://store" onUpdatePress={noop} onDismiss={noop} />,
+    );
+    expect(screen.UNSAFE_getByType(Modal).props.statusBarTranslucent).toBe(true);
   });
 });

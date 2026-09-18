@@ -3,7 +3,7 @@
 //   UpdateSuggestModal 셸(딤·중앙카드·상단 hairline 2버튼 행)을 그대로 승계한 "입력 없는 확인형".
 //   배선(reloadAsync·dismiss 상태)은 developer(T8) — 여기선 표시·콜백(지금 적용/나중에·딤 탭)만 본다.
 import React from 'react';
-import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { AccessibilityInfo, Modal, StyleSheet } from 'react-native';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
@@ -127,5 +127,14 @@ describe('OtaReadyDialog — 액션 눌림 피드백(motion-press-sweep A6·A7)'
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     renderWithTheme(<OtaReadyDialog visible onApply={noop} onDismiss={noop} />);
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+// 딤이 상태바까지 덮는지는 렌더 결과로 관측되지 않는다 → Modal props로 고정(dim-full-cover plan §6 S1).
+describe('OtaReadyDialog — 딤 전체 화면 커버 (dim-full-cover)', () => {
+  // TC-A3
+  it('A3 — Modal이 statusBarTranslucent를 켠다', () => {
+    renderWithTheme(<OtaReadyDialog visible onApply={noop} onDismiss={noop} />);
+    expect(screen.UNSAFE_getByType(Modal).props.statusBarTranslucent).toBe(true);
   });
 });

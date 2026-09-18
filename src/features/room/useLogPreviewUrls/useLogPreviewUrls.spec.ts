@@ -8,10 +8,14 @@ jest.mock('@/lib/supabase', () => ({
   supabase: { storage: { from: () => ({ createSignedUrls: mockCreateSignedUrls }) } },
 }));
 
+import { resetSignedUrlCache } from '@/features/muklog/signedUrlMap';
+
 import { useLogPreviewUrls } from './useLogPreviewUrls';
 
 beforeEach(() => {
   mockCreateSignedUrls.mockReset();
+  // 서명 URL 재사용 캐시(모듈 싱글턴)는 케이스를 가로질러 산다 → 케이스마다 비워 격리한다(query-cache T2).
+  resetSignedUrlCache();
 });
 
 describe('useLogPreviewUrls', () => {
@@ -36,6 +40,22 @@ describe('useLogPreviewUrls', () => {
     // 중복·빈 문자열 제거 + 정렬된 고유 경로로 1회 호출.
     expect(mockCreateSignedUrls).toHaveBeenCalledTimes(1);
     expect(mockCreateSignedUrls).toHaveBeenCalledWith(['a.jpg', 'b.jpg'], expect.any(Number));
+  });
+
+  it('H16(AC2-7): 언마운트 후 같은 경로로 재마운트하면 발급 호출 0이고 URL이 동일하다(코드 변경 0줄로 수혜)', async () => {
+    mockCreateSignedUrls.mockResolvedValueOnce({
+      data: [{ path: 'a.jpg', signedUrl: 'https://s/a?token=1' }],
+      error: null,
+    });
+    const first = renderHook(() => useLogPreviewUrls({ paths: ['a.jpg'] }));
+    await waitFor(() => expect(first.result.current.urls).toEqual({ 'a.jpg': 'https://s/a?token=1' }));
+    first.unmount();
+
+    const second = renderHook(() => useLogPreviewUrls({ paths: ['a.jpg'] }));
+
+    await waitFor(() => expect(second.result.current.urls).toEqual({ 'a.jpg': 'https://s/a?token=1' }));
+    // 두 번째 마운트는 캐시 히트 — 발급은 첫 마운트의 1회뿐이다(썸네일이 다시 내려받아지지 않는다).
+    expect(mockCreateSignedUrls).toHaveBeenCalledTimes(1);
   });
 
   it('발급 에러면 빈 맵(best-effort — 목록 막지 않음)', async () => {

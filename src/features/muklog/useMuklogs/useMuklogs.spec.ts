@@ -10,6 +10,9 @@ jest.mock('@/lib/supabase', () => ({
 }));
 
 import { supabase } from '@/lib/supabase';
+import { createQueryWrapper } from '@/lib/queryClient/testQueryWrapper';
+
+import { resetSignedUrlCache } from '../signedUrlMap';
 import { useMuklogs } from './useMuklogs';
 
 // 체이닝 빌더: select/eq/order는 this(빌더)를 반환, 마지막 order가 thenable로 결과를 resolve한다.
@@ -55,7 +58,13 @@ const mockQueryResult = ({ data, error }: { data: unknown; error: unknown }) => 
   fromMock.mockReturnValueOnce(builder);
 };
 
+// 케이스마다 새 캐시(QueryClientProvider) — 키가 같아도 케이스 간 데이터가 새지 않게 격리한다.
+let wrapper: ReturnType<typeof createQueryWrapper>['wrapper'];
+
 beforeEach(() => {
+  wrapper = createQueryWrapper().wrapper;
+  // 서명 URL 재사용 캐시(모듈 싱글턴)도 케이스마다 비운다 — 아니면 다음 케이스가 캐시 히트로 발급을 건너뛴다.
+  resetSignedUrlCache();
   fromMock.mockReset();
   selectMock.mockReset();
   eqMock.mockReset();
@@ -71,7 +80,7 @@ beforeEach(() => {
 describe('useMuklogs', () => {
   it('rows를 받으면 ready로 전이하고 snake→camel로 매핑한다 (사진 없으면 photoCount 0 / coverUri null) (AC1)', async () => {
     mockQueryResult({ data: [row()], error: null });
-    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }));
+    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper });
 
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
     expect(result.current.state).toEqual({
@@ -99,7 +108,7 @@ describe('useMuklogs', () => {
 
   it('select에 muklog_photos 임베드(storage_path, order_index)를 포함한다 (경계: 컬럼명 정확)', async () => {
     mockQueryResult({ data: [], error: null });
-    renderHook(() => useMuklogs({ roomId: 'r1' }));
+    renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper });
     await waitFor(() => expect(selectMock).toHaveBeenCalled());
     expect(selectMock.mock.calls[0][0]).toContain('muklog_photos(storage_path, order_index)');
   });
@@ -123,7 +132,7 @@ describe('useMuklogs', () => {
       error: null,
     });
 
-    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }));
+    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper });
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
 
     // 대표 path 1개만 배치 발급(전체 5장 아님 — 비용 가드레일 §8).
@@ -149,7 +158,7 @@ describe('useMuklogs', () => {
       error: null,
     });
 
-    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }));
+    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper });
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
 
     expect(createSignedUrlsMock).toHaveBeenCalledTimes(1);
@@ -166,7 +175,7 @@ describe('useMuklogs', () => {
     });
     createSignedUrlsMock.mockResolvedValueOnce({ data: null, error: new Error('signed boom') });
 
-    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }));
+    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper });
     await waitFor(() => expect(result.current.state.status).toBe('ready'));
     const state = result.current.state as { status: 'ready'; muklogs: { photoCount: number; coverUri: string | null }[] };
     expect(state.muklogs[0].photoCount).toBe(1);
@@ -175,7 +184,7 @@ describe('useMuklogs', () => {
 
   it('from/eq/order 계약(room_id 필터 + visited_at desc, created_at desc)을 지킨다 (AC6·AC7)', async () => {
     mockQueryResult({ data: [], error: null });
-    renderHook(() => useMuklogs({ roomId: 'r1' }));
+    renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper });
 
     await waitFor(() => expect(orderMock).toHaveBeenCalledTimes(2));
     expect(fromMock).toHaveBeenCalledWith('muklogs');
@@ -186,19 +195,19 @@ describe('useMuklogs', () => {
 
   it('빈 배열이면 ready + muklogs:[] 로 전이한다 (빈 상태=정상) (AC1)', async () => {
     mockQueryResult({ data: [], error: null });
-    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }));
+    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper });
     await waitFor(() => expect(result.current.state).toEqual({ status: 'ready', muklogs: [] }));
   });
 
   it('data가 null이어도 ready + muklogs:[] 로 흡수한다', async () => {
     mockQueryResult({ data: null, error: null });
-    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }));
+    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper });
     await waitFor(() => expect(result.current.state).toEqual({ status: 'ready', muklogs: [] }));
   });
 
   it('조회 에러면 error 상태와 한국어 메시지로 전이한다 (AC11)', async () => {
     mockQueryResult({ data: null, error: new Error('boom') });
-    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }));
+    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper });
     await waitFor(() =>
       expect(result.current.state).toEqual({
         status: 'error',
@@ -214,13 +223,13 @@ describe('useMuklogs', () => {
     builder.order = () => builder;
     builder.then = () => new Promise(() => {}); // 영원히 pending
     fromMock.mockReturnValueOnce(builder);
-    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }));
+    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper });
     expect(result.current.state.status).toBe('loading');
   });
 
   it('refresh() 명시 호출로만 재조회한다 (폴링 없음)', async () => {
     mockQueryResult({ data: [], error: null });
-    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }));
+    const { result } = renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper });
     await waitFor(() => expect(result.current.state).toEqual({ status: 'ready', muklogs: [] }));
 
     mockQueryResult({ data: [row({ id: 'm9' })], error: null });
@@ -229,5 +238,52 @@ describe('useMuklogs', () => {
     });
     expect(result.current.state.status).toBe('ready');
     expect(fromMock).toHaveBeenCalledTimes(2);
+  });
+
+  // ── 공유 캐시 (query-cache T4 / H10·H11) ──────────────────────────────────────
+  it('H10(AC4-3): 언마운트 후 같은 roomId로 재마운트하면 첫 렌더가 loading이 아니라 ready다', async () => {
+    const { wrapper: shared } = createQueryWrapper();
+    mockQueryResult({ data: [row()], error: null });
+    const first = renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper: shared });
+    await waitFor(() => expect(first.result.current.state.status).toBe('ready'));
+    first.unmount();
+
+    // 재진입 시점의 재조회분(백그라운드)도 준비해 둔다 — 첫 렌더 판정에는 영향이 없어야 한다.
+    mockQueryResult({ data: [row()], error: null });
+    const second = renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper: shared });
+
+    expect(second.result.current.state.status).toBe('ready');
+    await waitFor(() => expect(fromMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('H11(AC4-4): roomId가 바뀌면 이전 로그의 먹로그가 새 로그의 ready로 새지 않는다 (E2)', async () => {
+    const { wrapper: shared } = createQueryWrapper();
+    mockQueryResult({ data: [row({ id: 'a1', place_name: 'A로그 맛집' })], error: null });
+    const { result, rerender } = renderHook(
+      ({ roomId }: { roomId: string }) => useMuklogs({ roomId }),
+      { wrapper: shared, initialProps: { roomId: 'rA' } },
+    );
+    await waitFor(() => expect(result.current.state.status).toBe('ready'));
+
+    // B 로그는 캐시가 없다 → 로딩으로 시작하고, A의 데이터가 보이지 않아야 한다.
+    mockQueryResult({ data: [row({ id: 'b1', place_name: 'B로그 맛집' })], error: null });
+    rerender({ roomId: 'rB' });
+
+    expect(result.current.state.status).toBe('loading');
+    await waitFor(() => expect(result.current.state.status).toBe('ready'));
+    const state = result.current.state as { status: 'ready'; muklogs: { id: string }[] };
+    expect(state.muklogs.map((m) => m.id)).toEqual(['b1']);
+  });
+
+  it('AC5-1: 조회 키는 queryKeys.muklogs를 쓴다(같은 키의 두 관찰자는 조회 1회를 공유한다)', async () => {
+    const { wrapper: shared } = createQueryWrapper();
+    mockQueryResult({ data: [row()], error: null });
+
+    const a = renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper: shared });
+    const b = renderHook(() => useMuklogs({ roomId: 'r1' }), { wrapper: shared });
+
+    await waitFor(() => expect(a.result.current.state.status).toBe('ready'));
+    await waitFor(() => expect(b.result.current.state.status).toBe('ready'));
+    expect(fromMock).toHaveBeenCalledTimes(1);
   });
 });

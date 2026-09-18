@@ -213,8 +213,9 @@ export const MuklogEditor = ({
 
   const { createMuklog, loading: createLoading, error: createError } = useCreateMuklog();
   const picker = useMuklogPhotoPicker();
-  // 저장 성공 토스트 — 전역 토스트 컨트롤러(루트 단일 <Toast>). 성공 콜백에서만 show, 실패 시 미표시(기존 에러는 인라인 유지).
-  //   전역이라 showToast 직후 onSaved(goBack)로 에디터가 언마운트돼도 복귀 화면 위에서 토스트가 유지된다(언마운트 레이스 해소). 킷 mk-log:400.
+  // 저장 결과 토스트 — 전역 토스트 컨트롤러(루트 단일 <Toast>). 성공=positive(킷 mk-log:400) / 실패=neutral(U8 개정).
+  //   전역이라 showToast 직후 onSaved(goBack)로 에디터가 언마운트돼도 복귀 화면 위에서 토스트가 유지된다(언마운트 레이스 해소).
+  //   실패 토스트는 인라인 에러를 대체하지 않는다 — 토스트=알림(2.2초), 인라인=기록(재시도까지 남음)으로 역할이 다르다(D4).
   const { showToast } = useToastController();
 
   // 필드 초기값 — 편집이면 initial 프리필, 작성이면 빈값(킷 mk-log:283-288).
@@ -429,7 +430,7 @@ export const MuklogEditor = ({
             lng: placeData.lng,
           },
         });
-        // 성공 시에만 토스트(킷 mk-log:400). onSaved(goBack)와 겹쳐도 직전 화면에서 보이도록 show 후 onSaved.
+        // 성공 토스트(킷 mk-log:400). onSaved(goBack)와 겹쳐도 직전 화면에서 보이도록 show 후 onSaved.
         showToast({ message: SAVE_TOAST_EDIT, tone: 'positive' });
         setSaveStatus(SaveStatus.Saved);
       } catch (saveError) {
@@ -459,7 +460,7 @@ export const MuklogEditor = ({
         },
       });
       if (!controlled) picker.reset();
-      // 성공 시에만 토스트(킷 mk-log:400). 실패 경로(catch)엔 토스트 없음 — 기존 에러 인라인 유지.
+      // 성공 토스트(킷 mk-log:400).
       showToast({ message: SAVE_TOAST_CREATE, tone: 'positive' });
       setSaveStatus(SaveStatus.Saved);
     } catch (saveError) {
