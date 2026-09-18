@@ -278,15 +278,15 @@ describe('useUpdateMuklog', () => {
     expect(updateMock).not.toHaveBeenCalled();
   });
 
-  it('rating 0(미평가)으로 변경 → null로 update', async () => {
+  it('별점 없이 편집 저장하면 update 전에 거부한다', async () => {
     const { result } = renderHook(() => useUpdateMuklog());
     await act(async () => {
-      await result.current.updateMuklog({
+      await expect(result.current.updateMuklog({
         input: { ...baseInput, rating: 0, photos: [] },
         initialPhotos: [],
-      });
+      })).rejects.toThrow('RATING_OUT_OF_RANGE');
     });
-    const payload = updateMock.mock.calls[0][0] as Record<string, unknown>;
-    expect(payload.rating).toBeNull();
+    expect(updateMock).not.toHaveBeenCalled();
   });
+
 });

@@ -26,6 +26,8 @@ import {
 import { useRemoveWishlist } from '@/features/wishlist';
 import { useTheme } from '@/theme';
 
+import { NativeEditorExitGuard } from './NativeEditorExitGuard';
+
 import { Routes, type AppStackParamList, type MuklogEditorPrefill } from '../../routes';
 
 // 위시 prefill(라우트 파라미터) → PlaceSelection(에디터 selectedPlace 시드). address는 위시 미저장 → null.
@@ -89,6 +91,7 @@ const CreateEditorRoute = ({
 
   return (
     <MuklogEditor
+      ExitGuard={NativeEditorExitGuard}
       roomId={roomId}
       onBack={handleBack}
       onSaved={handleSaved}
@@ -192,6 +195,7 @@ const EditEditorRoute = ({ roomId, muklogId }: { roomId: string; muklogId: strin
 
   return (
     <MuklogEditor
+      ExitGuard={NativeEditorExitGuard}
       roomId={roomId}
       initial={editInitial}
       onBack={handleBack}
