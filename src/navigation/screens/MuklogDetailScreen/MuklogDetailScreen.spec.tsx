@@ -473,3 +473,17 @@ describe('MuklogDetailScreen — 사진 페이드인 (motion-pass-1 D2)', () => 
     expect(screen.getByTestId('muklog-detail-indicator')).toBeTruthy();
   });
 });
+
+describe('사진 전체화면 연결', () => {
+  it('비연속 orderIndex라도 누른 배열의 두 번째 사진에서 연다', () => {
+    renderReady({ photos: [photo({ orderIndex: 2 }), photo({ orderIndex: 7, uri: 'https://signed/second' })] });
+    fireEvent.press(screen.getByLabelText('사진 2 크게 보기'));
+    expect(screen.getByText('2 / 2')).toBeTruthy();
+    expect(screen.getByTestId('viewer-image').props.source).toEqual({ uri: 'https://signed/second' });
+  });
+  it('FoodCover에는 사진 보기 액션이 없다', () => {
+    renderReady({ photos: [] });
+    expect(screen.queryByLabelText('사진 1 크게 보기')).toBeNull();
+    expect(screen.queryByTestId('photo-viewer-modal')).toBeNull();
+  });
+});

@@ -34,6 +34,7 @@ import {
   Text,
 } from '@/components';
 // 직접 경로 import — 배럴(@/features/map/components)은 다른 지도 컴포넌트(expo-location 등) 의존을 함께 끌어옴.
+import { PhotoViewer } from '@/components/PhotoViewer';
 import { MuklogMiniMap } from '@/features/map/components/MuklogMiniMap';
 import { AuthorKind, resolveAuthor } from '@/features/muklog/author';
 import { type RoomMember } from '@/features/room/logName';
@@ -174,6 +175,7 @@ export const MuklogDetailScreen = ({
   const { width } = useWindowDimensions();
   // 캐러셀 현재 페이지 — onScroll로 갱신(킷 mk-log:134 setIdx(round(scrollLeft/clientWidth))).
   const [pageIndex, setPageIndex] = React.useState(0);
+  const [viewerIndex, setViewerIndex] = React.useState<number | null>(null);
   // more 메뉴 / 삭제 확인 시트 열림 상태(킷 mk-log:124-125 menuOpen/confirmOpen).
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -276,6 +278,8 @@ export const MuklogDetailScreen = ({
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.color.bg }]}>
+      <PhotoViewer visible={viewerIndex !== null} photos={muklog.photos} initialIndex={viewerIndex ?? 0}
+        placeName={muklog.placeName} onClose={() => setViewerIndex(null)} />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={{ paddingBottom: insets.bottom + theme.spacing[28] }}
@@ -292,16 +296,18 @@ export const MuklogDetailScreen = ({
               onScroll={handleScroll}
               scrollEventThrottle={16}
             >
-              {muklog.photos.map((p) => (
+              {muklog.photos.map((p, photoIndex) => (
                 // motion-pass-1 D2: 로드되면 페이드로 자리를 잡는다(FadeInImage는 Image 드롭인 — props 불변).
+                <MotionPressable key={`${p.orderIndex}-${p.uri}`} accessibilityRole="button" accessibilityLabel={`사진 ${photoIndex + 1} 크게 보기`}
+                  onPress={() => setViewerIndex(photoIndex)} pressSize="lg" pressedOpacity={0.85}>
                 <FadeInImage
-                  key={`${p.orderIndex}-${p.uri}`}
                   testID="muklog-detail-photo"
                   accessibilityLabel={`${muklog.placeName} 사진 ${p.orderIndex + 1}`}
                   source={{ uri: p.uri }}
                   resizeMode="cover"
                   style={{ width, aspectRatio: PHOTO_ASPECT }}
                 />
+                </MotionPressable>
               ))}
             </ScrollView>
           ) : (
