@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-09-21~22 |
 | 브랜치 | feat/photo-viewer |
-| PR | 미생성 |
+| PR | https://github.com/Guksu/muklog/pull/30 |
 | 관련 경로 | src/components/PhotoViewer/, src/navigation/screens/MuklogDetailScreen/, src/theme/tokens/tokens.ts |
 
 ## 1. 개요
