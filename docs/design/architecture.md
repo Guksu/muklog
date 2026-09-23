@@ -194,6 +194,7 @@ LogScreen (로그 진입 — 한 로그의 공간)
   │     · 기록하기(구 "다녀왔어요" 플로우, 라벨 변경 U59·2026-09-05 사용자 승인 킷 이탈 K1) → MuklogEditor 생성모드 prefill(place/cat/area/road/좌표) + 생성 성공 시 위시 삭제(취소 시 보존)
   │     · 담은 사람: 본인=내 닉/아바타 / 파트너=익명 "짝꿍"(RLS 제약, log-name 폴백과 동일)
   ├─ MuklogDetail 사진 캐러셀(최대5) + 영상 + 메모 + 위치 미니맵
+  │    └─ 사진 탭 → 전체화면 보기(기존 signed URL, 1~3배 확대·사진 이동·닫기). 서버/API 추가 없음. 네이티브 제스처 검증 범위는 docs/history/2026-09-21-photo-viewer.md 참조.
   └─ **MuklogEditor (풀스크린 라우트)** 장소검색(Kakao Local) + 사진5 + 2초 영상(옵션) + 메모 + 별점 + 방문일
         ※ ui-fidelity-audit(2026-06-14): ~~하단 시트~~ → **풀스크린 화면(Screen+SubBar+저장)**으로 전환. 장소검색은 에디터 내 **searching 상태 → 전용 풀스크린 검색뷰(PlaceSearchView) 스왑**(킷 mk-log 정합), 선택/직접입력/취소 시 폼 복귀. 진입: MuklogList FAB(작성)·MuklogDetail more(편집) → `navigate(MuklogEditor)`.
 

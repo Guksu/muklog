@@ -1,335 +1,225 @@
-// src/components/PhotoViewer/PhotoViewer.tsx
-// 풀스크린 사진 뷰어 — photo-viewer plan §3.2·§4 (UX 백로그 U56).
-//   킷 templates/muklog는 이 표면에 침묵한다 → 판단 기준은 ux-principles이고, 비주얼 어휘(토큰·글래스·radius)는
-//   앱이 이미 쓰는 것을 그대로 승계한다. 새 어휘는 배경 토큰(viewerBg) 하나뿐이다.
-//
-// 어휘 승계(비주얼 충실도 근거 — 새로 발명한 값 0)
-//   · 상단바 위치      = 상세 글래스 바(MuklogDetailScreen.tsx:318-322) top=inset+8 / 좌우 12, 좌=나가기·우=위치.
-//   · 닫기 X          = 상세 GlassBtn(mk-log:245-255 RN 근사) — scrimStrong 원형 + primaryFg 아이콘 20 + IconButton 40×40.
-//   · 카운터 pill      = 킷 사진수 배지(mk-log:94 → MuklogCard.tsx:69-89) scrimStrong + radius.full + badge/primaryFg + 6·8 패딩.
-//   · 배경            = viewerBg 신규 토큰(§3.4). 컴포넌트에 raw hex 0.
-//
-// 모션(§3.5)
-//   진입 = 배경 페이드 + 콘텐츠가 살짝 작은 데서(0.96) 제자리 확대되며 페이드. translate는 0이다.
-//     · 왜 순수 페이드가 아닌가: fe-craft §3이 "초기 transform 없는 순수 페이드 진입"을 즉시 플래그로 잡고,
-//       #5가 진입 스케일을 0.9~0.97로 규정한다. fe-skills `swipe-dismiss-viewer`도 출발 썸네일이 없을 때는
-//       "살짝 작은 상태에서 페이드로 연다"를 뷰어의 기본 관례로 둔다 — 그 판단값만 RN으로 옮겼다(웹 코드 복사 0).
-//     · 배경은 스케일하지 않는다 — absoluteFill을 0.96으로 줄이면 가장자리에 뒤 화면이 새어 보인다.
-//       그래서 배경(페이드)과 콘텐츠(페이드+스케일)를 별도 레이어로 나눈다.
-//   감소 모션: 스케일(이동 성격)은 통째로 제거하고 페이드만 남긴다(fe-craft #8 — 제거가 아니라 완화).
-//   퇴장은 연출 없음(닫기는 시스템 응답 — 비대칭, fe-craft #9). Modal 언마운트로 끝난다.
-//   진입 연출과 무관하게 사진은 곧바로 마운트된다(Sheet E1) — 연출 도중 스크린리더·테스트가 빈 화면을 보지 않게.
-//
-// RN 제약 근사
-//   · 상단 컨트롤의 킷 글래스(backdrop-filter blur)는 RN 미지원 → scrimStrong 반투명 검정만(흐림 없음).
-//     상세 GlassBtn·카드 사진수 배지가 이미 같은 근사를 쓰므로 앱 안에서 어휘가 일치한다.
-//   · ScrollView의 `contentOffset`은 iOS 전용이라 Android는 첫 콘텐츠 측정 시 scrollTo로 같은 자리를 잡는다.
-import React, { useLayoutEffect, useRef, useState } from 'react';
-import {
-  Animated,
-  Easing,
-  Modal,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-  type LayoutChangeEvent,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Image, Modal, StatusBar, StyleSheet, View } from 'react-native';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import {
-  MOTION_DURATION,
-  MOTION_EASE_OUT,
-  MotionKind,
-  resolveMotionDuration,
-  useReduceMotion,
-  useTheme,
-} from '@/theme';
-
-import { FadeInImage } from '../FadeInImage';
-import { IconName } from '../Icon';
-import { IconButton } from '../IconButton';
-import { resolveModalTopInset } from '../modalInsets';
+import { useReduceMotion, useTheme } from '@/theme';
+import { Icon, IconName } from '../Icon';
+import { MotionPressable } from '../MotionPressable';
 import { Text } from '../Text';
-import { clampPhotoIndex, resolvePageIndex } from './photoViewerIndex';
+import { resolveModalTopInset } from '../modalInsets';
+import { clampPhotoIndex } from './photoViewerIndex';
+import { clampPhotoTransform, containSize, swipePhotoIndex, zoomAtPoint, type PhotoPoint, type PhotoSize, type PhotoTransform } from './photoViewerGeometry';
 
-/**
- * 진입 시간(ms). 화면을 가로지르는 이동이 없어(제자리 스케일 + 페이드) 시트 진입(260, 40px 슬라이드 동반)보다
- *   짧은 쪽을 택했다 — 같은 시간이면 이동 거리가 없는 연출이 더 굼뜨게 읽힌다.
- *   fe-craft #4의 모달·드로어 예산(200~500ms) 하단이자 원칙 4(150~300ms) 안이다.
- */
-const VIEWER_ENTER_DURATION = MOTION_DURATION.swapEnter;
-
-/**
- * 진입 시작 스케일 — fe-craft #5가 정한 진입 스케일 구간(0.9~0.97)의 가장 옅은 쪽.
- *   뷰어는 "새 화면이 튀어나오는" 것이 아니라 "사진이 덮으며 자리잡는" 표면이라 확대감이 눈에 띄면 안 된다.
- *   테스트·QA가 매직 넘버가 아니라 이 상수를 참조하도록 export한다(Sheet.SHEET_ENTER_TRANSLATE 선례).
- *   ⚠️ export는 스펙이 실제로 소비할 때만 값을 한다 — `PhotoViewer.spec.tsx`가 이 상수를 import해
- *   "진입 시작 스케일 = 이 값" + "값이 fe-craft #5 구간(0.9~0.97) 안"을 단언한다(Sheet E2·E4와 같은 형태).
- */
+/** 공용 URI/접근성 계약. 도메인의 orderIndex는 선택적 메타데이터다. */
+export type PhotoViewerPhoto = { uri: string; accessibilityLabel?: string; orderIndex?: number };
 export const PHOTO_VIEWER_ENTER_SCALE = 0.96;
 
-/** 닫기 아이콘 한 변(px) — 상세 GlassBtn과 동일(사진 위 컨트롤 어휘 일치). */
-const CLOSE_ICON_SIZE = 20;
-
-/** 뷰어가 표시하는 사진 1장. 도메인 무관 — 호출자가 자기 데이터를 이 shape으로 매핑한다. */
-export type PhotoViewerPhoto = {
-  /** 표시할 이미지 URL(먹로그는 signed URL). */
-  uri: string;
-  /** 스크린리더가 읽을 라벨. 없으면 `사진 {n}`으로 폴백(n은 1-based). */
-  accessibilityLabel?: string;
-};
-
 export type PhotoViewerProps = {
-  /** 열림 여부. false면 아무것도 렌더하지 않는다(null). */
   visible: boolean;
-  /** 표시 순서대로의 사진 목록. 빈 배열이면 visible이어도 렌더하지 않는다(null). */
-  photos: PhotoViewerPhoto[];
-  /** 열릴 때 처음 보여줄 0-based 인덱스. 범위 밖·음수·소수는 0~length-1로 클램프. 기본 0. */
+  photos: ReadonlyArray<PhotoViewerPhoto>;
   initialIndex?: number;
-  /** 닫기 요청(X 탭 · Android 하드웨어 뒤로가기). 인자 없음 — 호출자가 자기 상태를 닫는다. */
+  placeName?: string;
   onClose: () => void;
 };
+const ImageStatus = { Loading: 'loading', Ready: 'ready', Error: 'error' } as const;
+const INITIAL_TRANSFORM: PhotoTransform = { scale: 1, x: 0, y: 0 };
+const EMPTY_SIZE = { width: 0, height: 0 };
+const TRANSITION_MS = 200;
 
-export const PhotoViewer = ({ visible, photos, initialIndex = 0, onClose }: PhotoViewerProps) => {
+export const PhotoViewer = (props: PhotoViewerProps) =>
+  props.visible ? <ViewerSession {...props} /> : null;
+
+const ViewerSession = ({ photos, initialIndex = 0, placeName, onClose }: PhotoViewerProps) => {
+  // 열린 동안 signed URI 배열의 identity를 고정하고, 재열 때만 최신 props를 사용한다.
+  const [session] = useState(() => photos.map((photo) => ({ ...photo })));
+  const [index, setIndex] = useState(() => clampPhotoIndex({ index: initialIndex, count: session.length }));
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
+  const closed = useRef(false);
+  const opacity = useRef(new Animated.Value(0)).current;
   const reduceMotion = useReduceMotion();
-  const { width, height } = useWindowDimensions();
-
-  const count = photos.length;
-  const isOpen = visible && count > 0;
-
-  // 현재 보고 있는 페이지(0-based). 열 때 initialIndex를 접어 넣고, 이후엔 스크롤이 갱신한다.
-  const [pageIndex, setPageIndex] = useState(() => clampPhotoIndex({ index: initialIndex, count }));
-  // 트랙의 **진입** 오프셋(px). ⚠️ 열림 시점에만 확정되고 스크롤로는 절대 바뀌지 않는다.
-  //   RN의 `contentOffset`은 값이 바뀔 때마다 네이티브 UIScrollView의 오프셋을 다시 "설정"하는 제어 prop이다
-  //   (RCTScrollViewManager: contentOffset → scrollView.contentOffset). 이걸 pageIndex에 묶으면
-  //   손가락이 닿아 있는 중에 페이지 절반을 넘는 순간 트랙이 다음 페이지로 끌려가 한 번 튀고(iOS),
-  //   폭 0으로 보고되는 스크롤 이벤트가 한 번 끼면 트랙이 1페이지로 되감긴다. 그래서 원래 의도(§7 A3
-  //   "진입 위치를 잡는 초기값")대로 열림 상승 엣지에서만 갱신한다. 열려 있는 동안의 이동은 네이티브 몫이다.
-  const [initialOffsetX, setInitialOffsetX] = useState(
-    () => clampPhotoIndex({ index: initialIndex, count }) * width,
-  );
-  // 표시 직전에 한 번 더 접는다 — 열려 있는 동안 목록이 줄어드는 재렌더(공용 프리미티브 재사용처)에서
-  //   pageIndex가 범위 밖에 남아 카운터가 `5 / 3`을 띄우는 것을 막는다. 진입·스크롤과 같은 클램프 함수다.
-  const safePageIndex = clampPhotoIndex({ index: pageIndex, count });
-  // 실제로 측정된 트랙 높이. 가로 ScrollView의 페이지는 세로로 늘어날 근거가 없어(교차축이 콘텐츠 크기)
-  //   `height:'100%'`가 0으로 접힌다 → 페이지 높이를 숫자로 못 박아야 사진이 보인다.
-  //   측정 전 첫 프레임은 창 높이로 대신한다(0 높이 프레임 방지). 단위 테스트로는 관측되지 않는 레이아웃이라
-  //   실기기 스모크 DS6(긴 사진이 잘리지 않는지)이 최종 확인점이다.
-  const [trackHeight, setTrackHeight] = useState(0);
-  // 진입 진행도 — 페이드와 스케일을 별도 값으로 나눈다. 감소 모션에서 스케일만 접고 페이드는 남기기 위해서다
-  //   (Sheet의 entry/enterFade 분리와 같은 구조, fe-craft #8).
-  const enterFade = useRef(new Animated.Value(0)).current;
-  const enterZoom = useRef(new Animated.Value(0)).current;
-  // 이번 열림에서 진입을 이미 재생했는지 — 열려 있는 동안의 재렌더가 연출을 되감지 않게 한다(Sheet enteredRef 선례).
-  const openedRef = useRef(false);
-  const trackRef = useRef<ScrollView>(null);
-  // Android는 contentOffset을 무시하므로 첫 콘텐츠 측정 때 한 번만 진입 위치로 이동시킨다.
-  const scrolledToInitialRef = useRef(false);
-
-  // 열릴 때마다 진입 인덱스를 다시 접고 진입 연출을 1회 재생한다.
-  //   ⚠️ visible의 상승 엣지에서만 — 열려 있는 동안 부모가 재렌더해도 인덱스가 초기값으로 되돌아가지 않는다(B8).
-  //   ⚠️ useLayoutEffect — 페인트 뒤에 0으로 되돌리면 정착 상태가 한 프레임 보였다가 다시 스며든다(Sheet S5).
-  const playViewerEnter = () => {
-    if (!isOpen) {
-      openedRef.current = false;
-      return;
-    }
-    if (openedRef.current) return;
-    openedRef.current = true;
-    scrolledToInitialRef.current = false;
-    const entryIndex = clampPhotoIndex({ index: initialIndex, count });
-    setPageIndex(entryIndex);
-    setInitialOffsetX(entryIndex * width);
-    enterFade.setValue(0);
-    enterZoom.setValue(0);
-    Animated.parallel([
-      Animated.timing(enterFade, {
-        toValue: 1,
-        duration: resolveMotionDuration({
-          durationMs: VIEWER_ENTER_DURATION,
-          kind: MotionKind.Fade,
-          reduceMotion,
-        }),
-        easing: Easing.bezier(...MOTION_EASE_OUT),
-        useNativeDriver: true,
-      }),
-      Animated.timing(enterZoom, {
-        toValue: 1,
-        duration: resolveMotionDuration({
-          durationMs: VIEWER_ENTER_DURATION,
-          kind: MotionKind.Move,
-          reduceMotion,
-        }),
-        easing: Easing.bezier(...MOTION_EASE_OUT),
-        useNativeDriver: true,
-      }),
-    ]).start();
+  const [isClosing, setIsClosing] = useState(false);
+  useEffect(function animateViewerEntry() {
+    Animated.timing(opacity, { toValue: 1, duration: reduceMotion ? 80 : 180, useNativeDriver: true }).start();
+    return function stopViewerOpacity() { opacity.stopAnimation(); };
+  }, [opacity, reduceMotion]);
+  const close = () => {
+    if (closed.current) return;
+    closed.current = true;
+    setIsClosing(true);
+    Animated.timing(opacity, { toValue: 0, duration: reduceMotion ? 80 : 150, useNativeDriver: true }).start(({ finished }) => { if (finished) onClose(); });
   };
-  useLayoutEffect(playViewerEnter, [isOpen, initialIndex, count, reduceMotion]);
-
-  // 외부(RN) 콜백 시그니처 — named-args 컨벤션 예외.
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const next = resolvePageIndex({
-      offsetX: event.nativeEvent.contentOffset.x,
-      pageWidth: event.nativeEvent.layoutMeasurement.width,
-      count,
-    });
-    if (next !== pageIndex) setPageIndex(next);
-  };
-
-  // Android 보정: contentOffset이 iOS 전용이라, 콘텐츠가 처음 측정된 시점에 한 번만 진입 위치로 이동시킨다.
-  //   (열림마다 scrolledToInitialRef가 리셋되므로 다시 열 때도 한 번씩 동작한다.)
-  const handleContentSizeChange = () => {
-    if (scrolledToInitialRef.current) return;
-    scrolledToInitialRef.current = true;
-    if (safePageIndex === 0) return;
-    trackRef.current?.scrollTo({ x: safePageIndex * width, animated: false });
-  };
-
-  // 외부(RN) 콜백 시그니처 — named-args 컨벤션 예외.
-  const handleTrackLayout = (event: LayoutChangeEvent) => {
-    const measured = event.nativeEvent.layout.height;
-    if (measured !== trackHeight) setTrackHeight(measured);
-  };
-
-  if (!isOpen) return null;
-
-  const pageHeight = trackHeight > 0 ? trackHeight : height;
-
-  // 감소 모션이면 transform 키를 아예 만들지 않는다(스케일 제거 · 페이드 유지 — SwapTransition과 같은 형태).
-  const enterScale = enterZoom.interpolate({
-    inputRange: [0, 1],
-    outputRange: [PHOTO_VIEWER_ENTER_SCALE, 1],
-  });
-  const contentMotionStyle = reduceMotion
-    ? { opacity: enterFade }
-    : { opacity: enterFade, transform: [{ scale: enterScale }] };
-
-  // 사진 위 컨트롤의 글래스 근사(scrimStrong) — 닫기 원형과 카운터 pill이 같은 배경 어휘를 공유한다.
-  const glassBackground = { backgroundColor: theme.color.scrimStrong, borderRadius: theme.radius.full };
-
+  if (session.length === 0) return null;
   return (
-    // statusBarTranslucent: Android에서 뷰어 배경이 상태바까지 빈틈없이 덮는다(U57 — 없으면 상단에 밝은 띠가 남는다).
-    //   대가로 컨테이너 위쪽 inset이 0이 되므로 상단바 여백은 resolveModalTopInset이 되돌린다.
-    // animationType="none": 진입 연출은 아래 페이드 레이어가 담당하고, 퇴장은 즉시다(§3.5 비대칭).
-    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
-      <View style={styles.fill}>
-        {/* 배경은 페이드만 한다 — 스케일하면 화면 가장자리로 뒤 화면이 새어 보인다. */}
-        <Animated.View
-          testID="photo-viewer-backdrop"
-          style={[styles.backdrop, { backgroundColor: theme.color.viewerBg, opacity: enterFade }]}
-        />
-
-        {/* 콘텐츠 레이어 — 사진·상단바가 함께 살짝 확대되며 스며든다(감소 모션이면 페이드만). */}
-        <Animated.View testID="photo-viewer-enter-layer" style={[styles.fill, contentMotionStyle]}>
-          {/* 가로 페이징 트랙 — 한 페이지 = 화면 폭 1장. 폭은 useWindowDimensions에서 읽는다(하드코딩 금지, E12). */}
-          <ScrollView
-            ref={trackRef}
-            testID="photo-viewer-track"
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={handleScroll}
-            onContentSizeChange={handleContentSizeChange}
-            onLayout={handleTrackLayout}
-            scrollEventThrottle={16}
-            contentOffset={{ x: initialOffsetX, y: 0 }}
-            style={styles.fill}
-          >
-            {photos.map((photo, index) => (
-              <View
-                key={`${index}-${photo.uri}`}
-                testID="photo-viewer-page"
-                style={[styles.page, { width, height: pageHeight }]}
-              >
-                {/* 로드/실패 시 페이드로 자리를 잡는다(fail-visible — 만료 URL도 빈칸으로 남지 않는다, E5). */}
-                <FadeInImage
-                  testID="photo-viewer-photo"
-                  accessibilityLabel={photo.accessibilityLabel ?? `사진 ${index + 1}`}
-                  source={{ uri: photo.uri }}
-                  resizeMode="contain"
-                  style={styles.photo}
-                />
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* 상단바 — 좌=나가기 / 우=위치(상세 글래스 바 어휘 승계). 사진 탭을 가로막지 않게 box-none. */}
-          <View
-            testID="photo-viewer-topbar"
-            pointerEvents="box-none"
-            style={[
-              styles.topBar,
-              {
-                paddingTop:
-                  resolveModalTopInset({
-                    insetTop: insets.top,
-                    statusBarHeight: StatusBar.currentHeight,
-                  }) + theme.spacing[8],
-                paddingHorizontal: theme.spacing[12],
-              },
-            ]}
-          >
-            <View style={[styles.glass, glassBackground]}>
-              <IconButton
-                testID="photo-viewer-close"
-                name={IconName.Close}
-                size={CLOSE_ICON_SIZE}
-                color="primaryFg"
-                accessibilityLabel="닫기"
-                onPress={onClose}
-              />
-            </View>
-
-            {/* 카운터 — 1장이면 정보량이 0이라 렌더하지 않는다(상세 도트가 1장에서 숨는 것과 같은 규칙, E2). */}
-            {count > 1 ? (
-              <View
-                testID="photo-viewer-counter"
-                accessible
-                accessibilityLabel={`${count}장 중 ${safePageIndex + 1}번째 사진`}
-                style={[
-                  styles.counter,
-                  glassBackground,
-                  {
-                    paddingVertical: theme.spacing[6],
-                    paddingHorizontal: theme.spacing[8],
-                  },
-                ]}
-              >
-                <Text variant="badge" color="primaryFg">
-                  {`${safePageIndex + 1} / ${count}`}
-                </Text>
-              </View>
-            ) : null}
-          </View>
+    <Modal testID="photo-viewer-modal" visible animationType="none" presentationStyle="fullScreen" statusBarTranslucent onRequestClose={close}>
+      <GestureHandlerRootView testID="photo-viewer-backdrop" style={[styles.fill, { backgroundColor: theme.color.mediaViewerBg }]}>
+        <StatusBar barStyle="light-content" />
+        <Animated.View testID="photo-viewer-enter-layer" pointerEvents={isClosing ? 'none' : 'auto'} style={[styles.fill, { opacity }, reduceMotion ? undefined : { transform: [{ scale: opacity.interpolate({ inputRange: [0, 1], outputRange: [PHOTO_VIEWER_ENTER_SCALE, 1] }) }] }]}>
+        <PhotoPage key={index} uri={session[index].uri} index={index} count={session.length} accessibilityLabel={session[index].accessibilityLabel ?? (placeName ? `${placeName} 사진 ${index + 1}` : `사진 ${index + 1}`)}
+          onClose={close} onMove={({ next }) => { if (!closed.current) setIndex(next); }} />
         </Animated.View>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 };
 
+type PhotoPageProps = { uri: string; index: number; count: number; accessibilityLabel: string; onClose: () => void; onMove: ({ next }: { next: number }) => void };
+const PhotoPage = ({ uri, index, count, accessibilityLabel, onClose, onMove }: PhotoPageProps) => {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const reduceMotion = useReduceMotion();
+  const [viewport, setViewport] = useState<PhotoSize>(EMPTY_SIZE);
+  const [image, setImage] = useState<PhotoSize>(EMPTY_SIZE);
+  const [status, setStatus] = useState<(typeof ImageStatus)[keyof typeof ImageStatus]>(ImageStatus.Loading);
+  const [displayScale, setDisplayScale] = useState(1);
+  const transform = useRef<PhotoTransform>({ ...INITIAL_TRANSFORM });
+  const values = useRef({ scale: new Animated.Value(1), x: new Animated.Value(0), y: new Animated.Value(0), opacity: new Animated.Value(0) }).current;
+  const fitted = containSize({ image, viewport });
+  const panStart = useRef({ ...INITIAL_TRANSFORM });
+  const panOrigin = useRef<PhotoPoint>({ x: 0, y: 0 });
+  const rebasePan = useRef(false);
+  const pinchStart = useRef({ transform: { ...INITIAL_TRANSFORM }, origin: { x: 0, y: 0 }, gestureScale: 1, pointers: 2 });
+  const pinching = useRef(false);
+  const pinched = useRef(false);
+  const closing = useRef(false);
+  const moving = useRef(false);
+
+  const apply = ({ next }: { next: PhotoTransform }) => {
+    transform.current = next;
+    values.scale.setValue(next.scale);
+    values.x.setValue(next.x);
+    values.y.setValue(next.y);
+  };
+  const bounded = ({ next }: { next: PhotoTransform }) => clampPhotoTransform({ ...next, image: fitted, viewport });
+  const settle = () => {
+    if (moving.current || closing.current) return;
+    const next = bounded({ next: transform.current });
+    transform.current = next;
+    setDisplayScale(next.scale);
+    Animated.parallel([
+      Animated.timing(values.x, { toValue: next.x, duration: reduceMotion ? 0 : TRANSITION_MS, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(values.y, { toValue: next.y, duration: reduceMotion ? 0 : TRANSITION_MS, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start();
+  };
+  useEffect(function animatePageEntry() {
+    const animation = Animated.timing(values.opacity, { toValue: 1, duration: reduceMotion ? 80 : 180, useNativeDriver: true });
+    animation.start();
+    return function stopPageAnimation() { animation.stop(); values.x.stopAnimation(); values.y.stopAnimation(); values.scale.stopAnimation(); };
+  }, [values, reduceMotion]);
+  useEffect(function resetViewportTransform() {
+    transform.current = { ...INITIAL_TRANSFORM };
+    values.scale.setValue(1); values.x.setValue(0); values.y.setValue(0);
+    setDisplayScale(1);
+    pinching.current = false; pinched.current = false;
+  }, [viewport.width, viewport.height, values]);
+
+  const move = ({ next }: { next: number }) => {
+    if (closing.current || moving.current || next === index || next < 0 || next >= count) return;
+    moving.current = true;
+    Animated.timing(values.x, { toValue: next > index ? -viewport.width : viewport.width, duration: reduceMotion ? 0 : TRANSITION_MS,
+      easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
+        moving.current = false;
+        if (finished && !closing.current) onMove({ next });
+        else apply({ next: bounded({ next: transform.current }) });
+      });
+  };
+  const zoom = ({ increase }: { increase: boolean }) => {
+    if (status !== ImageStatus.Ready || closing.current || moving.current) return;
+    const scale = increase ? Math.floor(transform.current.scale + 0.001) + 1 : Math.ceil(transform.current.scale - 0.001) - 1;
+    apply({ next: bounded({ next: zoomAtPoint({ start: transform.current, scale, origin: { x: 0, y: 0 }, focal: { x: 0, y: 0 } }) }) });
+    setDisplayScale(transform.current.scale);
+  };
+  const close = () => {
+    if (closing.current) return;
+    closing.current = true;
+    onClose();
+  };
+  const pan = Gesture.Pan().runOnJS(true).withTestId('photo-viewer-pan').minDistance(5)
+    .onBegin((event) => { if (moving.current || closing.current) return; pinched.current = pinching.current || event.numberOfPointers > 1; rebasePan.current = false; panStart.current = { ...transform.current }; panOrigin.current = { x: 0, y: 0 }; values.x.stopAnimation(); values.y.stopAnimation(); })
+    .onUpdate((event) => {
+      if (closing.current || moving.current) return;
+      if (pinching.current || event.numberOfPointers !== 1) { pinched.current = true; rebasePan.current = true; return; }
+      if (rebasePan.current) { panStart.current = { ...transform.current }; panOrigin.current = { x: event.translationX, y: event.translationY }; rebasePan.current = false; }
+      const x = panStart.current.x + event.translationX - panOrigin.current.x;
+      const y = panStart.current.y + event.translationY - panOrigin.current.y;
+      if (transform.current.scale > 1) apply({ next: bounded({ next: { ...transform.current, x, y } }) });
+      else if (!pinched.current) apply({ next: { scale: 1, x, y: 0 } });
+    })
+    .onEnd((event, success) => {
+      if (!success || closing.current || moving.current || pinching.current) return;
+      if (transform.current.scale === 1) {
+        move({ next: swipePhotoIndex({ index, count, width: viewport.width, x: event.translationX, y: event.translationY, pinched: pinched.current }) });
+      }
+    })
+    .onFinalize(() => { if (!pinching.current) settle(); });
+  const pinch = Gesture.Pinch().runOnJS(true).withTestId('photo-viewer-pinch').enabled(status === ImageStatus.Ready)
+    .onStart((event) => {
+      if (moving.current || closing.current) return;
+      pinching.current = true; pinched.current = true; rebasePan.current = true;
+      values.x.stopAnimation(); values.y.stopAnimation();
+      pinchStart.current = { transform: { ...transform.current }, origin: { x: event.focalX - viewport.width / 2, y: event.focalY - viewport.height / 2 }, gestureScale: event.scale, pointers: event.numberOfPointers };
+    })
+    .onUpdate((event) => {
+      if (closing.current || moving.current) return;
+      if (event.numberOfPointers !== pinchStart.current.pointers) {
+        pinchStart.current = { transform: { ...transform.current }, origin: { x: event.focalX - viewport.width / 2, y: event.focalY - viewport.height / 2 }, gestureScale: event.scale, pointers: event.numberOfPointers };
+        return;
+      }
+      apply({ next: bounded({ next: zoomAtPoint({ start: pinchStart.current.transform, scale: pinchStart.current.transform.scale * event.scale / pinchStart.current.gestureScale,
+        origin: pinchStart.current.origin, focal: { x: event.focalX - viewport.width / 2, y: event.focalY - viewport.height / 2 } }) }) });
+    })
+    .onFinalize(() => { pinching.current = false; rebasePan.current = true; settle(); });
+
+  const control = ({ label, disabled, onPress, icon, testID }: { testID?: string; label: string; disabled?: boolean; onPress: () => void; icon?: IconName }) => (
+    <MotionPressable testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled }} disabled={disabled}
+      onPress={onPress} hitSlop={theme.spacing[4]} pressSize="sm" pressedOpacity={0.6}
+      style={[styles.control, { opacity: disabled ? 0.4 : 1, padding: theme.spacing[8] }]}>
+      {icon ? <Icon name={icon} color="mediaViewerFg" size={24} /> : <Text variant="bodySm" color="mediaViewerFg">{label}</Text>}
+    </MotionPressable>
+  );
+  return (
+    <View style={[styles.fill, { backgroundColor: theme.color.mediaViewerBg }]}>
+      <View testID="photo-viewer-topbar" style={[styles.header, { paddingTop: resolveModalTopInset({ insetTop: insets.top, statusBarHeight: StatusBar.currentHeight }) + theme.spacing[8], paddingHorizontal: theme.spacing[12] }]}>
+        {control({ label: '닫기', testID: 'photo-viewer-close', onPress: close, icon: IconName.Close })}
+        <View testID="photo-viewer-counter" accessible accessibilityLabel={`${count}장 중 ${index + 1}번째 사진`} accessibilityLiveRegion="polite">
+          <Text variant="bodySm" color="mediaViewerFg">{`${index + 1} / ${count}`}</Text>
+        </View>
+        <View style={styles.control} />
+      </View>
+      <GestureDetector gesture={Gesture.Simultaneous(pan, pinch)}>
+        <View testID="viewer-viewport" collapsable={false} style={styles.viewport} onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          setViewport((prev) => prev.width === width && prev.height === height ? prev : { width, height });
+        }}>
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: values.opacity, transform: [{ translateX: values.x }, { translateY: values.y }, { scale: values.scale }] }]}>
+            <Image testID="photo-viewer-photo" source={{ uri }} resizeMode="contain" accessibilityLabel={accessibilityLabel}
+              style={styles.fill} onLoad={(event) => { const { width, height } = event.nativeEvent.source; setImage({ width, height }); setStatus(ImageStatus.Ready); }}
+              onError={() => { setStatus(ImageStatus.Error); apply({ next: { ...INITIAL_TRANSFORM } }); setDisplayScale(1); }} />
+          </Animated.View>
+          {status !== ImageStatus.Ready ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.message]}>
+            <Text variant="bodySm" color="mediaViewerFg">{status === ImageStatus.Loading ? '사진을 불러오는 중이에요' : '사진을 불러오지 못했어요'}</Text>
+            {status === ImageStatus.Error ? <Text variant="caption" color="mediaViewerFg">닫고 다시 열어 주세요</Text> : null}
+          </View> : null}
+        </View>
+      </GestureDetector>
+      <View style={{ paddingHorizontal: theme.spacing[20], paddingBottom: insets.bottom + theme.spacing[16], gap: theme.spacing[12] }}>
+        <Text variant="caption" color="mediaViewerFg" style={styles.scale} accessibilityLiveRegion="polite">{`${Number(displayScale.toFixed(1))}배`}</Text>
+        <View style={styles.controls}>
+          {control({ label: '이전 사진', icon: IconName.ChevronLeft, disabled: index === 0, onPress: () => move({ next: index - 1 }) })}
+          {control({ label: '축소', disabled: status !== ImageStatus.Ready || displayScale <= 1, onPress: () => zoom({ increase: false }) })}
+          {control({ label: '확대', icon: IconName.Plus, disabled: status !== ImageStatus.Ready || displayScale >= 3, onPress: () => zoom({ increase: true }) })}
+          {control({ label: '다음 사진', icon: IconName.ChevronRight, disabled: index === count - 1, onPress: () => move({ next: index + 1 }) })}
+        </View>
+      </View>
+    </View>
+  );
+};
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  backdrop: { ...StyleSheet.absoluteFillObject },
-  // 한 페이지 = 화면 폭. 세로는 트랙 높이만큼 늘어나고 사진은 그 안에서 가운데 정렬된다.
-  page: { justifyContent: 'center', alignItems: 'center' },
-  photo: { width: '100%', height: '100%' },
-  topBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  // 글래스 원형/pill은 자식 크기에 맞춘다(닫기는 IconButton 40×40이 크기를 정한다).
-  glass: { overflow: 'hidden' },
-  counter: { alignItems: 'center', justifyContent: 'center' },
+  viewport: { flex: 1, overflow: 'hidden' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  controls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  control: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  message: { alignItems: 'center', justifyContent: 'center' },
+  scale: { textAlign: 'center' },
 });

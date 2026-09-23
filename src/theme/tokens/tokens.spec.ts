@@ -508,3 +508,12 @@ describe('tokens — memoInput (에디터 메모 입력 타이포, memo-max-heig
     expect(typography.fieldLabel).toEqual({ fontSize: 15, lineHeight: 18, fontFamily: 'SUIT-Bold' });
   });
 });
+
+describe('사진 뷰어 semantic 토큰', () => {
+  it('미디어 배경과 전경은 테마와 무관하게 검정/흰색이다', () => {
+    expect(themes.light.color.mediaViewerBg).toBe('#000000');
+    expect(themes.light.color.mediaViewerFg).toBe('#FFFFFF');
+    expect(themes.dark.color.mediaViewerBg).toBe('#000000');
+    expect(themes.dark.color.mediaViewerFg).toBe('#FFFFFF');
+  });
+});

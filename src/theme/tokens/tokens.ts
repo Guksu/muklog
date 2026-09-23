@@ -126,6 +126,8 @@ const lightColor = {
   starFill: palette.starFill,
   // 브랜드 스플래시 배경 단색 근사(킷 splash 상단 라이트블루). app.json 스플래시 backgroundColor 출처.
   splashBg: palette.splashBg,
+  // 전체화면 사진 뷰어 — 양 테마에서 원본 대비를 유지하는 검정/흰색.
+  mediaViewerBg: palette.black, mediaViewerFg: palette.white,
   // 인증(social-auth) — 킷 mk-auth.jsx. 소셜 버튼 색·강한 보더(--line-strong).
   //   apple bg는 라이트/다크 공통 검정(브랜드 가이드), google bg는 surface(흰)와 동일하나 의미 분리로 별칭 유지.
   lineStrong: palette.lineStrong,

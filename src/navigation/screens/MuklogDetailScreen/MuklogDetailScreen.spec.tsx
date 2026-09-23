@@ -510,12 +510,17 @@ describe('MuklogDetailScreen — 사진 풀스크린 뷰어 배선 (photo-viewer
     },
   );
 
-  it('뷰어에 넘기는 사진은 상세가 가진 signed URL 순서 그대로다(신규 조회 0) (B2)', () => {
+  it('뷰어를 한 장씩 넘겨도 상세 signed URL 순서를 그대로 따른다(신규 조회 0)', () => {
     renderReady({ photos: threePhotos });
     pressPhoto({ index: 0 });
-    expect(
-      screen.getAllByTestId('photo-viewer-photo').map((image) => image.props.source.uri),
-    ).toEqual(['u0', 'u1', 'u2']);
+    for (const [index, uri] of ['u0', 'u1', 'u2'].entries()) {
+      expect(screen.getAllByTestId('photo-viewer-photo')).toHaveLength(1);
+      expect(screen.getByTestId('photo-viewer-photo').props.source.uri).toBe(uri);
+      if (index < 2) {
+        fireEvent.press(screen.getByLabelText('다음 사진'));
+        act(() => jest.advanceTimersByTime(250));
+      }
+    }
   });
 
   // TC-S4
@@ -524,6 +529,7 @@ describe('MuklogDetailScreen — 사진 풀스크린 뷰어 배선 (photo-viewer
     pressPhoto({ index: 1 });
 
     fireEvent.press(screen.getByTestId('photo-viewer-close'));
+    act(() => jest.advanceTimersByTime(200));
 
     expect(screen.queryByTestId('photo-viewer-backdrop')).toBeNull();
     expect(screen.getByText('트라토리아 보나')).toBeTruthy();
@@ -536,6 +542,7 @@ describe('MuklogDetailScreen — 사진 풀스크린 뷰어 배선 (photo-viewer
     expect(screen.getByText('3 / 3')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('photo-viewer-close'));
+    act(() => jest.advanceTimersByTime(200));
     pressPhoto({ index: 0 });
 
     expect(screen.getByText('1 / 3')).toBeTruthy();
@@ -581,5 +588,19 @@ describe('MuklogDetailScreen — 사진 페이드인 (motion-pass-1 D2)', () => 
       },
     });
     expect(screen.getByTestId('muklog-detail-indicator')).toBeTruthy();
+  });
+});
+
+describe('사진 전체화면 연결', () => {
+  it('비연속 orderIndex라도 누른 배열의 두 번째 사진에서 연다', () => {
+    renderReady({ photos: [photo({ orderIndex: 2 }), photo({ orderIndex: 7, uri: 'https://signed/second' })] });
+    fireEvent.press(screen.getByLabelText('트라토리아 보나 사진 2 크게 보기'));
+    expect(screen.getByText('2 / 2')).toBeTruthy();
+    expect(screen.getByTestId('photo-viewer-photo').props.source).toEqual({ uri: 'https://signed/second' });
+  });
+  it('FoodCover에는 사진 보기 액션이 없다', () => {
+    renderReady({ photos: [] });
+    expect(screen.queryByLabelText('트라토리아 보나 사진 1 크게 보기')).toBeNull();
+    expect(screen.queryByTestId('photo-viewer-modal')).toBeNull();
   });
 });
