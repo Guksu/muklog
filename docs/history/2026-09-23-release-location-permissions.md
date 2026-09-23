@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-09-23 |
 | 브랜치 | fix/release-location-permissions |
-| PR | 생성 후 연결 |
+| PR | https://github.com/Guksu/muklog/pull/31 (draft) |
 | 관련 경로 | app.json, src/features/map/useLocationPermission/locationPermissions.spec.ts |
 
 ## 1. 개요
