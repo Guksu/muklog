@@ -6,8 +6,12 @@
 import { MuklogErrorToken } from '../errors';
 import { type CreateMuklogInput, type NormalizedMuklogInput } from '../types';
 
-/** 메모 최소 길이(필수 입력, 사용자 요청). 에디터 저장 게이팅·검증의 단일 출처. */
-export const MEMO_MIN_LENGTH = 5;
+/** 저장 가능한 필수 별점인지 판정한다. 조회 데이터의 nullable 계약은 유지한다.
+ * @param rating 입력 별점
+ * @returns 1~5의 유한한 0.5 단위이면 true
+ */
+export const isValidMuklogRating = ({ rating }: { rating: number | null | undefined }): boolean =>
+  typeof rating === 'number' && Number.isFinite(rating) && rating >= 1 && rating <= 5 && Number.isInteger(rating * 2);
 
 /**
  * 오늘 날짜를 로컬 기준 'YYYY-MM-DD'로 반환한다(타임존 시프트 없이 표시·비교용).
@@ -57,15 +61,9 @@ export const normalizeMuklogInput = ({
     throw new Error(MuklogErrorToken.PlaceNameRequired);
   }
 
-  // rating: 0/null/undefined = 미평가(null). 그 외는 1~5 + 0.5 단위(rating×2가 정수)만 허용.
-  //   0.5 단위는 이진 표현이 정확(1.5·2.5·…·4.5 exact)해 부동소수 오차 없음. DB 트리거가 최종 방어(동일 규칙).
-  let rating: number | null = null;
-  if (input.rating != null && input.rating !== 0) {
-    const isHalfStep = input.rating * 2 === Math.trunc(input.rating * 2);
-    if (input.rating < 1 || input.rating > 5 || !isHalfStep) {
-      throw new Error(MuklogErrorToken.RatingOutOfRange);
-    }
-    rating = input.rating;
+  const rating = input.rating;
+  if (!isValidMuklogRating({ rating })) {
+    throw new Error(MuklogErrorToken.RatingOutOfRange);
   }
 
   const visitedAt = input.visitedAt ?? todayLocalDate();
@@ -73,11 +71,7 @@ export const normalizeMuklogInput = ({
     throw new Error(MuklogErrorToken.VisitedAtInFuture);
   }
 
-  // 메모 필수·최소 5자(사용자 요청). 빈/공백/5자 미만이면 거부(클라 1차 — DB 트리거는 레거시 행 보호 위해 미강제).
-  const memo = (input.memo ?? '').trim();
-  if (memo.length < MEMO_MIN_LENGTH) {
-    throw new Error(MuklogErrorToken.MemoTooShort);
-  }
+  const memo = trimToNull({ value: input.memo });
 
   // place 좌표(muklog-place, plan §3.8): 유한 number만 통과. 한쪽이라도 결측/NaN이면 쌍 무결성 위해 둘 다 null
   //   (지도 map-tab가 lat is not null만 핀 → 반쪽 좌표 차단). 좌표 쌍은 placeFieldsFromItem이 이미 보장하나 2차 방어.
@@ -90,7 +84,7 @@ export const normalizeMuklogInput = ({
     placeName,
     category: trimToNull({ value: input.category }),
     area: trimToNull({ value: input.area }),
-    rating,
+    rating: rating ?? null,
     memo,
     visitedAt,
     kakaoPlaceId: trimToNull({ value: input.kakaoPlaceId }),

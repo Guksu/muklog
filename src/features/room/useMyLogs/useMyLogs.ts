@@ -7,9 +7,14 @@
 // 소비자: MyLogsProvider → LogListScreen(목록/빈상태/에러) + PlusHeaderButton(생성 성공 후 refresh).
 //
 // 정책: 앱 진입(Provider 마운트) 1회 조회 + 성공 후 refresh()만. 폴링/주기 조회 금지(비용 가드레일 §8).
-//   로딩/에러/마운트 가드/refresh 는 useOneShotQuery 가 소유(진입 1회 + 명시적 refresh).
+//   로딩/에러/캐시/refresh 는 useCachedQuery 가 소유(진입 1회 + 명시적 refresh).
+//
+// 캐시(query-cache T4): 키가 ['myLogs', userId]라 같은 사용자의 두 관찰자(MyLogsProvider·ProfileScreen)가
+//   조회 1회를 공유한다 → list_my_rooms RPC가 1회 줄고, 프로필 통계가 로딩 없이 즉시 뜬다(AC4-2).
+//   계정이 바뀌면 키가 달라져 이전 사용자의 목록이 새 계정 화면으로 새지 않는다(E1).
+import { queryKeys } from '@/lib/queryKeys';
 import { supabase } from '@/lib/supabase';
-import { useOneShotQuery } from '@/lib/useOneShotQuery';
+import { useCachedQuery } from '@/lib/useCachedQuery';
 
 import { type RoomMode } from '../modes';
 
@@ -76,7 +81,7 @@ export const useMyLogs = ({ userId }: { userId: string }): {
   state: MyLogsState;
   refresh: () => Promise<void>;
 } => {
-  // 쿼리+매핑만 정의 — 로딩/에러/마운트 가드/refresh 는 useOneShotQuery 가 소유.
+  // 쿼리+매핑만 정의 — 로딩/에러/캐시/refresh 는 useCachedQuery 가 소유.
   const fetchMyLogs = async (): Promise<{ logs: MyLog[] }> => {
     // 무인자 RPC. 행 집합 반환(0행=빈 목록=정상).
     const { data, error } = await supabase.rpc('list_my_rooms');
@@ -86,9 +91,9 @@ export const useMyLogs = ({ userId }: { userId: string }): {
     return { logs: rows.map((row) => toMyLog({ row })) };
   };
 
-  return useOneShotQuery<{ logs: MyLog[] }>({
-    deps: [userId],
-    fetch: fetchMyLogs,
+  return useCachedQuery<{ logs: MyLog[] }>({
+    queryKey: queryKeys.myLogs({ userId }),
+    queryFn: fetchMyLogs,
     mapError: () => '로그 목록을 불러오지 못했어요. 다시 시도해 주세요.',
   });
 };

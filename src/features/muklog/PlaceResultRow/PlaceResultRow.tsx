@@ -24,6 +24,8 @@ export type PlaceResultRowProps = {
   address?: string | null;
   /** 행 탭 — 소비처가 선택→자동채움을 연결. */
   onPress: () => void;
+  /** true면 탭 불가 + dim. 제출(위시 담기) 진행 중 표시용(U6-b). 기본 false. */
+  disabled?: boolean;
   /** 테스트/식별자. */
   testID?: string;
 };
@@ -37,12 +39,17 @@ const PLUS_SIZE = 20;
 // 눌림 불투명도 — 치환 전 로컬 styles.pressed 실값 승계(비주얼 회귀 0). 등급은 lg(카드형 리스트 행). ui-spec §2-2 A9.
 const RESULT_ROW_PRESSED_OPACITY = 0.6;
 
+// 비활성 dim(U6-b) — Button 비활성 실값(Button.tsx:103 opacity 0.45) 승계. 신규 실값 0(plan §4-3).
+//   MotionPressable 계약: 정적 opacity는 `disabled`와 함께여야 유효하다(disabled면 눌림 보간을 안 붙임).
+const RESULT_ROW_DISABLED_OPACITY = 0.45;
+
 export const PlaceResultRow = ({
   placeName,
   category = null,
   roadAddress,
   address,
   onPress,
+  disabled = false,
   testID,
 }: PlaceResultRowProps) => {
   const theme = useTheme();
@@ -56,12 +63,19 @@ export const PlaceResultRow = ({
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={`${placeName} 선택`}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
       pressSize="lg"
       pressedOpacity={RESULT_ROW_PRESSED_OPACITY}
       style={[
         styles.row,
-        { borderRadius: theme.radius.control, paddingVertical: 11, paddingHorizontal: 12 },
+        {
+          borderRadius: theme.radius.control,
+          paddingVertical: 11,
+          paddingHorizontal: 12,
+          opacity: disabled ? RESULT_ROW_DISABLED_OPACITY : 1,
+        },
       ]}
     >
       <FoodCover category={category} size={COVER_SIZE} radius={COVER_RADIUS} emojiSize={COVER_EMOJI} />

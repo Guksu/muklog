@@ -228,19 +228,31 @@ jest.mock('@/features/muklog', () => {
       </View>
     ),
     // PlaceSearchView probe — 위시 추가 검색 스왑. 결과선택/직접입력/뒤로 트리거 노출.
-    PlaceSearchView: (props: Record<string, unknown>) => (
-      <View accessibilityLabel="place-search">
-        <Pressable
-          accessibilityLabel="search-pick"
-          onPress={() => {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- 테스트 probe: 명명 파라미터 타입은 jest.mock hoist가 거부.
-            (props.onSelectResult as Function)({ item: { kakaoPlaceId: '12345' } });
-          }}
-        />
-        <Pressable accessibilityLabel="search-manual" onPress={props.onUseManualInput as () => void} />
-        <Pressable accessibilityLabel="search-back" onPress={props.onBack as () => void} />
-      </View>
-    ),
+    //   U6-b(silent-failure-feedback T6): submitting/submittingLabel도 그대로 반영한다 —
+    //   진행 문구 노출과 행 비활성(콜백 차단)은 실제 컴포넌트가 계약대로 하는 일이고(PlaceSearchView.spec가 lock),
+    //   여기선 LogScreen이 그 두 prop을 옳게 내려보내는지만 본다.
+    PlaceSearchView: (props: Record<string, unknown>) => {
+      const submitting = props.submitting === true;
+      return (
+        <View accessibilityLabel="place-search">
+          {submitting ? <Text>{(props.submittingLabel as string) ?? '처리 중…'}</Text> : null}
+          <Pressable
+            accessibilityLabel="search-pick"
+            disabled={submitting}
+            onPress={() => {
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type -- 테스트 probe: 명명 파라미터 타입은 jest.mock hoist가 거부.
+              (props.onSelectResult as Function)({ item: { kakaoPlaceId: '12345' } });
+            }}
+          />
+          <Pressable
+            accessibilityLabel="search-manual"
+            disabled={submitting}
+            onPress={props.onUseManualInput as () => void}
+          />
+          <Pressable accessibilityLabel="search-back" onPress={props.onBack as () => void} />
+        </View>
+      );
+    },
   };
 });
 
@@ -252,7 +264,10 @@ const mockRemoveWishlist = jest.fn();
 const mockWishlistExists = jest.fn();
 jest.mock('@/features/wishlist', () => {
   const { View, Text, Pressable } = require('react-native');
+  // errors(mapWishlistError)는 실 구현 — U6 실패 토스트 문구가 지도 담기(useAddNearbyWish)와 글자까지 같은지 직접 검증한다.
+  const errors = jest.requireActual('@/features/wishlist/errors');
   return {
+    ...errors,
     useWishlist: () => mockUseWishlist(),
     useAddWishlist: () => ({ addWishlist: mockAddWishlist, loading: false, error: null }),
     wishlistExists: (args: { roomId: string; kakaoPlaceId: string }) => mockWishlistExists(args),
@@ -925,6 +940,135 @@ describe('LogScreen — 위시리스트 세그먼트(wishlist, TC-6/B7 · TC-1·
     fireEvent.press(screen.getByLabelText('search-back'));
     expect(screen.queryByLabelText('place-search')).toBeNull();
     expect(mockAddWishlist).not.toHaveBeenCalled();
+  });
+
+  // ── U6 실패 피드백(silent-failure-feedback T3~T7) ──────────────────────────────────────
+  //   seam = 화면(토스트 문구·검색뷰 존재·진행 문구) + addWishlist 호출 횟수. 내부 ref/setState는 보지 않는다.
+  //   ⚠️ 기존 성공/중복/연타/직접입력 케이스(:832·:857·:871·:893)는 손대지 않는다 — 그것이 회귀 0 가드다(T7).
+  describe('위시 추가 실패 피드백(U6, 원칙 3·10)', () => {
+    // 실패 문구 = mapWishlistError 기본값. 지도 담기(useAddNearbyWish.ts:70)와 동일 문구여야 한다.
+    const FAIL_MESSAGE = '위시리스트 처리에 실패했어요. 다시 시도해 주세요.';
+
+    const openSearch = () => {
+      renderWithTheme(<LogScreen />);
+      fireEvent.press(screen.getByText('위시리스트 0'));
+      fireEvent.press(screen.getByLabelText('wish-add'));
+    };
+
+    it('T3 — insert 실패 시 mapWishlistError 토스트를 표시하고 성공 토스트는 뜨지 않는다', async () => {
+      mockAddWishlist.mockRejectedValueOnce(new Error('network down'));
+      openSearch();
+      await act(async () => {
+        fireEvent.press(screen.getByLabelText('search-pick'));
+      });
+      expect(await screen.findByText(FAIL_MESSAGE)).toBeTruthy();
+      expect(screen.queryByText('위시리스트에 담았어요 📍')).toBeNull();
+    });
+
+    it('T3 — 에러 토큰이 있으면 매핑된 문구를 쓴다(NOT_AUTHENTICATED)', async () => {
+      mockAddWishlist.mockRejectedValueOnce(new Error('NOT_AUTHENTICATED'));
+      openSearch();
+      await act(async () => {
+        fireEvent.press(screen.getByLabelText('search-pick'));
+      });
+      expect(await screen.findByText('로그인이 필요해요. 다시 로그인해 주세요.')).toBeTruthy();
+    });
+
+    it('T4 — 중복 pre-check 실패도 같은 토스트 + addWishlist 미호출', async () => {
+      mockWishlistExists.mockRejectedValueOnce(new Error('network down'));
+      openSearch();
+      await act(async () => {
+        fireEvent.press(screen.getByLabelText('search-pick'));
+      });
+      expect(await screen.findByText(FAIL_MESSAGE)).toBeTruthy();
+      expect(mockAddWishlist).not.toHaveBeenCalled();
+    });
+
+    it('T4 — "직접 입력" 경로 실패도 같은 토스트', async () => {
+      mockUsePlaceSearch.mockReturnValue({
+        query: '노포국밥',
+        setQuery: jest.fn(),
+        status: 'ready',
+        results: [],
+        errorMessage: null,
+      });
+      mockAddWishlist.mockRejectedValueOnce(new Error('network down'));
+      openSearch();
+      await act(async () => {
+        fireEvent.press(screen.getByLabelText('search-manual'));
+      });
+      expect(await screen.findByText(FAIL_MESSAGE)).toBeTruthy();
+    });
+
+    it('T5 — 실패해도 검색뷰가 유지되고, 같은 행 재탭이 addWishlist를 2번째로 호출한다(복구 경로)', async () => {
+      mockAddWishlist.mockRejectedValueOnce(new Error('network down'));
+      openSearch();
+      await act(async () => {
+        fireEvent.press(screen.getByLabelText('search-pick'));
+      });
+      // D2: 실패 시 닫지 않는다 — 재시도가 재검색부터가 되지 않게(원칙 10).
+      expect(screen.getByLabelText('place-search')).toBeTruthy();
+      // 가드(ref)가 영구 잠기지 않는다 — finally에서 풀린다.
+      await act(async () => {
+        fireEvent.press(screen.getByLabelText('search-pick'));
+      });
+      expect(mockAddWishlist).toHaveBeenCalledTimes(2);
+    });
+
+    it('T5 — 실패 후 재시도가 성공하면 성공 토스트로 대체되고 검색뷰가 닫힌다(§5-1 케이스 5)', async () => {
+      mockAddWishlist.mockRejectedValueOnce(new Error('network down'));
+      openSearch();
+      await act(async () => {
+        fireEvent.press(screen.getByLabelText('search-pick'));
+      });
+      expect(await screen.findByText(FAIL_MESSAGE)).toBeTruthy();
+      await act(async () => {
+        fireEvent.press(screen.getByLabelText('search-pick'));
+      });
+      // 토스트는 큐가 없다 — 마지막 호출만 보인다.
+      expect(await screen.findByText('위시리스트에 담았어요 📍')).toBeTruthy();
+      expect(screen.queryByText(FAIL_MESSAGE)).toBeNull();
+      expect(screen.queryByLabelText('place-search')).toBeNull();
+    });
+
+    it('T6 — 제출 중에는 "담는 중…"이 보이고, 완료 후 사라진다', async () => {
+      let resolveAdd: (v: { id: string }) => void = () => {};
+      mockAddWishlist.mockImplementation(
+        () =>
+          new Promise<{ id: string }>((resolve) => {
+            resolveAdd = resolve;
+          }),
+      );
+      openSearch();
+      await act(async () => {
+        fireEvent.press(screen.getByLabelText('search-pick'));
+      });
+      expect(screen.getByText('담는 중…')).toBeTruthy();
+      await act(async () => {
+        resolveAdd({ id: 'w-new' });
+      });
+      await waitFor(() => expect(screen.queryByText('담는 중…')).toBeNull());
+    });
+
+    it('T6 — 실패로 끝나도 "담는 중…"이 사라진다(검색뷰는 유지)', async () => {
+      let rejectAdd: (e: Error) => void = () => {};
+      mockAddWishlist.mockImplementation(
+        () =>
+          new Promise<{ id: string }>((_resolve, reject) => {
+            rejectAdd = reject;
+          }),
+      );
+      openSearch();
+      await act(async () => {
+        fireEvent.press(screen.getByLabelText('search-pick'));
+      });
+      expect(screen.getByText('담는 중…')).toBeTruthy();
+      await act(async () => {
+        rejectAdd(new Error('network down'));
+      });
+      await waitFor(() => expect(screen.queryByText('담는 중…')).toBeNull());
+      expect(screen.getByLabelText('place-search')).toBeTruthy();
+    });
   });
 
   it('재포커스(에디터/상세 복귀) 시 먹로그·위시 목록을 함께 refresh (다녀왔어요/삭제 반영, 폴링 아님)', () => {

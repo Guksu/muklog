@@ -6,6 +6,8 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 jest.mock('@/lib/supabase', () => ({ supabase: { rpc: jest.fn() } }));
 import { supabase } from '@/lib/supabase';
+import { createQueryWrapper } from '@/lib/queryClient/testQueryWrapper';
+
 import { useMyLogs } from './useMyLogs';
 
 const rpc = supabase.rpc as jest.Mock;
@@ -32,7 +34,11 @@ const row = (over?: Partial<{
   ...over,
 });
 
+// 케이스마다 새 캐시(QueryClientProvider) — 같은 키라도 케이스 간 데이터가 새지 않게 격리한다.
+let wrapper: ReturnType<typeof createQueryWrapper>['wrapper'];
+
 beforeEach(() => {
+  wrapper = createQueryWrapper().wrapper;
   rpc.mockReset();
 });
 
@@ -45,7 +51,7 @@ describe('useMyLogs', () => {
       ],
       error: null,
     });
-    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }), { wrapper });
 
     await waitFor(() => {
       expect(result.current.state.status).toBe('ready');
@@ -93,7 +99,7 @@ describe('useMyLogs', () => {
       ],
       error: null,
     });
-    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }), { wrapper });
 
     await waitFor(() => {
       expect(result.current.state.status).toBe('ready');
@@ -113,7 +119,7 @@ describe('useMyLogs', () => {
       ],
       error: null,
     });
-    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }), { wrapper });
 
     await waitFor(() => {
       expect(result.current.state.status).toBe('ready');
@@ -132,7 +138,7 @@ describe('useMyLogs', () => {
       ],
       error: null,
     });
-    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }), { wrapper });
 
     await waitFor(() => {
       expect(result.current.state.status).toBe('ready');
@@ -153,7 +159,7 @@ describe('useMyLogs', () => {
       ],
       error: null,
     });
-    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }), { wrapper });
 
     await waitFor(() => {
       expect(result.current.state.status).toBe('ready');
@@ -174,7 +180,7 @@ describe('useMyLogs', () => {
       ],
       error: null,
     });
-    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }), { wrapper });
 
     await waitFor(() => {
       expect(result.current.state.status).toBe('ready');
@@ -185,7 +191,7 @@ describe('useMyLogs', () => {
 
   it('빈 배열이면 ready + logs:[] 로 전이한다 (빈 상태=정상, 에러 아님) (C9)', async () => {
     rpc.mockResolvedValueOnce({ data: [], error: null });
-    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }), { wrapper });
 
     await waitFor(() => {
       expect(result.current.state).toEqual({ status: 'ready', logs: [] });
@@ -194,7 +200,7 @@ describe('useMyLogs', () => {
 
   it('data가 null이어도(행 없음) ready + logs:[] 로 흡수한다', async () => {
     rpc.mockResolvedValueOnce({ data: null, error: null });
-    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }), { wrapper });
 
     await waitFor(() => {
       expect(result.current.state).toEqual({ status: 'ready', logs: [] });
@@ -203,7 +209,7 @@ describe('useMyLogs', () => {
 
   it('조회 에러면 error 상태와 한국어 메시지로 전이한다', async () => {
     rpc.mockResolvedValueOnce({ data: null, error: new Error('boom') });
-    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }), { wrapper });
 
     await waitFor(() => {
       expect(result.current.state).toEqual({
@@ -215,13 +221,13 @@ describe('useMyLogs', () => {
 
   it('초기 상태는 loading이다 (resolve 전)', () => {
     rpc.mockReturnValueOnce(new Promise(() => {})); // 영원히 pending
-    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }), { wrapper });
     expect(result.current.state.status).toBe('loading');
   });
 
   it('refresh() 명시 호출로만 재조회한다 (폴링 없음) — 빈 목록 → 로그 1개', async () => {
     rpc.mockResolvedValueOnce({ data: [], error: null });
-    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }));
+    const { result } = renderHook(() => useMyLogs({ userId: 'u1' }), { wrapper });
 
     await waitFor(() => {
       expect(result.current.state).toEqual({ status: 'ready', logs: [] });
@@ -234,5 +240,39 @@ describe('useMyLogs', () => {
 
     expect(result.current.state.status).toBe('ready');
     expect(rpc).toHaveBeenCalledTimes(2);
+  });
+
+  // ── 공유 캐시 (query-cache T4 / H13) ──────────────────────────────────────────
+  it('H13(AC4-2): 같은 사용자 키의 두 관찰자가 동시에 마운트돼도 list_my_rooms RPC는 1회만 나간다', async () => {
+    // 실제 경로: MyLogsProvider(앱 진입 시 마운트)와 ProfileScreen(통계용)이 같은 목록을 본다.
+    const { wrapper: shared } = createQueryWrapper();
+    rpc.mockResolvedValue({ data: [row({ room_id: 'r1' })], error: null });
+
+    const provider = renderHook(() => useMyLogs({ userId: 'u1' }), { wrapper: shared });
+    const screen = renderHook(() => useMyLogs({ userId: 'u1' }), { wrapper: shared });
+
+    await waitFor(() => expect(provider.result.current.state.status).toBe('ready'));
+    await waitFor(() => expect(screen.result.current.state.status).toBe('ready'));
+    expect(rpc).toHaveBeenCalledTimes(1);
+    // 두 관찰자가 같은 데이터를 본다(통계 자리가 로딩 없이 즉시 뜬다 — DS4).
+    expect(screen.result.current.state).toEqual(provider.result.current.state);
+  });
+
+  it('AC4-4: userId가 바뀌면 이전 계정의 로그가 새 계정의 ready로 새지 않는다 (E1)', async () => {
+    const { wrapper: shared } = createQueryWrapper();
+    rpc.mockResolvedValueOnce({ data: [row({ room_id: 'old' })], error: null });
+    const { result, rerender } = renderHook(
+      ({ userId }: { userId: string }) => useMyLogs({ userId }),
+      { wrapper: shared, initialProps: { userId: 'u1' } },
+    );
+    await waitFor(() => expect(result.current.state.status).toBe('ready'));
+
+    rpc.mockResolvedValueOnce({ data: [row({ room_id: 'new' })], error: null });
+    rerender({ userId: 'u2' });
+
+    expect(result.current.state.status).toBe('loading');
+    await waitFor(() => expect(result.current.state.status).toBe('ready'));
+    const state = result.current.state as { status: 'ready'; logs: { roomId: string }[] };
+    expect(state.logs.map((l) => l.roomId)).toEqual(['new']);
   });
 });

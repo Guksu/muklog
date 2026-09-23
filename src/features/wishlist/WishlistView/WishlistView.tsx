@@ -22,7 +22,7 @@ export type WishlistViewProps = {
   meAvatarUrl?: string | null;
   /** "추가" 진입(빈 상태 CTA / 상단 점선 버튼) — PlaceSearchView 풀스크린 스왑 배선은 developer. */
   onAdd: () => void;
-  /** "다녀왔어요" — MuklogEditor prefill 진입 배선은 developer. */
+  /** "기록하기" pill — MuklogEditor prefill 진입 배선은 developer(콜백 시그니처 불변). */
   onVisit: ({ id }: { id: string }) => void;
   /** 항목 삭제(✕) — removeWishlist 배선은 developer. */
   onRemove: ({ id }: { id: string }) => void;
@@ -34,6 +34,8 @@ const COVER_RADIUS = 14;
 const COVER_EMOJI = 26;
 // 파트너 익명 표시 라벨(킷 정합 카피, RLS 제약).
 const PARTNER_LABEL = '짝꿍';
+// 위시 → 먹로그 전환 액션 라벨. 표시 텍스트와 접근성 라벨이 어긋나지 않도록 한 곳에서 정의(plan §3 표시 계약).
+const VISIT_ACTION_LABEL = '기록하기';
 
 // 부여 판정: AddSheet 전폭 행 lg/0.6 승계(motion-press-c §2 C4)
 const ADD_WISH_PRESSED_OPACITY = 0.6;
@@ -154,7 +156,7 @@ export const WishlistView = ({
                   </Text>
                 ) : null}
 
-                {/* 작성자 행 + 액션 — 킷 209-216. 아바타18 + "{닉}님이 담았어요" + 다녀왔어요 + ✕. */}
+                {/* 작성자 행 + 액션 — 킷 209-216. 아바타18 + "{닉}님이 담았어요" + 기록하기 pill + ✕. */}
                 <View style={styles.authorRow}>
                   <Avatar
                     url={wish.addedByMe ? meAvatarUrl : null}
@@ -167,7 +169,7 @@ export const WishlistView = ({
                   </Text>
                   <MotionPressable
                     accessibilityRole="button"
-                    accessibilityLabel={`${wish.placeName} 다녀왔어요`}
+                    accessibilityLabel={`${wish.placeName} ${VISIT_ACTION_LABEL}`}
                     onPress={() => onVisit({ id: wish.id })}
                     pressSize="md"
                     pressedOpacity={VISIT_BTN_PRESSED_OPACITY}
@@ -177,7 +179,7 @@ export const WishlistView = ({
                     ]}
                   >
                     <Text variant="cardTitle" color="accentStrong" style={styles.visitText}>
-                      다녀왔어요
+                      {VISIT_ACTION_LABEL}
                     </Text>
                   </MotionPressable>
                   <MotionPressable
@@ -241,7 +243,10 @@ const styles = StyleSheet.create({
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 9 },
   // "{닉}님이 담았어요" 500/11.5(킷 211) — caption 크기 오버라이드. flex로 액션 버튼을 우측 정렬.
   authorLabel: { flex: 1, fontSize: 11.5 },
-  // 다녀왔어요 pill — 킷 ex.visitBtn(232): padding 7×13, radius full.
+  // 기록하기 pill — 킷 ex.visitBtn(232): padding 7×13, radius full. 토큰·치수·프레스 값은 킷 실값 그대로.
+  //   ⚠ 라벨만 킷 이탈: 킷 ex.visitBtn(232) 원본 카피는 "다녀왔어요"이나, 상태 서술이라 위시(아직 안 간 곳) 목록에서
+  //   모순으로 읽혀 행동 동사 "기록하기"로 교체했다 — 사용자 승인된 의도적 이탈(2026-09-05, K1).
+  //   킷 대조 시 결함이 아니다. 킷 파일 확보 시 킷 쪽 라벨을 역반영할 것.
   visitBtn: { paddingVertical: 7, paddingHorizontal: 13 },
   // 700/12.5(킷 232) — cardTitle 크기 오버라이드.
   visitText: { fontSize: 12.5, lineHeight: 13 },

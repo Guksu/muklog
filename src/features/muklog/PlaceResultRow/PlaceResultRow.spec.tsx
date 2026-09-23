@@ -62,6 +62,42 @@ describe('PlaceResultRow', () => {
   });
 });
 
+// ── 제출 중 비활성(U6-b, silent-failure-feedback T1) ────────────────────────────────────
+//   seam = props(disabled, onPress) + accessibilityState.disabled + flatten style의 opacity.
+//   dim 실값 0.45는 Button 비활성(Button.tsx:103) 승계 — 신규 실값 0(plan §4-3).
+describe('PlaceResultRow — disabled(U6-b)', () => {
+  it('disabled면 행 탭이 onPress를 호출하지 않는다', () => {
+    const onPress = jest.fn();
+    renderWithTheme(<PlaceResultRow placeName="보나" onPress={onPress} disabled testID="result-0" />);
+    fireEvent.press(screen.getByTestId('result-0'));
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('disabled면 accessibilityState.disabled=true + dim(opacity 0.45)이다', () => {
+    renderWithTheme(<PlaceResultRow placeName="보나" onPress={jest.fn()} disabled testID="result-0" />);
+    const row = screen.getByTestId('result-0');
+    expect(row.props.accessibilityState?.disabled).toBe(true);
+    expect((StyleSheet.flatten(row.props.style) as Record<string, unknown>).opacity).toBe(0.45);
+  });
+
+  it('disabled={false} 명시는 미전달과 동일하다(탭 동작·dim 없음)', () => {
+    const onPress = jest.fn();
+    renderWithTheme(
+      <PlaceResultRow placeName="보나" onPress={onPress} disabled={false} testID="result-0" />,
+    );
+    fireEvent.press(screen.getByTestId('result-0'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('result-0').props.accessibilityState?.disabled).toBe(false);
+  });
+
+  it('disabled 렌더에서도 console.warn 0건(MotionPressable 정적 opacity 계약 — disabled와 함께라 유효)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    renderWithTheme(<PlaceResultRow placeName="보나" onPress={jest.fn()} disabled testID="result-0" />);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
 // ── 프레스 치환 A9(motion-press-sweep T4 / ui-spec §2-2·§3-1) ───────────────────────────
 //   seam = testID로 조회한 노드의 (a) flatten style의 transform/opacity 키 유무.
 describe('PlaceResultRow — 눌림 피드백(motion-press-sweep A9)', () => {

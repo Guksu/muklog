@@ -8,7 +8,7 @@ import { PhotoViewer } from './PhotoViewer';
 const renderViewer = async () => {
   renderWithTheme(<PhotoViewer visible photos={[{ uri: 'a', orderIndex: 0 }, { uri: 'b', orderIndex: 3 }]} initialIndex={0} placeName="보나" onClose={jest.fn()} />);
   fireEvent(screen.getByTestId('viewer-viewport'), 'layout', { nativeEvent: { layout: { width: 300, height: 600 } } });
-  fireEvent(screen.getByTestId('viewer-image'), 'load', { nativeEvent: { source: { width: 600, height: 1200 } } });
+  fireEvent(screen.getByTestId('photo-viewer-photo'), 'load', { nativeEvent: { source: { width: 600, height: 1200 } } });
   await waitFor(() => expect(getByGestureTestId('photo-viewer-pinch').config.enabled).toBe(true));
 };
 const flush = async () => { await act(async () => { await new Promise<void>((resolve) => setTimeout(resolve, 300)); }); };
@@ -38,7 +38,7 @@ describe('사진 뷰어 제스처 계약', () => {
     await renderViewer();
     fireEvent.press(screen.getByLabelText('다음 사진'));
     if (cause === 'rotation') fireEvent(screen.getByTestId('viewer-viewport'), 'layout', { nativeEvent: { layout: { width: 600, height: 300 } } });
-    else fireEvent(screen.getByTestId('viewer-image'), 'error');
+    else fireEvent(screen.getByTestId('photo-viewer-photo'), 'error');
     await flush();
     expect(screen.getByText('1 / 2')).toBeTruthy();
     fireEvent.press(screen.getByLabelText('다음 사진'));

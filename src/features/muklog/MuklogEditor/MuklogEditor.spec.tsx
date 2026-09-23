@@ -4,7 +4,7 @@
 //   ⚠️ 시트(MuklogEntrySheet)→풀스크린 전환: visible 제거, onClose→onBack. 폼/저장/사진/장소 로직은 불변.
 import React from 'react';
 import { AccessibilityInfo, StyleSheet } from 'react-native';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 
 import { SWAP_TRANSITION_TEST_ID } from '@/components/SwapTransition';
 import { renderWithTheme } from '@/test/renderWithTheme';
@@ -22,6 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { MEMO_INPUT_LINES, memoBoxHeight } from './memoBoxHeight';
 import { MuklogEditor, type MuklogPlaceSearchControl } from './MuklogEditor';
+import { mapMuklogError } from '../errors';
 import { formatVisitedDate } from '../formatVisitedDate';
 import { type MuklogEditInitial, type PlaceSearchItem } from '../types';
 import { todayLocalDate } from '../validate';
@@ -56,6 +57,7 @@ const renderEditor = () =>
 
 beforeEach(() => {
   jest.clearAllMocks();
+  createMuklog.mockReset();
   createMuklog.mockResolvedValue({ id: 'new-id' });
   useCreateMuklogMock.mockReturnValue({ createMuklog, loading: false, error: null });
   requestMock.mockResolvedValue({ granted: true });
@@ -75,19 +77,14 @@ describe('MuklogEditor', () => {
     expect(save.props.accessibilityState?.disabled).toBe(true);
   });
 
-  it('메모가 5자 미만이면 저장 비활성 + 힌트 표시(메모 필수·최소 5자)', () => {
+  it('장소와 별점이 있으면 메모 없이 저장할 수 있다', () => {
     renderEditor();
     fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
-    fireEvent.changeText(screen.getByLabelText('메모'), '맛'); // 1자 < 5
-    expect(screen.getByLabelText('저장').props.accessibilityState?.disabled).toBe(true);
-    expect(screen.getByTestId('memo-hint')).toBeTruthy();
-  });
-
-  it('메모 5자 이상이면 저장 활성(장소명도 있을 때)', () => {
-    renderEditor();
-    fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
-    fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요'); // 5자
-    expect(screen.getByLabelText('저장').props.accessibilityState?.disabled).toBe(false);
+    expect(screen.getByLabelText('저장').props.accessibilityState.disabled).toBe(true);
+    fireEvent.press(screen.getByLabelText('별점 4점'));
+    expect(screen.getByLabelText('저장').props.accessibilityState.disabled).toBe(false);
+    expect(screen.getByText('메모 (선택)')).toBeTruthy();
+    expect(screen.queryByTestId('memo-hint')).toBeNull();
   });
 
   it('장소명 입력 후 저장 시 createMuklog(input)을 호출하고 onSaved를 부른다 (AC2·AC12)', async () => {
@@ -97,6 +94,7 @@ describe('MuklogEditor', () => {
     fireEvent.press(screen.getByLabelText('별점 5점'));
     fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요');
 
+    fireEvent.press(screen.getByLabelText('별점 5점'));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
@@ -124,11 +122,12 @@ describe('MuklogEditor', () => {
     renderEditor();
     fireEvent.changeText(screen.getByLabelText('장소 이름'), 'x');
 
+    fireEvent.press(screen.getByLabelText('별점 5점'));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
 
-    await waitFor(() => expect(screen.getByText('장소 이름을 입력해 주세요.')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('장소 이름을 입력해 주세요.')).toHaveLength(2));
     expect(onSaved).not.toHaveBeenCalled();
   });
 
@@ -166,6 +165,7 @@ describe('MuklogEditor', () => {
     await waitFor(() => expect(screen.getByTestId('photo-thumb-0')).toBeTruthy());
     expect(screen.getByText('1/5')).toBeTruthy();
 
+    fireEvent.press(screen.getByLabelText('별점 5점'));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
@@ -202,6 +202,7 @@ describe('MuklogEditor', () => {
     fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
     fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요'); // 메모 필수 ≥5자(저장 게이팅 충족)
 
+    fireEvent.press(screen.getByLabelText('별점 5점'));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
@@ -311,6 +312,7 @@ describe('MuklogEditor — 장소 자동채움 payload 합류 (muklog-place, T10
       <MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} selectedPlace={fullSelection} />,
     );
     fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요'); // 메모 필수 ≥5자
+    fireEvent.press(screen.getByLabelText('별점 5점'));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
@@ -340,6 +342,7 @@ describe('MuklogEditor — 장소 자동채움 payload 합류 (muklog-place, T10
     );
     fireEvent.press(screen.getByLabelText('카테고리 카페·디저트'));
     fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요'); // 메모 필수 ≥5자
+    fireEvent.press(screen.getByLabelText('별점 5점'));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
@@ -369,6 +372,7 @@ describe('MuklogEditor — 장소 자동채움 payload 합류 (muklog-place, T10
     // §4.2 직접 입력 → 검색어('없는가게')를 장소명으로 채택, 폼 복귀.
     fireEvent.press(screen.getByLabelText('직접 입력'));
     fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요'); // 메모 필수 ≥5자
+    fireEvent.press(screen.getByLabelText('별점 5점'));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
@@ -643,11 +647,17 @@ describe('MuklogEditor — 장소검색 풀스크린 스왑 상태머신 (FLAG-1
 });
 
 describe('MuklogEditor — 킷 정합 (editor-fidelity, mk-log:400·449·418)', () => {
-  // AC1 — 저장 성공 시 토스트(신규/편집 분기, positive). 실패 시 토스트 없음.
+  // AC1 — 저장 성공 시 토스트(신규/편집 분기, positive).
+  //   ⚠️ AC1 개정(U8, silent-failure-feedback): "실패 시 토스트 없음" 조항만 뒤집혔다.
+  //      원 계약: docs/sprint/sprint-20260620-editor-fidelity/plan.md:20 "저장 실패 시 토스트 없음(기존 에러 처리 유지)".
+  //      개정 사유: 그 계약의 전제는 "인라인 에러가 보인다"였는데, 저장 버튼은 상단 SubBar이고 인라인 에러는
+  //        폼 최하단(방문일 아래)이라 스크롤 위치에 따라 인라인이 뷰포트 밖이다 → 전제가 성립하지 않는다(원칙 3).
+  //      성공 토스트 계약(아래 두 케이스)은 불변. 인라인도 제거하지 않는다(D4 — 토스트=알림, 인라인=기록).
   it('작성 저장 성공 시 "맛집을 기록했어요" 토스트를 표시한다 (AC1)', async () => {
     renderEditor();
     fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
     fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요');
+    fireEvent.press(screen.getByLabelText('별점 5점'));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
@@ -665,22 +675,123 @@ describe('MuklogEditor — 킷 정합 (editor-fidelity, mk-log:400·449·418)', 
     await waitFor(() => expect(screen.getByText('기록을 수정했어요')).toBeTruthy());
   });
 
-  it('작성 저장 실패 시 토스트를 표시하지 않는다 (AC1)', async () => {
-    createMuklog.mockRejectedValueOnce(new Error('PLACE_NAME_REQUIRED'));
+  // T8 — 구 케이스 '작성 저장 실패 시 토스트를 표시하지 않는다 (AC1)'을 U8로 다시 쓴 것(삭제 아님).
+  //   성공 문구가 뜨지 않는다는 단언은 그대로 남겨 성공/실패 분기 혼선을 계속 막는다.
+  it('작성 저장 실패 시 실패 토스트를 표시한다 (AC1 개정 — U8)', async () => {
+    const failure = new Error('PLACE_NAME_REQUIRED');
+    createMuklog.mockRejectedValueOnce(failure);
     useCreateMuklogMock.mockReturnValue({
       createMuklog,
       loading: false,
-      error: '장소 이름을 입력해 주세요.',
+      error: mapMuklogError({ error: failure }),
     });
     renderEditor();
     fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
     fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요');
+    fireEvent.press(screen.getByLabelText('별점 5점'));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
     await waitFor(() => expect(createMuklog).toHaveBeenCalledTimes(1));
+    // 실패 문구는 catch의 원본 err에서 만든다(렌더 클로저의 error 상태 아님) — mapper 결과와 일치해야 한다.
+    const toast = await screen.findByTestId('toast-pill');
+    expect(within(toast).getByText('장소 이름을 입력해 주세요.')).toBeTruthy();
+    // 성공 분기 회귀 가드(구 케이스에서 승계).
     expect(screen.queryByText('맛집을 기록했어요')).toBeNull();
     expect(screen.queryByText('기록을 수정했어요')).toBeNull();
+    expect(onSaved).not.toHaveBeenCalled();
+    // 입력 보존(화면 유지).
+    expect(screen.getByLabelText('장소 이름').props.value).toBe('보나');
+  });
+
+  it('T9 — 편집 저장 실패 시 실패 토스트를 표시한다 (U8)', async () => {
+    const onSubmit = jest.fn().mockRejectedValue(new Error('UPDATE_MUKLOG_NOT_FOUND'));
+    renderWithTheme(
+      <MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} initial={editInitial()} onSubmit={onSubmit} />,
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('수정'));
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const toast = await screen.findByTestId('toast-pill');
+    expect(within(toast).getByText('저장에 실패했어요. 다시 시도해 주세요.')).toBeTruthy();
+    expect(screen.queryByText('기록을 수정했어요')).toBeNull();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  // T11 / D4 — 토스트(알림)와 인라인(기록)이 같은 사건을 같은 문자열로 설명한다.
+  //   두 소비처가 같은 mapMuklogError를 쓰므로 정의상 동일 문자열이다. 갈라지면 인지 부하가 생긴다.
+  it('T11 — 편집 저장 실패 시 토스트와 인라인이 같은 문구로 공존한다 (U8·D4)', async () => {
+    const failure = new Error('UPDATE_MUKLOG_NOT_FOUND');
+    const message = mapMuklogError({ error: failure }); // 훅(useUpdateMuklog)이 submitError로 넣는 것과 같은 출처.
+    const onSubmit = jest.fn().mockRejectedValue(failure);
+    renderWithTheme(
+      <MuklogEditor
+        roomId="r1"
+        onBack={onBack}
+        onSaved={onSaved}
+        initial={editInitial()}
+        onSubmit={onSubmit}
+        submitError={message}
+      />,
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('수정'));
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    // 토스트 안에 1건.
+    expect(within(await screen.findByTestId('toast-pill')).getByText(message)).toBeTruthy();
+    // 화면 전체엔 2건(토스트 + 인라인) — 인라인은 제거되지 않는다(토스트는 추가지 대체가 아니다).
+    expect(screen.getAllByText(message)).toHaveLength(2);
+  });
+
+  // S1(qa-report-logic) — 편집 경로의 "원본 err 직결" 계약(plan §3-2·§9-1)을 잠그는 케이스.
+  //   ⚠️ T9·T11만으로는 부족했다: 두 케이스가 쓰는 UPDATE_MUKLOG_NOT_FOUND는 MUKLOG_ERROR_MESSAGES에 없어
+  //      기본 문구로 떨어지고, submitError도 같은 기본 문구라 `err`를 `submitError`로 바꾸는 변이가 green으로 통과했다.
+  //   그래서 여기선 **매핑되는 토큰**(PHOTO_LIMIT_EXCEEDED)으로 err를 만들고 submitError에는 **다른 문구**를 준다.
+  //   토스트가 catch의 err에서 만들어질 때만 통과한다 — submitError를 읽으면 문구가 갈려 red.
+  it('T9 — 편집 실패 토스트는 submitError prop이 아니라 catch의 원본 err에서 만든다 (U8·L5)', async () => {
+    const failure = new Error('PHOTO_LIMIT_EXCEEDED');
+    const fromError = mapMuklogError({ error: failure }); // '사진은 최대 5장까지 첨부할 수 있어요.'
+    // 부모 훅의 setState가 아직 반영되지 않은 상태를 흉내 낸다 — 직전 실패가 남긴 다른 문구.
+    const staleInline = '저장에 실패했어요. 다시 시도해 주세요.';
+    expect(fromError).not.toBe(staleInline); // 전제: 두 문구가 실제로 다르다(변이 감지의 근거).
+    const onSubmit = jest.fn().mockRejectedValue(failure);
+    renderWithTheme(
+      <MuklogEditor
+        roomId="r1"
+        onBack={onBack}
+        onSaved={onSaved}
+        initial={editInitial()}
+        onSubmit={onSubmit}
+        submitError={staleInline}
+      />,
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('수정'));
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const toast = await screen.findByTestId('toast-pill');
+    expect(within(toast).getByText(fromError)).toBeTruthy();
+    // 토스트가 prop(직전 값)을 읽어 만들어지지 않았다.
+    expect(within(toast).queryByText(staleInline)).toBeNull();
+    // 인라인은 여전히 prop을 표시한다(토스트와 별개 소스 — 실제 런타임에선 훅이 같은 mapper로 곧 수렴).
+    expect(screen.getByText(staleInline)).toBeTruthy();
+  });
+
+  // S2(qa-report-logic) — plan §5-1 행 7 경계: onSubmit/initial 부재 시 조기 반환 → 토스트 0회.
+  it('T9 — 편집 모드에 onSubmit이 없으면 조기 반환한다(토스트 0회 · 작성 경로 미침범)', async () => {
+    renderWithTheme(
+      <MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} initial={editInitial()} />,
+    );
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('수정'));
+    });
+    // 성공·실패 어느 토스트도 뜨지 않는다(저장 시도 자체가 없었다).
+    expect(screen.queryByTestId('toast-pill')).toBeNull();
+    // 편집 모드가 작성 경로(useCreateMuklog)로 새지 않는다.
+    expect(createMuklog).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
   });
 
   // AC2 — 별점 보조 텍스트(미선택 placeholder / 선택 시 n.0).
@@ -762,6 +873,7 @@ describe('MuklogEditor — 방문일 캘린더 시트 배선 (date-picker T4)', 
     fireEvent.press(screen.getByLabelText(`방문일 ${formatVisitedDate({ visitedAt: todayLocalDate(), withDow: true })}, 선택`));
     fireEvent.press(screen.getByTestId('date-cell-1')); // 이번 달 1일(과거/오늘)
 
+    fireEvent.press(screen.getByLabelText('별점 5점'));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
@@ -833,6 +945,7 @@ describe('MuklogEditor — 메모 입력 고정 높이 (memo-max-height)', () =>
     fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
     fireEvent.changeText(memoInput(), memo500);
 
+    fireEvent.press(screen.getByLabelText('별점 5점'));
     await act(async () => {
       fireEvent.press(screen.getByLabelText('저장'));
     });
@@ -842,10 +955,10 @@ describe('MuklogEditor — 메모 입력 고정 높이 (memo-max-height)', () =>
     expect(payload.memo).toBe(memo500);
   });
 
-  it('S6: 빈 메모면 힌트가 보이고 저장이 비활성이다 (기존 게이팅 유지)', () => {
+  it('S6: 별점이 없으면 메모 유무와 관계없이 저장이 비활성이다', () => {
     renderEditor();
     fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
-    expect(screen.getByTestId('memo-hint')).toBeTruthy();
+    expect(screen.queryByTestId('memo-hint')).toBeNull();
     expect(screen.getByLabelText('저장').props.accessibilityState?.disabled).toBe(true);
   });
 
@@ -970,6 +1083,7 @@ describe('MuklogEditor — 눌림 피드백 부착(motion-coverage B1~B4, U30)',
         renderWithTheme(<MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} />);
         fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
         fireEvent.changeText(screen.getByLabelText('메모'), '맛있었어요');
+        fireEvent.press(screen.getByLabelText('별점 5점'));
         return '저장';
       },
     ],
@@ -1007,5 +1121,66 @@ describe('MuklogEditor — 눌림 피드백 부착(motion-coverage B1~B4, U30)',
     fireEvent.press(save);
     expect(createMuklog).not.toHaveBeenCalled();
     expect(flattenByLabel({ label: '저장' }).transform).toBeUndefined();
+  });
+});
+
+// 작성 신뢰: 공개 사용자 동작을 검증한다.
+describe('MuklogEditor — 미저장 이탈과 저장 보호', () => {
+  it('수정 후 뒤로가기는 확인하고 취소 시 입력을 보존한다', () => {
+    renderEditor();
+    fireEvent.changeText(screen.getByLabelText('메모'), '맛');
+    fireEvent.press(screen.getByLabelText('뒤로 가기'));
+    expect(onBack).not.toHaveBeenCalled();
+    expect(screen.getByText('저장하지 않고 나갈까요?')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('계속 작성하기'));
+    expect(screen.getByLabelText('메모').props.value).toBe('맛');
+    fireEvent.press(screen.getByLabelText('뒤로 가기'));
+    fireEvent.press(screen.getByLabelText('나가기'));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('메모 변경을 원상복구하면 확인 없이 나간다', () => {
+    renderEditor();
+    fireEvent.changeText(screen.getByLabelText('메모'), '맛');
+    fireEvent.changeText(screen.getByLabelText('메모'), '');
+    fireEvent.press(screen.getByLabelText('뒤로 가기'));
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('저장하지 않고 나갈까요?')).toBeNull();
+  });
+
+  it('저장 pending에는 뒤로와 중복 저장을 막고 성공 후 한 번 복귀한다', async () => {
+    let resolveSave!: () => void;
+    createMuklog.mockReturnValue(new Promise<void>((resolve) => { resolveSave = resolve; }));
+    renderEditor();
+    fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+    fireEvent.press(screen.getByLabelText('별점 5점'));
+    fireEvent.press(screen.getByLabelText('저장'));
+    fireEvent.press(screen.getByLabelText('뒤로 가기'));
+    fireEvent.press(screen.getByLabelText('저장'));
+    expect(createMuklog).toHaveBeenCalledTimes(1);
+    expect(onBack).not.toHaveBeenCalled();
+    expect(screen.getByText('저장 중이에요')).toBeTruthy();
+    expect(screen.getByLabelText('메모').props.editable).toBe(false);
+    await act(async () => resolveSave());
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('저장하지 않고 나갈까요?')).toBeNull();
+    fireEvent.press(screen.getByLabelText('저장'));
+    expect(createMuklog).toHaveBeenCalledTimes(1);
+  });
+
+  it('실패 후 입력과 이탈 보호를 유지하고 재시도한다', async () => {
+    createMuklog.mockRejectedValueOnce(new Error('network'));
+    renderEditor();
+    fireEvent.changeText(screen.getByLabelText('장소 이름'), '보나');
+    fireEvent.press(screen.getByLabelText('별점 5점'));
+    await act(async () => fireEvent.press(screen.getByLabelText('저장')));
+    expect(screen.getByText('저장에 실패했어요. 다시 시도해 주세요.')).toBeTruthy();
+    expect(screen.getByLabelText('장소 이름').props.value).toBe('보나');
+    expect(screen.getByLabelText('저장').props.accessibilityState.disabled).toBe(false);
+    fireEvent.press(screen.getByLabelText('뒤로 가기'));
+    expect(screen.getByText('저장하지 않고 나갈까요?')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('계속 작성하기'));
+    await act(async () => fireEvent.press(screen.getByLabelText('저장')));
+    expect(onSaved).toHaveBeenCalledTimes(1);
   });
 });

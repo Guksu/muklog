@@ -5,7 +5,7 @@
 //
 // 킷→RN 번역 근사(ui-spec 기록):
 //   · 딤 rgba(20,12,8,.34) → theme.color.fg(웜 잉크) + opacity 0.34 (토큰엔 동일 색 없음, Sheet와 동일 패턴).
-//   · 상단~중앙 배치 paddingTop=ESP+70 → insets.top + DIALOG_LAYOUT.topOffset(키보드 미가림, 킷 의도).
+//   · 상단~중앙 배치 paddingTop=ESP+70 → resolveModalTopInset({insetTop, statusBarHeight}) + RENAME_DIALOG_TOP_OFFSET(70) — statusBarTranslucent로 컨테이너가 상태바까지 커져도 '상태바 아래 70'을 보존(키보드 미가림, 킷 의도).
 //   · box-shadow 0 20px 50px → shadow.dialog 근사. backdrop blur/animation은 RN 제약으로 생략(Modal fade).
 //   · error 인라인은 킷에 없는 RN 확장(서버 검증 표시용) — 킷 레이아웃 비파괴 위치(입력 하단)에 최소 스타일.
 import React from 'react';
@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  StatusBar,
   StyleSheet,
   TextInput,
   View,
@@ -24,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 
 import { Icon, IconName } from '../Icon';
+import { resolveModalTopInset } from '../modalInsets';
 import { MotionPressable } from '../MotionPressable';
 import { Text } from '../Text';
 
@@ -37,9 +39,15 @@ const DIALOG_ACTION_PRESSED_OPACITY = 0.6;
 //   값은 같지만 역할·등급(md 라벨 행)이 달라 DIALOG_ACTION_PRESSED_OPACITY를 재사용하지 않는다.
 const CLEAR_PRESSED_OPACITY = 0.6;
 
+/**
+ * 카드가 상태바 아래에서 시작하는 거리(px) — 킷 ESP+70(상단~중앙 배치, 키보드 미가림).
+ *   딤이 상태바까지 덮으면서 이 값이 "상태바 아래 70"이라는 킷 계약의 유일한 근거가 됐다
+ *   → 테스트가 하드코딩 70이 아니라 이 상수를 참조하도록 export한다(dim-full-cover plan §6 S2).
+ */
+export const RENAME_DIALOG_TOP_OFFSET = 70;
+
 // 컨트롤 내부 레이아웃 수치(킷 verbatim) — 4px 그리드 밖이라 토큰화하지 않는다(Button.BUTTON_SIZE 선례).
 const DIALOG_LAYOUT = {
-  topOffset: 70, // 킷 ESP+70 (상단~중앙 배치, 키보드 미가림)
   cardWidth: '84%' as const, // 킷 width 84%
   cardMaxWidth: 320, // 킷 maxWidth 320
   inputBorderWidth: 1.5, // 킷 1.5px accent 보더
@@ -132,7 +140,10 @@ export const RenameDialog = ({
 
   return (
     // animationType="none": fade면 닫히는 모달이 페이드아웃되는 동안 이전 팝업 내용이 잔상으로 보임. none으로 즉시 전환.
-    <Modal visible transparent animationType="none" onRequestClose={onCancel}>
+    // statusBarTranslucent: Android에서 딤이 상태바까지 덮는다(U57). 대가로 컨테이너의 위쪽 inset이 0이 되므로
+    //   카드 위치는 아래 resolveModalTopInset이 되돌린다. 하단 시스템 내비바는 RN 0.76.9에 수단이 없어 미커버
+    //   — RN 0.77+의 navigationBarTranslucent를 한 줄 추가하면 완결(리더 결정 D2-A, Sheet.tsx 동일 주석).
+    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={onCancel}>
       {/* 딤 배경 — 탭하면 취소(킷 onClick={cancel}) */}
       <Pressable
         testID="rename-dialog-backdrop"
@@ -142,8 +153,20 @@ export const RenameDialog = ({
         style={[styles.backdrop, { backgroundColor: theme.color.fg, opacity: BACKDROP_OPACITY }]}
       />
       {/* 상단~중앙 배치 래퍼 — 카드 밖 터치는 box-none으로 딤에 전달 */}
+      {/* Android 비 edge-to-edge에서 insets.top은 0이라 그것만 쓰면 카드가 상태바 높이만큼 위로 밀린다.
+          resolveModalTopInset이 상태바 높이를 함께 보고 큰 쪽을 골라 킷 "상태바 아래 70"을 복원한다. */}
       <View
-        style={[styles.wrap, { paddingTop: insets.top + DIALOG_LAYOUT.topOffset }]}
+        testID="rename-dialog-wrap"
+        style={[
+          styles.wrap,
+          {
+            paddingTop:
+              resolveModalTopInset({
+                insetTop: insets.top,
+                statusBarHeight: StatusBar.currentHeight,
+              }) + RENAME_DIALOG_TOP_OFFSET,
+          },
+        ]}
         pointerEvents="box-none"
       >
         {/* 카드 — 탭해도 닫히지 않음(전파 차단, 킷 stopPropagation) */}

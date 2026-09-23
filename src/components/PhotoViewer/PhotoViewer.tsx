@@ -7,13 +7,19 @@ import { useReduceMotion, useTheme } from '@/theme';
 import { Icon, IconName } from '../Icon';
 import { MotionPressable } from '../MotionPressable';
 import { Text } from '../Text';
+import { resolveModalTopInset } from '../modalInsets';
+import { clampPhotoIndex } from './photoViewerIndex';
 import { clampPhotoTransform, containSize, swipePhotoIndex, zoomAtPoint, type PhotoPoint, type PhotoSize, type PhotoTransform } from './photoViewerGeometry';
+
+/** 공용 URI/접근성 계약. 도메인의 orderIndex는 선택적 메타데이터다. */
+export type PhotoViewerPhoto = { uri: string; accessibilityLabel?: string; orderIndex?: number };
+export const PHOTO_VIEWER_ENTER_SCALE = 0.96;
 
 export type PhotoViewerProps = {
   visible: boolean;
-  photos: ReadonlyArray<{ uri: string; orderIndex: number }>;
-  initialIndex: number;
-  placeName: string;
+  photos: ReadonlyArray<PhotoViewerPhoto>;
+  initialIndex?: number;
+  placeName?: string;
   onClose: () => void;
 };
 const ImageStatus = { Loading: 'loading', Ready: 'ready', Error: 'error' } as const;
@@ -24,10 +30,10 @@ const TRANSITION_MS = 200;
 export const PhotoViewer = (props: PhotoViewerProps) =>
   props.visible ? <ViewerSession {...props} /> : null;
 
-const ViewerSession = ({ photos, initialIndex, placeName, onClose }: PhotoViewerProps) => {
+const ViewerSession = ({ photos, initialIndex = 0, placeName, onClose }: PhotoViewerProps) => {
   // 열린 동안 signed URI 배열의 identity를 고정하고, 재열 때만 최신 props를 사용한다.
   const [session] = useState(() => photos.map((photo) => ({ ...photo })));
-  const [index, setIndex] = useState(() => Math.max(0, Math.min(session.length - 1, Number.isFinite(initialIndex) ? Math.trunc(initialIndex) : 0)));
+  const [index, setIndex] = useState(() => clampPhotoIndex({ index: initialIndex, count: session.length }));
   const theme = useTheme();
   const closed = useRef(false);
   const opacity = useRef(new Animated.Value(0)).current;
@@ -46,10 +52,10 @@ const ViewerSession = ({ photos, initialIndex, placeName, onClose }: PhotoViewer
   if (session.length === 0) return null;
   return (
     <Modal testID="photo-viewer-modal" visible animationType="none" presentationStyle="fullScreen" statusBarTranslucent onRequestClose={close}>
-      <GestureHandlerRootView style={[styles.fill, { backgroundColor: theme.color.mediaViewerBg }]}>
+      <GestureHandlerRootView testID="photo-viewer-backdrop" style={[styles.fill, { backgroundColor: theme.color.mediaViewerBg }]}>
         <StatusBar barStyle="light-content" />
-        <Animated.View pointerEvents={isClosing ? 'none' : 'auto'} style={[styles.fill, { opacity }]}>
-        <PhotoPage key={index} uri={session[index].uri} index={index} count={session.length} placeName={placeName}
+        <Animated.View testID="photo-viewer-enter-layer" pointerEvents={isClosing ? 'none' : 'auto'} style={[styles.fill, { opacity }, reduceMotion ? undefined : { transform: [{ scale: opacity.interpolate({ inputRange: [0, 1], outputRange: [PHOTO_VIEWER_ENTER_SCALE, 1] }) }] }]}>
+        <PhotoPage key={index} uri={session[index].uri} index={index} count={session.length} accessibilityLabel={session[index].accessibilityLabel ?? (placeName ? `${placeName} 사진 ${index + 1}` : `사진 ${index + 1}`)}
           onClose={close} onMove={({ next }) => { if (!closed.current) setIndex(next); }} />
         </Animated.View>
       </GestureHandlerRootView>
@@ -57,8 +63,8 @@ const ViewerSession = ({ photos, initialIndex, placeName, onClose }: PhotoViewer
   );
 };
 
-type PhotoPageProps = { uri: string; index: number; count: number; placeName: string; onClose: () => void; onMove: ({ next }: { next: number }) => void };
-const PhotoPage = ({ uri, index, count, placeName, onClose, onMove }: PhotoPageProps) => {
+type PhotoPageProps = { uri: string; index: number; count: number; accessibilityLabel: string; onClose: () => void; onMove: ({ next }: { next: number }) => void };
+const PhotoPage = ({ uri, index, count, accessibilityLabel, onClose, onMove }: PhotoPageProps) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
@@ -164,8 +170,8 @@ const PhotoPage = ({ uri, index, count, placeName, onClose, onMove }: PhotoPageP
     })
     .onFinalize(() => { pinching.current = false; rebasePan.current = true; settle(); });
 
-  const control = ({ label, disabled, onPress, icon }: { label: string; disabled?: boolean; onPress: () => void; icon?: IconName }) => (
-    <MotionPressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled }} disabled={disabled}
+  const control = ({ label, disabled, onPress, icon, testID }: { testID?: string; label: string; disabled?: boolean; onPress: () => void; icon?: IconName }) => (
+    <MotionPressable testID={testID} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled }} disabled={disabled}
       onPress={onPress} hitSlop={theme.spacing[4]} pressSize="sm" pressedOpacity={0.6}
       style={[styles.control, { opacity: disabled ? 0.4 : 1, padding: theme.spacing[8] }]}>
       {icon ? <Icon name={icon} color="mediaViewerFg" size={24} /> : <Text variant="bodySm" color="mediaViewerFg">{label}</Text>}
@@ -173,9 +179,11 @@ const PhotoPage = ({ uri, index, count, placeName, onClose, onMove }: PhotoPageP
   );
   return (
     <View style={[styles.fill, { backgroundColor: theme.color.mediaViewerBg }]}>
-      <View style={[styles.header, { paddingTop: insets.top + theme.spacing[8], paddingHorizontal: theme.spacing[12] }]}>
-        {control({ label: '사진 보기 닫기', onPress: close, icon: IconName.Close })}
-        <Text variant="bodySm" color="mediaViewerFg" accessibilityLiveRegion="polite">{`${index + 1} / ${count}`}</Text>
+      <View testID="photo-viewer-topbar" style={[styles.header, { paddingTop: resolveModalTopInset({ insetTop: insets.top, statusBarHeight: StatusBar.currentHeight }) + theme.spacing[8], paddingHorizontal: theme.spacing[12] }]}>
+        {control({ label: '닫기', testID: 'photo-viewer-close', onPress: close, icon: IconName.Close })}
+        <View testID="photo-viewer-counter" accessible accessibilityLabel={`${count}장 중 ${index + 1}번째 사진`} accessibilityLiveRegion="polite">
+          <Text variant="bodySm" color="mediaViewerFg">{`${index + 1} / ${count}`}</Text>
+        </View>
         <View style={styles.control} />
       </View>
       <GestureDetector gesture={Gesture.Simultaneous(pan, pinch)}>
@@ -184,7 +192,7 @@ const PhotoPage = ({ uri, index, count, placeName, onClose, onMove }: PhotoPageP
           setViewport((prev) => prev.width === width && prev.height === height ? prev : { width, height });
         }}>
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: values.opacity, transform: [{ translateX: values.x }, { translateY: values.y }, { scale: values.scale }] }]}>
-            <Image testID="viewer-image" source={{ uri }} resizeMode="contain" accessibilityLabel={`${placeName} 사진 ${index + 1}`}
+            <Image testID="photo-viewer-photo" source={{ uri }} resizeMode="contain" accessibilityLabel={accessibilityLabel}
               style={styles.fill} onLoad={(event) => { const { width, height } = event.nativeEvent.source; setImage({ width, height }); setStatus(ImageStatus.Ready); }}
               onError={() => { setStatus(ImageStatus.Error); apply({ next: { ...INITIAL_TRANSFORM } }); setDisplayScale(1); }} />
           </Animated.View>

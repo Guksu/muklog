@@ -86,8 +86,8 @@ muklogs
   area         text                -- 동네 표시용(예: "연남동"). 수동 입력/표시 편의 (muklog-list 신설, nullable)
   lat          double precision     -- nullable: 수동 입력 시 NULL, Kakao 선택 시 채움(muklog-editor). 지도는 lat is not null만 핀
   lng          double precision     -- nullable: 상동
-  memo         text
-  rating       numeric(2,1)        -- 1~5, 0.5 단위 half-star (옵션). 트리거 RATING_OUT_OF_RANGE로 2차 검증
+  memo         text                -- 선택 입력. 새 앱은 공백을 NULL로 저장하고 1자 메모도 허용
+  rating       numeric(2,1)        -- 1~5, 0.5 단위 half-star. DB NULL 허용은 구버전·레거시 호환용이며 새 앱 작성·편집 저장에서는 필수. 트리거 RATING_OUT_OF_RANGE로 2차 검증
   visited_at   date
   video_path   text                -- 2초 영상 1개(옵션). muklog-media/{room_id}/{muklog_id}/video.mp4 (NULL 가능)
   video_duration_ms integer        -- 영상 길이(ms). ≤ 2000 (앱 1차 + 트리거 2차 검증)
@@ -189,9 +189,9 @@ LogScreen (로그 진입 — 한 로그의 공간)
   ├─ **세그먼트(기록 N / 위시리스트 N)** (wishlist 스프린트) — 헤더 아래 2탭. 'log'=MuklogList+FAB / 'wish'=WishlistView(FAB 숨김)
   ├─ 초대 UI: 이 로그의 6자리 초대코드 표시 + 복사 → 파트너 초대(= 커플화). (log-invite 스프린트)
   ├─ MuklogList   맛집 카드 리스트 (대표사진 + 가게명 + 위치 + 날짜)  ── muklog-list 스프린트
-  ├─ **WishlistView** 가보고 싶은 곳 리스트(빈상태/항목카드/추가/다녀왔어요/삭제) ── wishlist 스프린트.
+  ├─ **WishlistView** 가보고 싶은 곳 리스트(빈상태/항목카드/추가/기록하기/삭제) ── wishlist 스프린트.
   │     · 추가 → PlaceSearchView(Kakao Local, muklog-place 재사용) → `wishlist_items` insert
-  │     · 다녀왔어요 → MuklogEditor 생성모드 prefill(place/cat/area/road/좌표) + 생성 성공 시 위시 삭제(취소 시 보존)
+  │     · 기록하기(구 "다녀왔어요" 플로우, 라벨 변경 U59·2026-09-05 사용자 승인 킷 이탈 K1) → MuklogEditor 생성모드 prefill(place/cat/area/road/좌표) + 생성 성공 시 위시 삭제(취소 시 보존)
   │     · 담은 사람: 본인=내 닉/아바타 / 파트너=익명 "짝꿍"(RLS 제약, log-name 폴백과 동일)
   ├─ MuklogDetail 사진 캐러셀(최대5) + 영상 + 메모 + 위치 미니맵
   │    └─ 사진 탭 → 전체화면 보기(기존 signed URL, 1~3배 확대·사진 이동·닫기). 서버/API 추가 없음. 네이티브 제스처 검증 범위는 docs/history/2026-09-21-photo-viewer.md 참조.

@@ -9,8 +9,12 @@
 // 정책: 진입(roomId 변경) 1회 조회 + 명시적 refresh()(저장 후 호출)만. 폴링/Realtime 미도입(비용 가드레일 §8).
 //   signed URL은 목록의 대표 path만 1회 배치 발급(개별 N회 호출 금지, §8). 발급 실패는 coverUri null로 폴백(목록은 유지).
 //   임베드는 대표 path 추출용 (storage_path, order_index)만 — 전체 5장 바이너리 미조회(전송량 절감 §8).
+//
+// 캐시(query-cache T4): 상태를 화면이 아니라 공유 캐시가 소유한다(useCachedQuery). 로그를 다시 열면
+//   캐시된 목록을 즉시 그리고 뒤에서 조용히 갱신한다(U58 ①). 공개 계약 { state, refresh }는 그대로다.
+import { queryKeys } from '@/lib/queryKeys';
 import { supabase } from '@/lib/supabase';
-import { useOneShotQuery } from '@/lib/useOneShotQuery';
+import { useCachedQuery } from '@/lib/useCachedQuery';
 
 import { createSignedUrlMap } from '../signedUrlMap';
 import { type Muklog, type MuklogsState } from '../types';
@@ -85,7 +89,7 @@ export const useMuklogs = ({ roomId }: { roomId: string }): {
   state: MuklogsState;
   refresh: () => Promise<void>;
 } => {
-  // 쿼리 + 대표 사진 signed URL 매핑만 정의 — 로딩/에러/마운트 가드/refresh 는 useOneShotQuery 가 소유.
+  // 쿼리 + 대표 사진 signed URL 매핑만 정의 — 로딩/에러/캐시/refresh 는 useCachedQuery 가 소유.
   const fetchMuklogs = async (): Promise<{ muklogs: Muklog[] }> => {
     const { data, error } = await supabase
       .from('muklogs')
@@ -111,9 +115,9 @@ export const useMuklogs = ({ roomId }: { roomId: string }): {
     return { muklogs };
   };
 
-  return useOneShotQuery<{ muklogs: Muklog[] }>({
-    deps: [roomId],
-    fetch: fetchMuklogs,
+  return useCachedQuery<{ muklogs: Muklog[] }>({
+    queryKey: queryKeys.muklogs({ roomId }),
+    queryFn: fetchMuklogs,
     // 목록 조회 실패는 고정 카피(토큰 매핑 대상 아님).
     mapError: () => '맛집 목록을 불러오지 못했어요. 다시 시도해 주세요.',
   });

@@ -28,6 +28,11 @@ const IDLE_LABEL = '장소 이름을 검색해 보세요'; // 킷 "연남동 주
 // 눌림 불투명도 — 치환 전 로컬 styles.pressed 실값 승계(비주얼 회귀 0). 등급은 lg(전폭 보더 행). ui-spec §2-2 A10.
 const MANUAL_ROW_PRESSED_OPACITY = 0.6;
 
+// 제출 진행 중(U6-b) 기본 문구 — 소비처가 submittingLabel로 흐름별 카피를 주입한다(위시=담는 중…).
+const DEFAULT_SUBMITTING_LABEL = '처리 중…';
+// 비활성 dim — PlaceResultRow와 같은 Button 비활성 실값(0.45) 승계. 신규 실값 0(plan §4-3).
+const MANUAL_ROW_DISABLED_OPACITY = 0.45;
+
 export type PlaceSearchViewProps = {
   /** 검색어(controlled). usePlaceSearch.query. */
   query: string;
@@ -51,6 +56,11 @@ export type PlaceSearchViewProps = {
   onUseManualInput?: () => void;
   /** 입력 placeholder. 킷 mk-log:392. */
   placeholder?: string;
+  /** 제출(위시 담기) 진행 중 — 결과행·직접입력행 비활성 + 진행 표시(U6-b). 기본 false.
+   *  ⚠️ optional: 장소 선택이 동기라 제출 개념이 없는 MuklogEditor는 넘기지 않는다(검색뷰 회귀 0). */
+  submitting?: boolean;
+  /** 진행 표시 문구. submitting=true일 때만 렌더. 기본 '처리 중…'. */
+  submittingLabel?: string;
 };
 
 export const PlaceSearchView = ({
@@ -65,6 +75,8 @@ export const PlaceSearchView = ({
   backLabel = '뒤로 가기',
   onUseManualInput,
   placeholder = '장소, 음식점 검색',
+  submitting = false,
+  submittingLabel = DEFAULT_SUBMITTING_LABEL,
 }: PlaceSearchViewProps) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -140,6 +152,18 @@ export const PlaceSearchView = ({
           </View>
         ) : null}
 
+        {/* 제출 진행 행(U6-b, 원칙 3 즉각 피드백) — 위 'loading' 행과 같은 마크업·간격을 그대로 승계한다(신규 실값 0).
+            D1: 행별 스피너가 아니라 상단 상태 행 하나 — 어느 행을 담는 중인지는 탭한 사용자가 이미 알고,
+            결과행 내부에 스피너를 넣으면 킷 레이아웃(mk-log:402-409)을 건드리게 된다. */}
+        {submitting ? (
+          <View style={[styles.stateRow, { paddingHorizontal: theme.spacing[20], gap: theme.spacing[8] }]}>
+            <ActivityIndicator testID="place-search-submitting-spinner" color={theme.color.primary} />
+            <Text variant="bodySm" color="fgMuted">
+              {submittingLabel}
+            </Text>
+          </View>
+        ) : null}
+
         {status === 'error' && errorMessage ? (
           <Text
             variant="bodySm"
@@ -167,6 +191,8 @@ export const PlaceSearchView = ({
           <MotionPressable
             accessibilityRole="button"
             accessibilityLabel="직접 입력"
+            accessibilityState={{ disabled: submitting }}
+            disabled={submitting}
             onPress={onUseManualInput}
             pressSize="lg"
             pressedOpacity={MANUAL_ROW_PRESSED_OPACITY}
@@ -179,6 +205,7 @@ export const PlaceSearchView = ({
                 marginTop: theme.spacing[12],
                 paddingVertical: theme.spacing[14],
                 paddingHorizontal: theme.spacing[16],
+                opacity: submitting ? MANUAL_ROW_DISABLED_OPACITY : 1,
               },
             ]}
           >
@@ -199,6 +226,7 @@ export const PlaceSearchView = ({
                 category={resolveCategory({ item: resultItem })}
                 roadAddress={resultItem.roadAddressName}
                 address={resultItem.addressName}
+                disabled={submitting}
                 onPress={() => onSelectResult({ item: resultItem })}
               />
             ))}
