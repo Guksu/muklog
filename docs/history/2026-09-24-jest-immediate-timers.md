@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-09-24 |
 | 브랜치 | fix/jest-immediate-timers |
-| PR | 미생성 |
+| PR | https://github.com/Guksu/muklog/pull/32 |
 | 관련 경로 | package.json, src/test/timerEnvironment/timerEnvironment.spec.ts, docs/testing-strategy.md |
 
 ## 1. 개요
