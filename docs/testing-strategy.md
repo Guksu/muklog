@@ -25,6 +25,12 @@
 - 파일명: 소스 옆 콜로케이션 `*.spec.ts` / `*.spec.tsx`(대표 심볼명 기준, 컨벤션 §네이밍).
 - 명령: `npm test`(=`jest`), watch는 `jest --watch`.
 
+### 가짜 시간과 즉시 실행 큐
+
+Jest의 `fakeTimers.doNotFake`는 `setImmediate`와 `clearImmediate`를 함께 제외한다. React/RNTL의 즉시 실행 큐는 실제 시간으로 진행하고, `setTimeout`·애니메이션 시간은 기존처럼 가짜 시간으로 제어한다.
+
+RN 0.76의 `StatusBar`는 실행이 끝난 immediate 핸들도 보관한다. 가짜 시간에서 만든 핸들이 `useRealTimers()` 뒤 native `clearImmediate`로 넘어가면 Node의 즉시 실행 큐를 손상시켜 다른 테스트 종료까지 지연시킬 수 있다. 두 함수를 개별 spec에서 다시 가짜 함수로 바꾸지 않는다. `advanceTimersByTime`으로 immediate 완료를 기대하지 말고 필요한 비동기 결과를 `await`한다. 경계 회귀는 `src/test/timerEnvironment/timerEnvironment.spec.ts`에서 검증한다.
+
 ## 무엇을, 어느 깊이로 테스트하나
 
 | 대상 | 테스트 | 비고 |
@@ -51,4 +57,3 @@
 ## 테스트를 거는 위치 — 공개 경계(seam) 사전 합의 (guksu-harness 1.18)
 
 테스트는 **합의된 공개 경계(seam — 호출자가 쓰는 인터페이스)** 에 쓴다: 유틸의 export 함수, 훅의 반환 계약, 화면의 사용자 가시 동작(텍스트·접근성·핸들러 효과), RPC/Edge Function의 응답 shape(모킹 경계). 구현 내부(사적 함수·내부 상태·스타일 상수)에 결합된 테스트는 리팩토링마다 깨져 유지비만 남긴다. **어느 경계를 지킬지는 스프린트 plan에서 인수조건과 함께 합의해 기록**하고, qa-logic은 테스트가 그 경계에 걸려 있는지도 본다.
-
