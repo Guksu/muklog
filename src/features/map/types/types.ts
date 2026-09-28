@@ -92,6 +92,31 @@ export type NearbyPlaceItem = {
 /** 주변 음식점 조회 UI 상태(plan §3.5) — useNearbyPlaces.status 단일 출처. */
 export type NearbyPlacesStatus = 'idle' | 'loading' | 'ready' | 'error';
 
+/**
+ * 재검색 pill이 보여야 할 상태(useNearbyPlaces.researchState 단일 출처, map-nearby-feedback · UX 백로그 U10).
+ * 화면은 이 값만 보고 pill을 그린다 — Hidden이면 렌더하지 않고 나머지는 MapResearchButton state로 매핑한다.
+ */
+export const NearbyResearchState = {
+  Hidden: 'hidden', // pill 없음(드리프트 없음·자동 조회 중·뷰포트 미수신)
+  Idle: 'idle', // "이 지역에서 검색" — 드리프트 임계 초과
+  Searching: 'searching', // 사용자가 누른 조회(research)가 진행 중
+  Failed: 'failed', // 가장 최근 조회가 실패(자동·수동 무관) — 다시 시도
+} as const;
+export type NearbyResearchState = (typeof NearbyResearchState)[keyof typeof NearbyResearchState];
+
+/**
+ * research() 1회의 결과(research가 돌려주는 Promise의 값, map-nearby-feedback).
+ * 실패 원인은 구분하지 않는다 — 오프라인 문구 분기(U39)는 원인 필드를 따로 더하면 되고 이 값은 그대로 둔다.
+ */
+export const NearbyResearchOutcome = {
+  Found: 'found', // 결과 ≥1건(네트워크 또는 캐시)
+  Empty: 'empty', // 결과 0건(네트워크 또는 캐시)
+  Failed: 'failed', // 조회 실패(status='error')
+  Skipped: 'skipped', // 조회하지 않았거나(뷰포트 미수신·연타) 결과를 적용하지 않음(더 새 요청에 밀림·언마운트)
+} as const;
+export type NearbyResearchOutcome =
+  (typeof NearbyResearchOutcome)[keyof typeof NearbyResearchOutcome];
+
 /** 위치 권한 상태(enum-style 단일 출처). */
 export const LocationPermissionStatus = {
   Undetermined: 'undetermined',

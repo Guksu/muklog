@@ -15,9 +15,16 @@
 //   - 양자화 bbox 캐시: 소수 4자리 키 → 동일 영역 재방문 시 invoke 0(인메모리 + AsyncStorage 영속).
 //   - 0틱 leading-edge 타이머: idle 다발(INIT 직후 0ms/60ms 이중 emit)을 마지막 1건으로 수렴 + cleanup 회수.
 //   - 레이스 가드: requestSeqRef 증가 → 늦게 온 stale 응답 폐기.
-//   - 에러: status='error'만(누적 유지). 재시도 어포던스는 재검색 버튼이다 —
+//   - 에러: 누적 유지 + status='error'. 재시도 어포던스는 재검색 pill이다 —
 //     이미 조회한 뒤의 실패는 lastQueried를 갱신하지 않아 드리프트가 살아 버튼이 남고,
 //     **첫 조회 실패는 lastQueried 자체가 없으므로** status==='error'가 노출을 책임진다(map-feedback U4).
+//
+// map-nearby-feedback(UX 백로그 U10 ①②③)이 더한 것 — 호출 경로·호출 수는 그대로다:
+//   - researchState: pill이 보일 모양(Hidden·Idle·Searching·Failed) 단일 출처. 화면은 이 값만 읽는다.
+//     Searching은 "가장 최근에 발사된 요청이 사용자가 누른 조회일 때"만이다 — 자동 조회 중엔 Hidden(말 걸지 않음).
+//     실패(자동·수동 무관)는 Failed — 같은 pill이 "다시 시도"가 된다(별도 배너 없음).
+//   - research()가 결과(Found·Empty·Failed·Skipped)를 돌려주는 Promise가 됐다. 항상 resolve(reject 0)하고,
+//     자동 경로는 결과를 밖으로 내지 않는다 — 자동 조회의 0건·실패는 구조적으로 토스트·알림 대상이 아니다.
 import { useEffect, useRef, useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
@@ -36,7 +43,14 @@ import { nearbyPreloadBbox } from '../nearbyPreloadBbox';
 import { nearbyToMapMarkers } from '../nearbyToMapMarkers';
 import { NearbyInvokeTrigger, NearbyTraceEvent, traceNearby } from '../nearbyTrace';
 import { searchNearby } from '../searchNearby';
-import { type Coords, type MapMarker, type NearbyPlaceItem, type NearbyPlacesStatus } from '../types';
+import {
+  NearbyResearchOutcome,
+  NearbyResearchState,
+  type Coords,
+  type MapMarker,
+  type NearbyPlaceItem,
+  type NearbyPlacesStatus,
+} from '../types';
 
 /**
  * 첫 조회 leading-edge 지연(ms) — 0틱(다음 매크로태스크)에 즉시 발사.
@@ -59,6 +73,56 @@ export const NEARBY_HYDRATE_MAX_SPANS = 3;
 
 /** 조회가 실제로 적용된 area(양자화 키 + 그때의 bbox) — 재검색 임계 비교의 기준선. */
 type QueriedArea = { key: string; bounds: Bounds };
+
+/** research() 1회를 끝내는 콜백 — 결과 표의 각 분기에서 정확히 한 번 부른다(자동 경로는 넘기지 않는다). */
+type SettleResearch = (args: { outcome: NearbyResearchOutcome }) => void;
+
+/**
+ * 조회 진행 상태 — status와 researching은 항상 한 번의 setState로 함께 바꾼다(map-nearby-feedback).
+ * Promise 콜백 안의 setState는 묶이지 않아(RN 구 아키텍처·테스트 렌더러 모두) 따로 바꾸면 사이에 렌더가 한 번 낀다.
+ * 그 렌더가 "검색 중도 아니고 누를 수도 없음"(Hidden)이 되면 화면이 pill을 언마운트했다가 새로 만들어
+ * 방금 누른 버튼에서 스크린리더 포커스가 떠난다.
+ */
+type NearbyQueryState = {
+  status: NearbyPlacesStatus;
+  /** 가장 최근에 발사된 요청이 사용자가 누른 조회(research)인가 — pill "검색하는 중" 판정. */
+  researching: boolean;
+};
+
+/**
+ * 결과 건수로 Found/Empty를 가른다(네트워크·캐시 공통).
+ * @param count 이번 조회(또는 캐시 area)의 결과 건수
+ * @returns 1건 이상이면 Found, 0건이면 Empty
+ */
+const classifyOutcomeByCount = ({ count }: { count: number }): NearbyResearchOutcome =>
+  count > 0 ? NearbyResearchOutcome.Found : NearbyResearchOutcome.Empty;
+
+/**
+ * 재검색 pill 모양을 정한다(map-nearby-feedback). 우선순위:
+ * ① 사용자가 누른 조회가 진행 중이면 Searching(자리를 지키며 "검색하는 중") ② 누를 수 없으면 Hidden
+ * (자동 조회 중·드리프트 없음·뷰포트 미수신) ③ 최근 조회가 실패면 Failed ④ 그 밖(드리프트 초과)은 Idle.
+ * researching이면 대개 status가 loading이라 researchAvailable은 false다 → researchAvailable은 Idle·Failed의 별칭으로 남는다.
+ * 예외: 누른 조회 진행 중에 캐시 적중·하이드레이션이 status만 ready로 바꾸면 별칭이 잠깐 어긋날 수 있다(H18·H19).
+ * 화면은 researchAvailable을 읽지 않고 Searching pill은 누를 수 없어 사용자에게 드러나지 않는다.
+ * @param researching 가장 최근에 발사된 요청이 사용자가 누른 조회인지
+ * @param researchAvailable 재검색을 누를 수 있는지(map-feedback U4 식)
+ * @param status 주변 조회 상태
+ * @returns pill 모양
+ */
+const toResearchState = ({
+  researching,
+  researchAvailable,
+  status,
+}: {
+  researching: boolean;
+  researchAvailable: boolean;
+  status: NearbyPlacesStatus;
+}): NearbyResearchState => {
+  if (researching) return NearbyResearchState.Searching;
+  if (!researchAvailable) return NearbyResearchState.Hidden;
+  if (status === 'error') return NearbyResearchState.Failed;
+  return NearbyResearchState.Idle;
+};
 
 /** bbox를 양자화 키로 정규화한다(소수 N자리 반올림 → 동일 영역 캐시 히트). */
 const quantizeKey = ({ bounds }: { bounds: Bounds }): string => {
@@ -89,20 +153,31 @@ export type UseNearbyPlacesResult = {
   setBounds: (next: Bounds) => void;
   /** 탭 진입 즉시 1회. 하이드레이션 완료 뒤 실행되도록 내부 큐잉된다. 2회차 이후 호출은 no-op. */
   preload: (args: { bbox: Bounds }) => void;
-  /** "이 지역에서 검색" 탭 — 현재 bbox로 1회 조회. in-flight면 no-op(연타 가드). */
-  research: () => void;
-  /** 버튼 노출 여부. 부모는 이 값만 보고 렌더한다(컴포넌트는 자기 노출 조건을 모른다). */
+  /**
+   * "이 지역에서 검색"·"다시 시도" 탭 — 현재 bbox로 1회 조회. in-flight면 조회 없이 Skipped(연타 가드).
+   * 결과를 돌려주는 Promise이며 항상 resolve한다(reject 0): 캐시·네트워크 ≥1건 Found, 0건 Empty, 실패 Failed,
+   * 뷰포트 미수신·연타·더 새 요청에 밀림·응답 전 언마운트는 Skipped. 요청이 멈추면 OS 네트워크 제한 시간까지 대기한다.
+   */
+  research: () => Promise<NearbyResearchOutcome>;
+  /** pill이 보일 모양. 부모는 이 값만 보고 렌더한다(Hidden이면 미렌더 — 컴포넌트는 자기 노출 조건을 모른다). */
+  researchState: NearbyResearchState;
+  /** 재검색을 누를 수 있는 상태인지 — researchState가 Idle 또는 Failed일 때 true인 파생 별칭(map-feedback U4 식 유지). */
   researchAvailable: boolean;
 };
 
 /**
  * 주변 음식점을 선로딩·영속 캐시·명시 재검색 모델로 관리하는 훅.
  * 지도 부팅과 병렬로 선로딩하고(preload), 재진입 시 캐시로 즉시 표시하며, 이후 갱신은 research()로만 한다.
- * @returns markers/items/status + setBounds·preload·research·researchAvailable
+ * @returns markers/items/status + setBounds·preload·research(결과 Promise)·researchState·researchAvailable
  */
 export const useNearbyPlaces = (): UseNearbyPlacesResult => {
   const [items, setItems] = useState<NearbyPlaceItem[]>([]);
-  const [status, setStatus] = useState<NearbyPlacesStatus>('idle');
+  // status + researching 한 덩어리(NearbyQueryState 주석). researching은 발사할 때 트리거로 덮어쓰고
+  //   (자동 요청이 새로 나가면 false), 현재 요청의 응답이 오면 status와 함께 false. stale 응답은 건드리지 않는다.
+  //   캐시 적중·하이드레이션은 status만 바꾼다 — 진행 중인 누른 조회의 "검색하는 중"은 그 응답이 내린다(H18·H19).
+  //   여기서 내리면 pill이 Searching → Hidden → (응답 뒤) Idle로 두 번 바뀌며 재마운트된다.
+  const [query, setQuery] = useState<NearbyQueryState>({ status: 'idle', researching: false });
+  const { status, researching } = query;
   // 버튼 노출 판정은 렌더에서 계산하므로 두 값은 state여야 한다(ref만이면 값이 바뀌어도 버튼이 안 뜬다).
   const [lastQueried, setLastQueried] = useState<QueriedArea | null>(null);
   const [currentBounds, setCurrentBounds] = useState<Bounds | null>(null);
@@ -194,7 +269,7 @@ export const useNearbyPlaces = (): UseNearbyPlacesResult => {
     areasRef.current.set(key, area);
     traceNearby({ event: NearbyTraceEvent.CacheHit, detail: { key } });
     setItems((prev) => accumulateNearbyItems({ prev, next: area.items, cap: NEARBY_ACCUM_CAP }));
-    setStatus('ready');
+    setQuery((prev) => ({ ...prev, status: 'ready' })); // researching 유지 — 위 query state 주석(H18).
     commitQueried({ key, bounds: bbox });
   };
 
@@ -224,41 +299,60 @@ export const useNearbyPlaces = (): UseNearbyPlacesResult => {
   /**
    * 조회 1건을 시작한다 — 캐시 히트면 invoke 0, miss면 0틱(또는 즉시) 발사.
    * research만 in-flight 가드로 막는다(연타). 자동 경로(보정)는 레이스 가드가 처리한다.
+   * settleResearch는 research만 넘긴다 — 아래 각 분기에서 결과를 정확히 한 번 알린다(새 타이머·새 invoke 경로 0).
    */
   const startQuery = ({
     bbox,
     trigger,
     defer,
+    settleResearch,
   }: {
     bbox: Bounds;
     trigger: NearbyInvokeTrigger;
     defer: boolean;
+    settleResearch?: SettleResearch;
   }): void => {
     pruneDistantAreas({ bbox });
     const key = quantizeKey({ bounds: bbox });
 
-    if (areasRef.current.has(key)) {
+    const cachedArea = areasRef.current.get(key);
+    if (cachedArea) {
       // 이미 가진 영역(직전 조회 포함) — 네트워크 0. 대기 중 조회가 있었다면 불필요해졌으므로 회수한다.
+      //   발사가 없으므로 "검색하는 중"을 거치지 않고 그 area의 건수로 바로 끝난다(0건 area면 Empty).
       firstLoadUsedRef.current = true;
       clearQueryTimer();
       applyCachedArea({ key, bbox });
+      settleResearch?.({ outcome: classifyOutcomeByCount({ count: cachedArea.items.length }) });
       return;
     }
-    if (trigger === NearbyInvokeTrigger.Research && inFlightRef.current) return; // 연타 가드(A3-7).
+    if (trigger === NearbyInvokeTrigger.Research && inFlightRef.current) {
+      settleResearch?.({ outcome: NearbyResearchOutcome.Skipped }); // 연타 가드(A3-7) — 조회 0.
+      return;
+    }
     firstLoadUsedRef.current = true;
 
     const fire = (): void => {
-      if (!mountedRef.current) return;
+      if (!mountedRef.current) {
+        settleResearch?.({ outcome: NearbyResearchOutcome.Skipped });
+        return;
+      }
       inFlightRef.current = true;
       const seq = (requestSeqRef.current += 1); // 이전 요청 무효화(레이스 가드).
       const startedAt = Date.now();
-      setStatus('loading');
+      // 자동 요청이 새로 나가면 researching이 false로 덮인다 — 밀려난 research가 "검색하는 중"을 붙들지 않는다(H12).
+      setQuery({ status: 'loading', researching: trigger === NearbyInvokeTrigger.Research });
       traceNearby({ event: NearbyTraceEvent.InvokeStart, detail: { key, trigger } });
       searchNearby(boundsToRect({ sw: bbox.sw, ne: bbox.ne }))
         .then(function onResults(nextItems) {
-          if (seq !== requestSeqRef.current) return; // stale 폐기.
+          if (seq !== requestSeqRef.current) {
+            settleResearch?.({ outcome: NearbyResearchOutcome.Skipped }); // stale 폐기 — 결과 미적용.
+            return;
+          }
           inFlightRef.current = false;
-          if (!mountedRef.current) return;
+          if (!mountedRef.current) {
+            settleResearch?.({ outcome: NearbyResearchOutcome.Skipped }); // 언마운트 — 상태 변경 0.
+            return;
+          }
           traceNearby({
             event: NearbyTraceEvent.InvokeEnd,
             detail: { key, ms: Date.now() - startedAt, count: nextItems.length, ok: true },
@@ -267,20 +361,33 @@ export const useNearbyPlaces = (): UseNearbyPlacesResult => {
           commitQueried({ key, bounds: bbox });
           // 교체가 아니라 누적 병합 — 같은 위치 줌/이동 시 이전 핀 유지(팝인/소실 해소).
           setItems((prev) => accumulateNearbyItems({ prev, next: nextItems, cap: NEARBY_ACCUM_CAP }));
-          setStatus('ready');
+          // 기준선·핀을 먼저 반영하고 마지막에 status·researching을 **한 번에** 바꾼다 — 그 전 렌더는 전부 Searching이고,
+          //   pill은 Searching에서 최종 모양(Hidden·Idle)으로 곧장 간다(H17). 기준선보다 먼저 바꾸면 옛 기준선으로 드리프트를
+          //   재서 Idle이 한 번 렌더되고, researching만 따로 먼저 내리면 Hidden이 끼어 pill이 재마운트된다.
+          setQuery({ status: 'ready', researching: false });
           scheduleCacheWrite();
+          settleResearch?.({ outcome: classifyOutcomeByCount({ count: nextItems.length }) });
         })
         .catch(function onError() {
-          if (seq !== requestSeqRef.current) return; // stale 폐기.
+          if (seq !== requestSeqRef.current) {
+            settleResearch?.({ outcome: NearbyResearchOutcome.Skipped }); // stale 폐기.
+            return;
+          }
           inFlightRef.current = false;
-          if (!mountedRef.current) return;
+          if (!mountedRef.current) {
+            settleResearch?.({ outcome: NearbyResearchOutcome.Skipped });
+            return;
+          }
           traceNearby({
             event: NearbyTraceEvent.InvokeEnd,
             detail: { key, ms: Date.now() - startedAt, count: 0, ok: false },
           });
-          // 누적 유지(items 미변경) + lastQueried 미갱신 → 버튼이 남아 재시도 어포던스가 된다(E12).
+          // 누적 유지(items 미변경) + lastQueried 미갱신 → pill이 남아 재시도 어포던스가 된다(E12).
           //   첫 조회 실패라 lastQueried가 아예 없는 경우는 status='error' 자체가 노출을 연다(map-feedback U4).
-          setStatus('error');
+          //   원인(오프라인·서버)은 구분하지 않는다 — 오프라인 문구 분기(U39)가 원인 필드를 더할 자리다.
+          // 한 번에 바꾼다(위 onResults와 같은 이유) — pill은 Searching에서 Failed로 곧장 간다(같은 요소, H17).
+          setQuery({ status: 'error', researching: false });
+          settleResearch?.({ outcome: NearbyResearchOutcome.Failed });
         });
     };
 
@@ -324,10 +431,18 @@ export const useNearbyPlaces = (): UseNearbyPlacesResult => {
     runPreload({ bbox });
   };
 
-  const research = (): void => {
+  const research = (): Promise<NearbyResearchOutcome> => {
     const bbox = currentBoundsRef.current;
-    if (!bbox) return; // 뷰포트 미수신 — 누를 수 없는 상태(버튼도 안 뜬다).
-    startQuery({ bbox, trigger: NearbyInvokeTrigger.Research, defer: false });
+    // 뷰포트 미수신 — 누를 수 없는 상태(버튼도 안 뜬다). 조회 0.
+    if (!bbox) return Promise.resolve(NearbyResearchOutcome.Skipped);
+    return new Promise<NearbyResearchOutcome>((resolve) => {
+      startQuery({
+        bbox,
+        trigger: NearbyInvokeTrigger.Research,
+        defer: false,
+        settleResearch: ({ outcome }) => resolve(outcome),
+      });
+    });
   };
 
   const setBounds = (next: Bounds): void => {
@@ -387,7 +502,7 @@ export const useNearbyPlaces = (): UseNearbyPlacesResult => {
         });
         if (hydratedItems.length > 0) {
           setItems(hydratedItems);
-          setStatus('ready');
+          setQuery((prev) => ({ ...prev, status: 'ready' })); // researching 유지(H19).
         }
       }
       hydratedRef.current = true;
@@ -426,8 +541,20 @@ export const useNearbyPlaces = (): UseNearbyPlacesResult => {
       (lastQueried !== null &&
         exceedsResearchThreshold({ prev: lastQueried.bounds, next: currentBounds })));
 
+  // pill 모양(map-nearby-feedback) — 렌더에서 직접 계산(useMemo 지양). 우선순위는 toResearchState 주석.
+  const researchState = toResearchState({ researching, researchAvailable, status });
+
   // 마커는 items에서 파생(지도 핀용 kind:'nearby'). 직접 계산(useMemo 지양, 컨벤션).
   const markers = nearbyToMapMarkers({ items });
 
-  return { markers, items, status, setBounds, preload, research, researchAvailable };
+  return {
+    markers,
+    items,
+    status,
+    setBounds,
+    preload,
+    research,
+    researchState,
+    researchAvailable,
+  };
 };
