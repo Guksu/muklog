@@ -6,7 +6,7 @@ import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
-import { PRESSED_OPACITY } from '@/theme';
+import { PRESS_SCALE, PRESSED_OPACITY } from '@/theme';
 
 import { MotionPressable, MOTION_PRESSABLE_STATIC_OPACITY_WARNING } from './MotionPressable';
 
@@ -247,5 +247,64 @@ describe('MotionPressable — 감소 모션 눌림 피드백 바닥값', () => {
   it('감소 모션 OFF에서 기존 소비처 값(0.6)도 그대로다', async () => {
     const pressedStyle = await renderPressed({ reduceMotion: false, pressedOpacity: 0.6 });
     expect(pressedStyle.opacity).toBeCloseTo(0.6, 5);
+  });
+});
+
+// 비활성 전환이 끊은 복귀(map-nearby-feedback qa-visual QV-1) — 손을 뗀 이벤트 안에서 소비처가 곧바로 disabled로 바꾸면
+//   (재검색 pill: 탭 → 검색 중) 눌림 스타일이 떨어지며 RN이 progress의 복귀 스프링을 멈춘다(detach → stopAnimation).
+//   다시 활성화될 때 멈춘 눌림 값이 그대로 그려지면 "눌린 채 굳은" 버튼이 된다. 눌림 표시는 지금 누르고 있을 때만 —
+//   웹 :active처럼(fe-skills press-feedback), 중단된 모션은 평상에서 다시 출발한다(fe-craft #6·#8).
+//   읽는 것은 **정착한 스타일 값**뿐이다(스프링 궤적은 읽지 않는다 — plan §5-2 규율 승계).
+describe('MotionPressable — 눌림 중 비활성 전환 뒤 평상 복귀', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  const renderFabPill = ({ disabled }: { disabled: boolean }) => (
+    <MotionPressable testID="mp" pressSize="fab" pressedOpacity={1} disabled={disabled}>
+      <Text>이 지역에서 검색</Text>
+    </MotionPressable>
+  );
+
+  /** 누름이 정착한 뒤 손을 떼고, 같은 틱에 disabled → 한참 뒤 다시 활성화했을 때의 스타일을 돌려준다. */
+  const pressReleaseDisableEnable = async ({ reduceMotion }: { reduceMotion: boolean }) => {
+    mockReduceMotion({ enabled: reduceMotion });
+    const { rerender } = renderWithTheme(renderFabPill({ disabled: false }));
+    await waitFor(() =>
+      expect(flattenStyle({ testID: 'mp' }).transform === undefined).toBe(reduceMotion),
+    );
+    fireEvent(screen.getByTestId('mp'), 'pressIn');
+    act(() => {
+      jest.advanceTimersByTime(200);
+    });
+    const pressedStyle = flattenStyle({ testID: 'mp' });
+    // 복귀 스프링이 시작된 바로 그 틱에 비활성으로 바뀐다(시간을 흘리지 않는다).
+    fireEvent(screen.getByTestId('mp'), 'pressOut');
+    rerender(renderFabPill({ disabled: true }));
+    act(() => {
+      jest.advanceTimersByTime(3000);
+    });
+    rerender(renderFabPill({ disabled: false }));
+    act(() => {
+      jest.advanceTimersByTime(3000);
+    });
+    return { pressedStyle, restStyle: flattenStyle({ testID: 'mp' }) };
+  };
+
+  it('감소 모션 OFF — 다시 활성화되면 축소(fab 0.92)가 남지 않고 scale 1이다', async () => {
+    const { pressedStyle, restStyle } = await pressReleaseDisableEnable({ reduceMotion: false });
+    // 전제: 누름이 실제로 축소까지 갔다(공허한 green 방지).
+    expect(pressedStyle.transform).toEqual([{ scale: PRESS_SCALE.fab }]);
+    expect(restStyle.transform).toEqual([{ scale: 1 }]);
+    expect(restStyle.opacity).toBeCloseTo(1, 5);
+  });
+
+  it('감소 모션 ON — 다시 활성화되면 흐림(바닥값 0.85)이 남지 않고 opacity 1이다', async () => {
+    const { pressedStyle, restStyle } = await pressReleaseDisableEnable({ reduceMotion: true });
+    expect(pressedStyle.opacity).toBeCloseTo(PRESSED_OPACITY.reduceMotionFloor, 5);
+    expect(restStyle.transform).toBeUndefined();
+    expect(restStyle.opacity).toBeCloseTo(1, 5);
   });
 });

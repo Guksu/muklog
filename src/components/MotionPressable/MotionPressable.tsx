@@ -73,6 +73,18 @@ export const MotionPressable = ({
   // 0=평상, 1=눌림. 새 애니메이션은 현재 값에서 재타게팅한다 — setValue 리셋 금지(fe-craft #6, plan E5).
   const progress = React.useRef(new Animated.Value(0)).current;
 
+  // 비활성 전환 = 눌림 종료(map-nearby-feedback qa-visual QV-1). 손을 뗀 이벤트 안에서 소비처가 곧바로 disabled로 바꾸면
+  //   (재검색 pill 탭 → 검색 중, Button loading) 눌림 스타일이 떨어지며 RN이 progress를 detach하고 복귀 스프링을 멈춘다.
+  //   그대로 두면 다시 활성화될 때 멈춘 눌림 값(축소·흐림)이 그려진다 → 평상으로 되돌린다(setValue가 남은 애니메이션도 멈춘다).
+  //   위의 "setValue 리셋 금지"는 누르는 중의 재타게팅 규칙이다 — 비활성 동안엔 눌림 스타일이 붙지 않아 이 리셋은 보이지 않는다.
+  React.useEffect(
+    function resetPressOnDisable() {
+      if (!disabled) return;
+      progress.setValue(0);
+    },
+    [disabled, progress],
+  );
+
   const handlePressIn = (event: GestureResponderEvent) => {
     Animated.timing(progress, {
       toValue: 1,

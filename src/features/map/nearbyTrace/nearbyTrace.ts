@@ -16,6 +16,8 @@ export const NearbyTraceEvent = {
   InvokeEnd: 'invoke:end', // { key, ms, count, ok }
   MapReady: 'map:ready', // {} — READY 수신(gapMs의 t0)
   FirstRender: 'render:first', // { kind, gapMs }
+  // { ms } — 지도 준비 제한 시간 만료(READY·ERROR 무응답). SDK ERROR와 로그로 구분하기 위함(map-nearby-feedback).
+  MapBootTimeout: 'map:boot-timeout',
 } as const;
 export type NearbyTraceEvent = (typeof NearbyTraceEvent)[keyof typeof NearbyTraceEvent];
 

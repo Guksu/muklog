@@ -8,6 +8,9 @@
 //   map-location-denied(U7·U13 ③): 위치 권한 거부는 중앙 오버레이가 아니라 FAB 위 하단 배너(MapPermissionBanner)로
 //   안내한다 — "설정 열기"(expo-linking openSettings, 실패 시 토스트) + 닫기(마운트 동안만, 비저장) + 거부 상태 FAB 탭 시
 //   배너 재노출·스크린리더 알림. 설정에서 허용하고 돌아온 반영은 useLocationPermission의 재활성화 재조회가 맡는다.
+//   map-nearby-feedback(U10): 재검색 pill은 훅 researchState(검색 중·실패 포함)로 그리고, 지도 가운데 안내가 있으면 숨긴다.
+//   누른 조회의 0건은 토스트+스크린리더, 실패는 스크린리더만 알린다(pill이 이미 실패를 보여 준다). 지도 SDK가 10초 안에
+//   READY·ERROR를 하나도 보내지 않으면 1회성 제한 시간이 SDK 오류 안내로 바꾼다(늦은 READY는 자동 복구).
 //
 // 정책: 진입 1회 핀 조회 + 권한 1회 요청 + 명시적 refresh만(폴링/Realtime 없음, 비용 가드레일 §8).
 //   현재위치는 RN expo-location으로 받아 INIT.me로 주입(WebView geolocation 미사용 — plan §9.2).
@@ -22,10 +25,12 @@ import {
   CategoryFilterBar,
   LogPickerSheet,
   MAP_LOCATE_BUTTON_SIZE,
+  MAP_RESEARCH_COPY,
   MapLegend,
   MapLocateButton,
   MapPermissionBanner,
   MapResearchButton,
+  MapResearchButtonState,
   MapStatusOverlay,
   MapStatusTone,
   MapWebView,
@@ -64,6 +69,8 @@ import {
   LocationPermissionStatus,
   MapInboundType,
   MapPinKind,
+  NearbyResearchOutcome,
+  NearbyResearchState,
   type MuklogPin,
   type WishPin,
 } from '@/features/map/types';
@@ -93,7 +100,32 @@ const MAP_COPY = {
   pinsError: '먹로그를 불러오지 못했어요',
   sdkError: '지도를 불러오지 못했어요',
   retry: '다시 시도',
+  // map-nearby-feedback: 사용자가 누른 조회가 0건일 때만(자동 조회 0건은 무통지). 0건이면 pill도 사라지므로
+  //   상태 + 다음 행동 두 절(킷 빈 상태 "…없어요 / …남겨보세요" 꼴) — 지도를 옮기면 pill이 다시 뜬다.
+  //   "이 지역엔"은 뺐다: 넣으면 토스트가 ≈288pt로 넓어져 360~402pt 기기에서 현재위치 FAB(같은 하단 줄)를 덮는다.
+  //   지금 ≈233pt = 320pt까지 한 줄, 360pt 이상 FAB와 안 겹침. 구분은 가운뎃점 대신 마침표 — 같은 문구를 스크린리더
+  //   알림에도 쓰므로 기호 이름을 읽지 않게(openSettingsFailed와 같은 꼴). "등록된"(누가?)·"맛집"(우리 맛집 오해)은 뺐다.
+  nearbyEmpty: '음식점이 없어요. 지도를 옮겨보세요',
 } as const;
+
+/**
+ * 훅 researchState → pill 모양. Hidden은 null(렌더하지 않음 — 노출은 부모 소유, 컴포넌트는 자기 노출 조건을 모른다).
+ * 전체 합집합 Record라 상태가 늘면 컴파일러가 여기 누락을 잡는다(map-nearby-feedback).
+ */
+const RESEARCH_BUTTON_STATE_BY_NEARBY: Record<NearbyResearchState, MapResearchButtonState | null> = {
+  [NearbyResearchState.Hidden]: null,
+  [NearbyResearchState.Idle]: MapResearchButtonState.Idle,
+  [NearbyResearchState.Searching]: MapResearchButtonState.Searching,
+  [NearbyResearchState.Failed]: MapResearchButtonState.Failed,
+};
+
+/**
+ * 지도 준비 제한 시간(ms) — 지도 탭 마운트 뒤 이 시간 안에 WebView의 첫 READY·ERROR가 하나도 없으면
+ * SDK 오류 안내로 바꾼다(map-nearby-feedback · U10 ④). 실측 부팅 최악 ≈2.9s(프리워밍 없음)의 약 3.4배라
+ * 느린 셀룰러의 SDK 다운로드 여유를 두면서 사용자가 기다림에 주의를 유지하는 10초를 넘지 않는다.
+ * 늦게 READY가 오면 안내가 스스로 걷히므로 느린 망의 오탐 비용은 작다.
+ */
+export const MAP_BOOT_TIMEOUT_MS = 10_000;
 
 /**
  * 좌표 출처를 정밀도 순위로 환산한다(폴백 0 < warm 1 < fresh 2).
@@ -295,6 +327,30 @@ export const MapTabScreen = () => {
     }
   };
 
+  // map-nearby-feedback(U10 ④): 지도 준비 제한 시간 — SDK 스크립트 요청이 멈추면 READY도 ERROR도 오지 않아
+  //   `!mapReady` 로딩 카드가 영구히 남는다(map-feedback E6). 첫 READY·ERROR를 기다리는 **1회성** 타이머 하나로 막는다.
+  //   · 무엇을: 마운트 이후 WebView의 첫 READY 또는 첫 ERROR. 폴링·반복·재시도 없음, 네트워크 호출 0.
+  //   · 몇 번: 마운트당 최대 1회 — mapBootSettled는 한 번 true면 다시 false가 되지 않는다(mapReady는 true로만 가고,
+  //     mapErrored는 READY 수신이나 READY 뒤 재시도로만 내려간다). 그래서 deps가 바뀌어도 재무장되지 않는다.
+  //   · 언제 해제: READY 수신 · ERROR 수신 · 만료 · 언마운트 중 먼저 오는 것.
+  //   만료하면 SDK ERROR와 같은 안내·같은 재시도로 합류한다. "다시 시도"는 이 타이머를 끄지도 다시 켜지도 않는다 —
+  //   끄면 부팅 중 핀 오류 재시도 뒤 SDK가 멈췄을 때 다시 영구 로딩에 갇힌다. 늦게 READY가 오면 READY 처리가 카드를 걷는다.
+  const mapBootSettled = mapReady || mapErrored;
+  useEffect(
+    function watchMapBoot() {
+      if (mapBootSettled) return undefined;
+      const expireMapBoot = () => {
+        traceNearby({ event: NearbyTraceEvent.MapBootTimeout, detail: { ms: MAP_BOOT_TIMEOUT_MS } });
+        setMapErrored(true);
+      };
+      const timerId = setTimeout(expireMapBoot, MAP_BOOT_TIMEOUT_MS);
+      return function clearMapBootWatch() {
+        clearTimeout(timerId);
+      };
+    },
+    [mapBootSettled],
+  );
+
   // nearby 마커 변경(또는 saved 핀 변경) 시 SET_MARKERS 재주입 — READY 이후에만(SDK 준비 전 무의미).
   //   slice1 경로(SET_MARKERS) 재사용 — 신규 outbound 메시지 불필요(plan §3.6). markers 키로 발화.
   const markersKey = markers.map((m) => `${m.id}:${m.kind}`).join('|');
@@ -375,11 +431,28 @@ export const MapTabScreen = () => {
   //   mapErrored를 내리면 `!mapReady` 로딩 분기가 배너를 대체해 스피너가 영구 잔류하고 재시도
   //   버튼까지 사라진다(바텀탭은 언마운트되지 않아 세션 내내 갇힌다). 배너를 남겨 어포던스를 지킨다.
   //   실제로 복구되면 READY 수신부가 mapErrored를 false로 되돌리므로 정상 경로는 그대로다.
-  //   타임아웃 배너로의 톤 전환(본안)은 U10 소유 — 여기선 신규 타이머를 만들지 않는다(비용 가드 §8).
+  //   처음부터 READY·ERROR가 오지 않는 경우는 위 지도 준비 제한 시간(watchMapBoot)이 맡는다 — 재시도는 그 타이머를
+  //   끄지도 다시 켜지도 않고, 지도 웹 화면을 다시 불러오지도 않는다(카카오 SDK 재요청 증가 — 비용 가드레일).
   const handleRetry = () => {
     if (mapReady) setMapErrored(false);
     void refresh();
     sendInit();
+  };
+
+  // 재검색 pill 탭(map-nearby-feedback U10 ②③) — 훅이 결과를 돌려주면 **사용자가 누른 조회의 결과만** 알린다.
+  //   0건: 토스트 + 스크린리더(0건이면 pill이 사라져 포커스를 잃는다). 실패: 스크린리더만(pill이 이미 실패 문구로 바뀌었고,
+  //   VoiceOver는 포커스 요소의 라벨 변경을 스스로 읽지 않는 경우가 많다). 성공·Skipped: 없음(핀 등장이 피드백).
+  //   research()는 reject하지 않는 계약이라 try/catch가 필요 없다. 자동 조회 결과는 여기로 오지 않는다(무통지).
+  const handleResearch = async () => {
+    const outcome = await nearby.research();
+    if (outcome === NearbyResearchOutcome.Empty) {
+      showToast({ message: MAP_COPY.nearbyEmpty, tone: 'neutral' });
+      AccessibilityInfo.announceForAccessibility(MAP_COPY.nearbyEmpty);
+      return;
+    }
+    if (outcome === NearbyResearchOutcome.Failed) {
+      AccessibilityInfo.announceForAccessibility(MAP_RESEARCH_COPY.failedMessage);
+    }
   };
 
   // kind 3분기: saved → SelectedSpotCard / nearby → NearbySpotCard / wish → WishSpotCard(각 컬렉션 lookup).
@@ -449,6 +522,12 @@ export const MapTabScreen = () => {
     permission.status === LocationPermissionStatus.Denied &&
     !permissionBannerDismissed;
 
+  // 재검색 pill 모양(map-nearby-feedback) — 훅 researchState 매핑(Hidden → null). 중앙 오버레이(지도 오류·핀 오류·로딩)가
+  //   있으면 어떤 상태든 숨긴다(원칙 1: 지도 자체가 준비 안 됐거나 오류일 때 주변 검색 안내를 겹치지 않는다).
+  //   오버레이가 걷히면 훅이 가진 상태 그대로 다시 보인다. 권한 배너(하단)와는 자리가 달라 공존한다.
+  const researchButtonState =
+    centerOverlay === null ? RESEARCH_BUTTON_STATE_BY_NEARBY[nearby.researchState] : null;
+
   return (
     <View style={styles.root}>
       <MapWebView html={html} onMessage={handleMessage} webviewRef={webviewRef}>
@@ -473,19 +552,28 @@ export const MapTabScreen = () => {
           <MapLegend />
         </View>
 
-        {/* 재검색 pill — 범례 아래 한 단(top 96 = 56 + 40), 가로 중앙(ui-spec §3.2).
+        {/* 재검색 pill — 범례 아래 한 단(top 96 = 56 + 40), 가로 중앙(map-pin-loading).
             범례(left:16, 3칩 ≈301pt)와 중앙 pill(≈155pt)이 모든 기기에서 가로로 겹쳐 같은 줄을 쓸 수 없다.
-            ⚠ pointerEvents="box-none" — 전폭 래퍼가 지도 팬/탭 제스처를 삼키지 않게. */}
-        {nearby.researchAvailable ? (
+            ⚠ pointerEvents="box-none" — 전폭 래퍼가 지도 팬/탭 제스처를 삼키지 않게.
+            좌우 16(map-nearby-feedback): 킷 지도 오버레이 좌우 여백(범례·FAB 16)과 같은 규칙 — 글자를 키우면 실패 pill(≈274pt)이
+            화면 끝까지 넓어지지 않고 16 안에서 줄바꿈된다. 기본 글자 크기에선 pill이 가용 폭보다 좁아 화면 변화 0. */}
+        {researchButtonState !== null ? (
           <View
             testID="map-overlay-research"
             pointerEvents="box-none"
             style={[
               styles.research,
-              { top: insets.top + theme.spacing[56] + theme.spacing[40] },
+              {
+                top: insets.top + theme.spacing[56] + theme.spacing[40],
+                paddingHorizontal: theme.spacing[16],
+              },
             ]}
           >
-            <MapResearchButton testID="map-research-button" onPress={nearby.research} />
+            <MapResearchButton
+              testID="map-research-button"
+              state={researchButtonState}
+              onPress={handleResearch}
+            />
           </View>
         ) : null}
 

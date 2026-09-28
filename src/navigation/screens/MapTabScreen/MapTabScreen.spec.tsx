@@ -4,7 +4,7 @@
 //   네이티브 지도 렌더는 스모크(디바이스) → WebView는 MapWebView 모킹으로 대체, onMessage만 직접 호출.
 import React from 'react';
 import { AccessibilityInfo, StyleSheet } from 'react-native';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -114,10 +114,12 @@ import {
   LocationCoordsSource,
   LocationPermissionStatus,
   MapPinKind,
+  NearbyResearchOutcome,
+  NearbyResearchState,
   type MapMarker,
 } from '@/features/map/types';
 
-import { MapTabScreen } from './MapTabScreen';
+import { MAP_BOOT_TIMEOUT_MS, MapTabScreen } from './MapTabScreen';
 
 const openSettingsMock = Linking.openSettings as jest.Mock;
 // RN jest 기본 목(react-native/jest/setup.js) — 호출 인자·횟수만 본다.
@@ -154,17 +156,29 @@ const setBoundsSpy = jest.fn();
 const preloadSpy = jest.fn();
 const researchSpy = jest.fn();
 // nearby 훅 상태 주입(기본: idle·빈 마커·빈 items·버튼 미노출). 테스트에서 오버라이드.
+//   map-nearby-feedback: 실제 훅 계약과 같은 모양으로 만든다(테스트 더블 충실도) —
+//   ① researchState를 주지 않으면 researchAvailable로 고른다(true → Idle, 아니면 Hidden)
+//   ② researchAvailable은 researchState가 Idle·Failed일 때만 true인 파생 별칭(훅 H15와 같은 식)
+//   ③ research()는 항상 resolve하는 Promise(기본 Skipped — 아무 안내도 만들지 않는 결과).
 const setNearby = (over?: {
   markers?: MapMarker[];
   items?: unknown[];
   status?: string;
   researchAvailable?: boolean;
+  researchState?: NearbyResearchState;
+  researchOutcome?: NearbyResearchOutcome;
 }) => {
+  const researchState =
+    over?.researchState ??
+    (over?.researchAvailable ? NearbyResearchState.Idle : NearbyResearchState.Hidden);
+  researchSpy.mockResolvedValue(over?.researchOutcome ?? NearbyResearchOutcome.Skipped);
   useNearbyPlacesMock.mockReturnValue({
     setBounds: setBoundsSpy,
     preload: preloadSpy,
     research: researchSpy,
-    researchAvailable: over?.researchAvailable ?? false,
+    researchState,
+    researchAvailable:
+      researchState === NearbyResearchState.Idle || researchState === NearbyResearchState.Failed,
     markers: over?.markers ?? [],
     items: over?.items ?? [],
     status: over?.status ?? 'idle',
@@ -1305,25 +1319,32 @@ describe('MapTabScreen — nearby 선로딩·재검색 버튼 배선', () => {
     expect((bbox.sw.lat + bbox.ne.lat) / 2).toBeCloseTo(37.5, 6);
   });
 
+  // map-nearby-feedback(DV8): 지도 가운데 안내(부팅 로딩 포함)가 떠 있으면 pill을 숨기는 규칙이 생겨
+  //   pill 케이스는 READY를 먼저 발화한다(단언은 그대로 — 노출 조건만 "중앙 안내 없음"이 전제로 붙었다).
   it('A4-3 researchAvailable=true일 때만 map-research-button이 렌더된다', () => {
     useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
     setNearby({ researchAvailable: false });
     const { unmount } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
     expect(screen.queryByTestId('map-research-button')).toBeNull();
     unmount();
 
     setNearby({ researchAvailable: true });
     renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
     expect(screen.getByTestId('map-research-button')).toBeTruthy();
     expect(screen.getByText('이 지역에서 검색')).toBeTruthy();
   });
 
-  it('A4-4 버튼 탭 → nearby.research가 1회 호출된다', () => {
+  it('A4-4 버튼 탭 → nearby.research가 1회 호출된다', async () => {
     useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
     setNearby({ researchAvailable: true });
     renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
 
-    fireEvent.press(screen.getByTestId('map-research-button'));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('map-research-button'));
+    });
     expect(researchSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -1356,6 +1377,7 @@ describe('MapTabScreen — nearby 선로딩·재검색 버튼 배선', () => {
 
     mockTopInset.current = 0;
     const { unmount } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
     expect(flatStyle({ testID: 'map-overlay-research' }).top).toBe(96);
     // 범례(56)보다 아래 한 단이며 겹치지 않는다.
     expect(flatStyle({ testID: 'map-overlay-legend' }).top).toBe(56);
@@ -1363,6 +1385,7 @@ describe('MapTabScreen — nearby 선로딩·재검색 버튼 배선', () => {
 
     mockTopInset.current = 59;
     renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
     expect(flatStyle({ testID: 'map-overlay-research' }).top).toBe(96 + 59);
     // inset이 하단으로 새지 않는다(map-headerless 규율).
     expect(flatStyle({ testID: 'map-overlay-locate' }).bottom).toBe(16);
@@ -1415,7 +1438,8 @@ describe('MapTabScreen — nearby 선로딩·재검색 버튼 배선', () => {
   //   SDK가 죽은 페이지에는 __muklogInit이 없어 READY도 ERROR도 다시 오지 않는다. 그 상태에서
   //   mapErrored를 미리 내리면 로딩 분기(!mapReady)가 배너를 대체해 스피너가 영구 잔류하고
   //   재시도 버튼이 사라진다(바텀탭은 언마운트되지 않아 세션 내내 갇힌다).
-  //   ⚠️ 타임아웃 배너 본안은 U10 소유 — 여기선 신규 타이머 0으로 어포던스만 지킨다.
+  //   READY·ERROR가 처음부터 하나도 오지 않는 경우(E6)는 map-nearby-feedback의 10초 1회 제한 시간이 맡는다(S11~S19).
+  //   재시도는 그 제한 시간을 끄지도 다시 켜지도 않는다 — 여기 F1 동작은 그대로다.
   it('F1-1 READY 전 SDK 에러에서 "다시 시도"를 눌러도 에러 배너·재시도 버튼이 유지된다', () => {
     useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
     setNearby({ status: 'ready' });
@@ -1474,6 +1498,7 @@ describe('MapTabScreen — nearby 선로딩·재검색 버튼 배선', () => {
     useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
     setNearby({ researchAvailable: true });
     renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
     expect(screen.getByTestId('map-overlay-research').props.pointerEvents).toBe('box-none');
   });
 });
@@ -1732,5 +1757,412 @@ describe('MapTabScreen — 위치 권한 거부 배너(map-location-denied)', ()
     readyPins();
     rerender(<MapTabScreen />);
     expect(screen.getByTestId('map-permission-banner')).toBeTruthy();
+  });
+});
+
+// ── map-nearby-feedback (plan §5-1 B S1~S20, UX 백로그 U10 ①~④) ─────────────────────────────
+//   seam: 화면 렌더 결과(pill testID·문구·스피너·accessibilityState, 중앙 카드 문구, 토스트 문구) + 모킹된 훅 반환
+//   (researchState · research()가 resolve하는 결과) + AccessibilityInfo(RN 기본 목) + WebView 메시지(READY/ERROR)
+//   + 가짜 시간 + export 상수 MAP_BOOT_TIMEOUT_MS. 훅 상태 기계는 useNearbyPlaces spec(H1~H16), pill 비주얼은
+//   MapResearchButton spec 몫이다. pill 케이스는 READY를 먼저 발화한다(부팅 로딩이 중앙 안내로 우선하므로).
+describe('MapTabScreen — 주변 조회·지도 준비 피드백(map-nearby-feedback)', () => {
+  // 카피는 spec에 문자 그대로 적는다 — 상수를 import하면 상수 오타가 spec까지 따라와 잠금이 풀린다.
+  const COPY = {
+    idle: '이 지역에서 검색',
+    searching: '검색하는 중이에요',
+    failedLine: '주변 음식점을 불러오지 못했어요 · 다시 시도',
+    failedMessage: '주변 음식점을 불러오지 못했어요',
+    nearbyEmpty: '음식점이 없어요. 지도를 옮겨보세요',
+    loading: '지도를 불러오는 중이에요',
+    sdkError: '지도를 불러오지 못했어요',
+    pinsError: '먹로그를 불러오지 못했어요',
+    retry: '다시 시도',
+  } as const;
+
+  const readyPins = () =>
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: muklogRefreshSpy });
+  const errorPins = () =>
+    useMuklogPinsMock.mockReturnValue({
+      state: { status: 'error', message: COPY.pinsError },
+      refresh: muklogRefreshSpy,
+    });
+  const emitReady = () => emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+  const emitSdkError = () =>
+    emitMessage({ raw: JSON.stringify({ type: 'ERROR', reason: 'SDK_LOAD_FAILED' }) });
+
+  /** 핀 ready + 주어진 훅 상태로 렌더하고 READY까지 보낸다(중앙 로딩이 걷힌 상태). */
+  const renderReadyWith = (over: {
+    researchState: NearbyResearchState;
+    researchOutcome?: NearbyResearchOutcome;
+  }) => {
+    readyPins();
+    setNearby(over);
+    const view = renderWithTheme(<MapTabScreen />);
+    emitReady();
+    return view;
+  };
+
+  /** pill 탭 → handleResearch의 await(research 결과)까지 흘린다. */
+  const pressResearch = async () => {
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('map-research-button'));
+    });
+  };
+
+  /** 콘솔 로그 중 지도 준비 제한 시간 만료 계측(`[nearby] map:boot-timeout`) 줄 수. */
+  const bootTimeoutTraces = ({ logSpy }: { logSpy: jest.SpyInstance }): number =>
+    logSpy.mock.calls.filter((call) => String(call[0]).includes('map:boot-timeout')).length;
+
+  describe('재검색 pill 상태(① 검색 중 · ② 실패)', () => {
+    it('S1 Searching → pill이 제자리에서 스피너 + "검색하는 중이에요"를 보이고 busy·disabled를 알린다', () => {
+      renderReadyWith({ researchState: NearbyResearchState.Searching });
+
+      const pill = screen.getByTestId('map-research-button');
+      expect(within(pill).getByText(COPY.searching)).toBeTruthy();
+      expect(within(pill).getByTestId('map-research-spinner')).toBeTruthy();
+      expect(within(pill).queryByText(COPY.idle)).toBeNull();
+      expect(pill.props.accessibilityState).toEqual(
+        expect.objectContaining({ busy: true, disabled: true }),
+      );
+    });
+
+    it('S2 Searching 중 pill을 3번 눌러도 research 호출 0(중복 조회 없음)', async () => {
+      renderReadyWith({ researchState: NearbyResearchState.Searching });
+
+      await pressResearch();
+      await pressResearch();
+      await pressResearch();
+
+      expect(researchSpy).not.toHaveBeenCalled();
+    });
+
+    it('S3 Failed → "주변 음식점을 불러오지 못했어요 · 다시 시도" 한 줄, 1번 누르면 research 1회', async () => {
+      renderReadyWith({ researchState: NearbyResearchState.Failed });
+
+      const pill = screen.getByTestId('map-research-button');
+      expect(within(pill).getByText(COPY.failedLine)).toBeTruthy();
+      expect(within(pill).getByText(COPY.retry)).toBeTruthy();
+      expect(pill.props.accessibilityState?.disabled).toBeFalsy();
+
+      await pressResearch();
+
+      expect(researchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('Idle → "이 지역에서 검색"(검색 아이콘) — 매핑이 Idle을 다른 모양으로 바꾸지 않는다', () => {
+      renderReadyWith({ researchState: NearbyResearchState.Idle });
+      const pill = screen.getByTestId('map-research-button');
+      expect(within(pill).getByText(COPY.idle)).toBeTruthy();
+      expect(within(pill).getByTestId('icon-search')).toBeTruthy();
+    });
+
+    it('Hidden → pill 없음(READY 뒤에도)', () => {
+      renderReadyWith({ researchState: NearbyResearchState.Hidden });
+      expect(screen.queryByTestId('map-overlay-research')).toBeNull();
+      expect(screen.queryByTestId('map-research-button')).toBeNull();
+    });
+
+    it('래퍼 좌우 16(큰 글자에서 실패 pill이 화면 끝까지 넓어지지 않게) · top·pointerEvents 불변', () => {
+      renderReadyWith({ researchState: NearbyResearchState.Failed });
+      const wrapper = screen.getByTestId('map-overlay-research');
+      const style = StyleSheet.flatten(wrapper.props.style) as Record<string, unknown>;
+      expect(style.paddingHorizontal).toBe(16);
+      expect(style.top).toBe(96);
+      expect(wrapper.props.pointerEvents).toBe('box-none');
+    });
+  });
+
+  describe('누른 조회의 결과 안내(② 실패 알림 · ③ 0건 토스트)', () => {
+    // 토스트 진입·자동 사라짐 애니메이션이 실제 시간으로 테스트 밖까지 흘러 act 경고를 내지 않게 가짜 시간으로 돈다(qa-logic L4).
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('S4 누른 조회가 실패하면 스크린리더에 "주변 음식점을 불러오지 못했어요"를 정확히 1회 알리고 토스트는 없다', async () => {
+      renderReadyWith({
+        researchState: NearbyResearchState.Idle,
+        researchOutcome: NearbyResearchOutcome.Failed,
+      });
+
+      await pressResearch();
+
+      expect(researchSpy).toHaveBeenCalledTimes(1);
+      expect(announceMock).toHaveBeenCalledTimes(1);
+      expect(announceMock).toHaveBeenCalledWith(COPY.failedMessage);
+      expect(screen.queryByTestId('toast-pill')).toBeNull();
+    });
+
+    it('S5 누른 조회가 0건이면 토스트 "음식점이 없어요. 지도를 옮겨보세요"(상태 + 다음 행동) + 같은 문구 알림 1회', async () => {
+      renderReadyWith({
+        researchState: NearbyResearchState.Idle,
+        researchOutcome: NearbyResearchOutcome.Empty,
+      });
+
+      await pressResearch();
+
+      const toast = screen.getByTestId('toast-pill');
+      expect(within(toast).getByText(COPY.nearbyEmpty)).toBeTruthy();
+      // 톤은 neutral — 0건은 성공이 아니다. positive면 ✓와 성공 배경이 붙어 "0건"이 완료처럼 보인다(qa-logic L3).
+      expect(within(toast).queryByText('✓')).toBeNull();
+      expect(announceMock).toHaveBeenCalledTimes(1);
+      expect(announceMock).toHaveBeenCalledWith(COPY.nearbyEmpty);
+
+      // 토스트 자동 사라짐(타이머) → 퇴장 애니메이션(다음 렌더에서 시작)까지 테스트 안에서 끝낸다.
+      await act(async () => {
+        jest.advanceTimersByTime(5_000);
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(5_000);
+      });
+      expect(screen.queryByTestId('toast-pill')).toBeNull();
+    });
+
+    it('S6 자동 조회의 0건은 알리지 않는다(누르지 않았으면 토스트·알림 0)', () => {
+      readyPins();
+      setNearby({ status: 'loading', items: [] });
+      const { rerender } = renderWithTheme(<MapTabScreen />);
+      emitReady();
+      setNearby({ status: 'ready', items: [] });
+      rerender(<MapTabScreen />);
+      rerender(<MapTabScreen />);
+
+      expect(screen.queryByTestId('toast-pill')).toBeNull();
+      expect(screen.queryByText(COPY.nearbyEmpty)).toBeNull();
+      expect(announceMock).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['S7 Found', NearbyResearchOutcome.Found],
+      ['S8 Skipped', NearbyResearchOutcome.Skipped],
+    ] as const)('%s → 토스트 0 · 알림 0(핀 등장 자체가 피드백 / 조회하지 않음)', async (_label, outcome) => {
+      renderReadyWith({ researchState: NearbyResearchState.Idle, researchOutcome: outcome });
+
+      await pressResearch();
+      await act(async () => {}); // 결과 처리 뒤 남은 마이크로태스크까지 흘린다
+
+      expect(researchSpy).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('toast-pill')).toBeNull();
+      expect(announceMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('안내 우선순위(한 자리 한 가지)', () => {
+    it.each([
+      NearbyResearchState.Idle,
+      NearbyResearchState.Searching,
+      NearbyResearchState.Failed,
+    ])('S9 지도 가운데 안내(로딩·핀 오류·지도 오류)가 있으면 pill(%s)을 숨기고, 걷히면 다시 보인다', (researchState) => {
+      readyPins();
+      setNearby({ researchState });
+      const { rerender } = renderWithTheme(<MapTabScreen />);
+
+      // ① READY 전 — 부팅 로딩
+      expect(screen.getByTestId('map-status-spinner')).toBeTruthy();
+      expect(screen.queryByTestId('map-research-button')).toBeNull();
+      emitReady();
+      expect(screen.getByTestId('map-research-button')).toBeTruthy();
+
+      // ② READY 뒤 핀 오류
+      errorPins();
+      rerender(<MapTabScreen />);
+      expect(screen.getByText(COPY.pinsError)).toBeTruthy();
+      expect(screen.queryByTestId('map-research-button')).toBeNull();
+      readyPins();
+      rerender(<MapTabScreen />);
+      expect(screen.getByTestId('map-research-button')).toBeTruthy();
+
+      // ③ READY 뒤 지도 SDK 오류
+      emitSdkError();
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+      expect(screen.queryByTestId('map-research-button')).toBeNull();
+      emitReady();
+      expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+      expect(screen.getByTestId('map-research-button')).toBeTruthy();
+    });
+
+    it('S10 권한 거부 + Failed → 상단 pill과 하단 배너가 공존하고, 핀 오류가 오면 둘 다 숨고 가운데 카드만 남는다', () => {
+      setPermission({ status: LocationPermissionStatus.Denied, coords: null });
+      readyPins();
+      setNearby({ researchState: NearbyResearchState.Failed });
+      const { rerender } = renderWithTheme(<MapTabScreen />);
+      emitReady();
+
+      expect(screen.getByTestId('map-research-button')).toBeTruthy();
+      expect(screen.getByTestId('map-permission-banner')).toBeTruthy();
+
+      errorPins();
+      rerender(<MapTabScreen />);
+
+      expect(screen.queryByTestId('map-research-button')).toBeNull();
+      expect(screen.queryByTestId('map-permission-banner')).toBeNull();
+      expect(screen.getAllByTestId('map-status-overlay')).toHaveLength(1);
+      expect(screen.getByText(COPY.pinsError)).toBeTruthy();
+    });
+  });
+
+  describe('④ 지도 준비 제한 시간(1회성 워치독)', () => {
+    let logSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      logSpy.mockRestore();
+      jest.useRealTimers();
+    });
+
+    const advance = ({ ms }: { ms: number }) => {
+      act(() => {
+        jest.advanceTimersByTime(ms);
+      });
+    };
+
+    /** READY·ERROR 없이 제한 시간을 정확히 채워 만료시킨다. */
+    const renderAndExpire = () => {
+      readyPins();
+      const view = renderWithTheme(<MapTabScreen />);
+      advance({ ms: MAP_BOOT_TIMEOUT_MS });
+      return view;
+    };
+
+    it('S18 제한 시간은 10초다', () => {
+      expect(MAP_BOOT_TIMEOUT_MS).toBe(10_000);
+    });
+
+    it('S11 READY·ERROR 없이 제한 시간이 지나면 로딩 카드가 "지도를 불러오지 못했어요" + 다시 시도로 바뀐다(1ms 경계)', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+
+      advance({ ms: MAP_BOOT_TIMEOUT_MS - 1 });
+      expect(screen.getByTestId('map-status-spinner')).toBeTruthy();
+      expect(screen.getByText(COPY.loading)).toBeTruthy();
+      expect(screen.queryByText(COPY.sdkError)).toBeNull();
+      expect(bootTimeoutTraces({ logSpy })).toBe(0);
+
+      advance({ ms: 1 });
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+      expect(screen.getByTestId('map-status-action')).toBeTruthy();
+      expect(screen.queryByTestId('map-status-spinner')).toBeNull();
+      expect(bootTimeoutTraces({ logSpy })).toBe(1);
+    });
+
+    it('S12 만료 뒤 늦게 READY가 오면 카드가 걷히고 INIT이 1번 주입된다(자동 복구)', () => {
+      renderAndExpire();
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+
+      emitReady();
+
+      expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+      expect(injectedScripts.filter((script) => script.includes('INIT'))).toHaveLength(1);
+    });
+
+    it('S13 5초에 READY가 오면 20초가 더 지나도 오류 카드·만료 계측 0', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      advance({ ms: 5_000 });
+      emitReady();
+
+      advance({ ms: 20_000 });
+
+      expect(screen.queryByText(COPY.sdkError)).toBeNull();
+      expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+      expect(bootTimeoutTraces({ logSpy })).toBe(0);
+    });
+
+    it('S14 3초에 ERROR가 오면 그 카드 1개가 유지되고 20초 뒤에도 만료 계측 0', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      advance({ ms: 3_000 });
+      emitSdkError();
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+
+      advance({ ms: 20_000 });
+
+      expect(screen.getAllByTestId('map-status-overlay')).toHaveLength(1);
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+      expect(bootTimeoutTraces({ logSpy })).toBe(0);
+    });
+
+    it('S15 1회성 — 만료 뒤 "다시 시도"는 카드를 유지하고(F1) 제한 시간을 다시 켜지 않는다', () => {
+      renderAndExpire();
+      expect(bootTimeoutTraces({ logSpy })).toBe(1);
+
+      fireEvent.press(screen.getByText(COPY.retry));
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+      expect(screen.queryByTestId('map-status-spinner')).toBeNull();
+
+      advance({ ms: 3 * MAP_BOOT_TIMEOUT_MS });
+
+      expect(bootTimeoutTraces({ logSpy })).toBe(1);
+      expect(screen.getAllByTestId('map-status-overlay')).toHaveLength(1);
+    });
+
+    it('S16 만료 전에 화면이 사라지면 타이머도 해제된다(만료 계측 0 · console.error 0)', () => {
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      readyPins();
+      const { unmount } = renderWithTheme(<MapTabScreen />);
+      advance({ ms: MAP_BOOT_TIMEOUT_MS - 1 });
+
+      unmount();
+      advance({ ms: 2 * MAP_BOOT_TIMEOUT_MS });
+
+      expect(bootTimeoutTraces({ logSpy })).toBe(0);
+      expect(errorSpy).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+
+    it('S17 만료는 네트워크 호출을 만들지 않는다(선로딩·재검색·뷰포트·핀 재조회 수 동일)', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      advance({ ms: MAP_BOOT_TIMEOUT_MS - 1 });
+      const before = {
+        preload: preloadSpy.mock.calls.length,
+        research: researchSpy.mock.calls.length,
+        setBounds: setBoundsSpy.mock.calls.length,
+        refresh: muklogRefreshSpy.mock.calls.length,
+      };
+
+      advance({ ms: 1 });
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+
+      expect({
+        preload: preloadSpy.mock.calls.length,
+        research: researchSpy.mock.calls.length,
+        setBounds: setBoundsSpy.mock.calls.length,
+        refresh: muklogRefreshSpy.mock.calls.length,
+      }).toEqual(before);
+    });
+
+    it('S19 부팅 중 핀 오류 카드의 "다시 시도"가 제한 시간을 끄지 않는다 — 만료되면 지도 오류 카드가 우선한다', () => {
+      errorPins();
+      renderWithTheme(<MapTabScreen />);
+      expect(screen.getByText(COPY.pinsError)).toBeTruthy();
+
+      fireEvent.press(screen.getByText(COPY.retry));
+      advance({ ms: MAP_BOOT_TIMEOUT_MS });
+
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+      expect(screen.queryByText(COPY.pinsError)).toBeNull();
+      expect(bootTimeoutTraces({ logSpy })).toBe(1);
+    });
+
+    it('S20 지도 오류·핀 오류 카드의 "다시 시도"는 주변 조회를 만들지 않는다(research·preload 추가 0)', () => {
+      const { rerender } = renderAndExpire();
+      const preloadBefore = preloadSpy.mock.calls.length;
+      fireEvent.press(screen.getByText(COPY.retry)); // 지도 오류(만료) 카드
+
+      emitReady();
+      errorPins();
+      rerender(<MapTabScreen />);
+      fireEvent.press(screen.getByText(COPY.retry)); // 핀 오류 카드
+
+      expect(researchSpy).not.toHaveBeenCalled();
+      expect(preloadSpy.mock.calls.length).toBe(preloadBefore);
+      expect(muklogRefreshSpy).toHaveBeenCalledTimes(2); // 재시도 = 핀 재조회(기존 동작)
+    });
   });
 });
