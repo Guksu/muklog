@@ -3,10 +3,16 @@
 //   (plan §4·§5-1 MapTabScreen) loading/denied/empty/마커탭→선택카드/error+refresh.
 //   네이티브 지도 렌더는 스모크(디바이스) → WebView는 MapWebView 모킹으로 대체, onMessage만 직접 호출.
 import React from 'react';
-import { StyleSheet } from 'react-native';
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
+
+// map-location-denied: "설정 열기" → expo-linking openSettings 배선 지점. 다른 export는 실물 유지(전이 import 보호).
+jest.mock('expo-linking', () => ({
+  ...jest.requireActual('expo-linking'),
+  openSettings: jest.fn(),
+}));
 
 // map-headerless: safe-area top inset 가변 모킹 — 네이티브 헤더(HomeHeader)를 끈 뒤 상단 오버레이가
 //   그 inset을 승계하는지 검증하는 주입 지점(LogScreen.spec:35-42 선례). SafeAreaProvider 등 나머지는 실 구현.
@@ -97,6 +103,9 @@ jest.mock('@/features/map/components', () => {
   };
 });
 
+import * as Linking from 'expo-linking';
+
+import { MapPermissionBanner } from '@/features/map/components';
 import { useMuklogPins } from '@/features/map/useMuklogPins';
 import { useLocationPermission } from '@/features/map/useLocationPermission';
 import { useNearbyPlaces } from '@/features/map/useNearbyPlaces';
@@ -109,6 +118,10 @@ import {
 } from '@/features/map/types';
 
 import { MapTabScreen } from './MapTabScreen';
+
+const openSettingsMock = Linking.openSettings as jest.Mock;
+// RN jest 기본 목(react-native/jest/setup.js) — 호출 인자·횟수만 본다.
+const announceMock = AccessibilityInfo.announceForAccessibility as jest.Mock;
 
 const useMuklogPinsMock = useMuklogPins as jest.Mock;
 const useLocationPermissionMock = useLocationPermission as jest.Mock;
@@ -229,6 +242,8 @@ beforeEach(() => {
   mockNearbyWish.choosing = null;
   mockNearbyWish.submitting = false;
   mockTopInset.current = 0;
+  openSettingsMock.mockReset();
+  announceMock.mockClear();
   setPermission();
   setNearby();
   setWishPins();
@@ -253,7 +268,8 @@ describe('MapTabScreen', () => {
   });
 
   // B1(map-feedback): 권한 안내는 로딩보다 **아래** 우선순위다 → 지도 부팅이 끝난(READY) 뒤의 상태를 본다.
-  it('권한 거부면 현재위치 안내를 노출하되 지도는 계속 렌더한다(차단 아님)', () => {
+  //   map-location-denied(DV8): 안내는 중앙 오버레이가 아니라 하단 배너(map-permission-banner) 안에 있다.
+  it('권한 거부면 현재위치 안내를 하단 배너로 노출하되 지도는 계속 렌더한다(차단 아님)', () => {
     setPermission({ status: LocationPermissionStatus.Denied, coords: null });
     useMuklogPinsMock.mockReturnValue({
       state: { status: 'ready', pins: [pin()] },
@@ -261,7 +277,11 @@ describe('MapTabScreen', () => {
     });
     renderWithTheme(<MapTabScreen />);
     emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
-    expect(screen.getByText('위치 권한을 허용하면 현재 위치를 볼 수 있어요')).toBeTruthy();
+    const banner = screen.getByTestId('map-permission-banner');
+    expect(
+      within(banner).getByText('위치 권한을 허용하면 현재 위치를 볼 수 있어요'),
+    ).toBeTruthy();
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
     expect(screen.getByTestId('map-webview-mock')).toBeTruthy();
   });
 
@@ -395,8 +415,12 @@ describe('MapTabScreen', () => {
     setNearby({ status: 'error', markers: [] });
     renderWithTheme(<MapTabScreen />);
     emitMessage({ raw: JSON.stringify({ type: 'READY' }) }); // B2: 권한 안내는 지도 부팅 이후의 상태다
-    // slice1 권한 안내는 그대로(nearby 에러가 덮지 않음).
-    expect(screen.getByText('위치 권한을 허용하면 현재 위치를 볼 수 있어요')).toBeTruthy();
+    // slice1 권한 안내는 그대로(nearby 에러가 덮지 않음) — map-location-denied 이후 하단 배너 안.
+    expect(
+      within(screen.getByTestId('map-permission-banner')).getByText(
+        '위치 권한을 허용하면 현재 위치를 볼 수 있어요',
+      ),
+    ).toBeTruthy();
     expect(screen.getByTestId('map-webview-mock')).toBeTruthy();
   });
 
@@ -441,15 +465,17 @@ describe('MapTabScreen', () => {
     expect(injectedScripts.some((s) => s.includes('"type":"RECENTER"'))).toBe(false);
   });
 
-  it('T6: 거부에서 FAB 탭 → refreshCoords·RECENTER inject 모두 없음(no-op)', async () => {
+  // map-location-denied(U13 ③)로 "무반응 no-op"은 "안내 재노출 + 스크린리더 알림"으로 대체됐다(P7·P8).
+  //   위치 호출 0(request·refreshCoords·RECENTER)은 그대로 유지되는지 여기서 잠근다.
+  it('T6: 거부에서 FAB 탭 → 위치 호출(request·refreshCoords·RECENTER) 0 — 안내 알림만', async () => {
     setPermission({ status: LocationPermissionStatus.Denied, coords: null });
     useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
     renderWithTheme(<MapTabScreen />);
 
     fireEvent.press(screen.getByTestId('map-locate-button'));
 
-    // 비동기 경로가 있더라도 호출이 일어나지 않음을 확정(다음 틱까지 대기).
-    await waitFor(() => expect(screen.getByTestId('map-locate-button')).toBeTruthy());
+    // 비동기 경로가 있더라도 호출이 일어나지 않음을 확정(알림 발화까지 대기).
+    await waitFor(() => expect(announceMock).toHaveBeenCalledTimes(1));
     expect(requestSpy).not.toHaveBeenCalled();
     expect(refreshCoordsSpy).not.toHaveBeenCalled();
     expect(injectedScripts.some((s) => s.includes('"type":"RECENTER"'))).toBe(false);
@@ -797,7 +823,11 @@ describe('MapTabScreen', () => {
 
     expect(parseInitPayload()?.me).toBeNull();
     expect(recenterScripts()).toHaveLength(0);
-    expect(screen.getByText('위치 권한을 허용하면 현재 위치를 볼 수 있어요')).toBeTruthy();
+    expect(
+      within(screen.getByTestId('map-permission-banner')).getByText(
+        '위치 권한을 허용하면 현재 위치를 볼 수 있어요',
+      ),
+    ).toBeTruthy();
   });
 
   // ── map-pin-select 증분 (plan §3.5·§5 T5·T6·T7) ─────────────────
@@ -1367,11 +1397,18 @@ describe('MapTabScreen — nearby 선로딩·재검색 버튼 배선', () => {
     renderWithTheme(<MapTabScreen />);
     // 부팅 중엔 로딩이 위다 — 지도가 아직 없는데 권한 안내를 먼저 띄우는 건 순서가 뒤집힌 것이다.
     expect(screen.getByTestId('map-status-spinner')).toBeTruthy();
+    expect(screen.queryByTestId('map-permission-banner')).toBeNull();
 
     emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
 
     expect(screen.queryByTestId('map-status-spinner')).toBeNull();
-    expect(screen.getByText('위치 권한을 허용하면 현재 위치를 볼 수 있어요')).toBeTruthy();
+    // map-location-denied: 로딩이 걷히면 중앙 오버레이 자체가 사라지고 안내는 하단 배너로 뜬다.
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+    expect(
+      within(screen.getByTestId('map-permission-banner')).getByText(
+        '위치 권한을 허용하면 현재 위치를 볼 수 있어요',
+      ),
+    ).toBeTruthy();
   });
 
   // ── qa-logic F1: SDK 로드 실패 후 "다시 시도"가 영구 로딩 dead-end로 끝나지 않는다 ────────────
@@ -1438,5 +1475,262 @@ describe('MapTabScreen — nearby 선로딩·재검색 버튼 배선', () => {
     setNearby({ researchAvailable: true });
     renderWithTheme(<MapTabScreen />);
     expect(screen.getByTestId('map-overlay-research').props.pointerEvents).toBe('box-none');
+  });
+});
+
+// ── map-location-denied (plan §5-1 A P1~P12, UX 백로그 U7 전체 + U13 ③) ─────────────────
+//   seam: 화면 렌더 결과(텍스트·역할/이름·testID·래퍼 스타일) + 모킹된 권한 훅 반환 + expo-linking openSettings
+//   + AccessibilityInfo(RN 기본 목) + ToastProvider(renderWithTheme 포함). 배너 비주얼은 MapPermissionBanner spec 몫.
+//   모든 배너 케이스는 READY를 먼저 발화한다(부팅 로딩이 중앙 오버레이로 우선하므로).
+describe('MapTabScreen — 위치 권한 거부 배너(map-location-denied)', () => {
+  const COPY = {
+    permissionDenied: '위치 권한을 허용하면 현재 위치를 볼 수 있어요',
+    openSettings: '설정 열기',
+    openSettingsHint: '기기 설정에서 위치 권한을 허용할 수 있어요',
+    dismissPermission: '위치 안내 닫기',
+    openSettingsFailed: '설정을 열지 못했어요. 설정 앱에서 허용해 주세요',
+  } as const;
+
+  const readyPins = () =>
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: muklogRefreshSpy });
+
+  // 거부 + 핀 ready + 지도 READY — 중앙 오버레이가 없는 기본 배너 상태.
+  const renderDeniedReady = () => {
+    setPermission({ status: LocationPermissionStatus.Denied, coords: null });
+    readyPins();
+    const view = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    return view;
+  };
+
+  const flatStyle = ({ testID }: { testID: string }) =>
+    StyleSheet.flatten(screen.getByTestId(testID).props.style) as Record<string, unknown>;
+
+  it('P1: 거부 + 중앙 오버레이 없음 → 하단 배너(문구 + 설정 열기 + 닫기)를 노출한다', () => {
+    renderDeniedReady();
+    const banner = screen.getByTestId('map-permission-banner');
+    expect(within(banner).getByText(COPY.permissionDenied)).toBeTruthy();
+    expect(within(banner).getByRole('button', { name: COPY.openSettings })).toBeTruthy();
+    expect(within(banner).getByLabelText(COPY.dismissPermission)).toBeTruthy();
+    // 배너는 전용 하단 래퍼 안에 있다(중앙 오버레이 재사용 아님).
+    expect(
+      within(screen.getByTestId('map-overlay-permission')).getByTestId('map-permission-banner'),
+    ).toBeTruthy();
+  });
+
+  it('P2: "설정 열기" 탭 → expo-linking openSettings를 정확히 1회 호출한다', async () => {
+    openSettingsMock.mockResolvedValueOnce(undefined);
+    renderDeniedReady();
+
+    fireEvent.press(screen.getByRole('button', { name: COPY.openSettings }));
+
+    await waitFor(() => expect(openSettingsMock).toHaveBeenCalledTimes(1));
+    // 설정 열기는 배너를 닫지 않는다(돌아왔을 때 여전히 거부면 그대로 안내 — D5).
+    expect(screen.getByTestId('map-permission-banner')).toBeTruthy();
+  });
+
+  it('P3: openSettings 실패 → 안내 토스트, 배너 유지, 예외 전파 0', async () => {
+    openSettingsMock.mockRejectedValueOnce(new Error('no settings app'));
+    renderDeniedReady();
+
+    fireEvent.press(screen.getByRole('button', { name: COPY.openSettings }));
+
+    await waitFor(() => expect(screen.getByText(COPY.openSettingsFailed)).toBeTruthy());
+    expect(screen.getByTestId('map-permission-banner')).toBeTruthy();
+
+    // 배너가 받은 onAction 자체가 reject하지 않는다(try/await/catch로 흡수 — unhandled rejection 0).
+    openSettingsMock.mockRejectedValueOnce(new Error('no settings app again'));
+    const onAction = screen.UNSAFE_getByType(MapPermissionBanner).props.onAction as () => unknown;
+    await expect(Promise.resolve(onAction())).resolves.toBeUndefined();
+  });
+
+  it('P4: 거부만으로는 지도 정중앙 오버레이가 뜨지 않고, 배너 래퍼는 FAB 위 하단 전폭에 둔다', () => {
+    renderDeniedReady();
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+
+    const wrapper = screen.getByTestId('map-overlay-permission');
+    expect(wrapper.props.pointerEvents).toBe('box-none');
+    const style = flatStyle({ testID: 'map-overlay-permission' });
+    expect(style.position).toBe('absolute');
+    // 16(FAB bottom) + 46(FAB 한 변 MAP_LOCATE_BUTTON_SIZE) + 10(간격) — ui-spec §4.
+    expect(style.bottom).toBe(72);
+    expect(style.left).toBe(16);
+    expect(style.right).toBe(16);
+    // 옛 중앙 오버레이(absoluteFill + center)의 흔적이 없어야 한다.
+    expect(style.top).toBeUndefined();
+    expect(style.alignItems).toBeUndefined();
+    expect(style.justifyContent).toBeUndefined();
+  });
+
+  it('P5-①: READY 전(로딩) + 거부 → 스피너만, READY 뒤 배너(동시 노출 0)', () => {
+    setPermission({ status: LocationPermissionStatus.Denied, coords: null });
+    readyPins();
+    renderWithTheme(<MapTabScreen />);
+
+    expect(screen.getByTestId('map-status-spinner')).toBeTruthy();
+    expect(screen.queryByTestId('map-permission-banner')).toBeNull();
+
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+    expect(screen.getByTestId('map-permission-banner')).toBeTruthy();
+  });
+
+  it('P5-②: 거부 + 지도 SDK 오류 → 오류만(배너 숨김)', () => {
+    renderDeniedReady();
+    emitMessage({ raw: JSON.stringify({ type: 'ERROR', reason: 'SDK_LOAD_FAILED' }) });
+
+    expect(screen.getByText('지도를 불러오지 못했어요')).toBeTruthy();
+    expect(screen.queryByTestId('map-permission-banner')).toBeNull();
+  });
+
+  it('P5-③: 거부 + 핀 오류 → 오류만(배너 숨김), 오류가 풀리면 배너', () => {
+    setPermission({ status: LocationPermissionStatus.Denied, coords: null });
+    useMuklogPinsMock.mockReturnValue({
+      state: { status: 'error', message: '먹로그를 불러오지 못했어요' },
+      refresh: muklogRefreshSpy,
+    });
+    const { rerender } = renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    expect(screen.getByText('먹로그를 불러오지 못했어요')).toBeTruthy();
+    expect(screen.queryByTestId('map-permission-banner')).toBeNull();
+
+    readyPins();
+    rerender(<MapTabScreen />);
+
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+    expect(screen.getByTestId('map-permission-banner')).toBeTruthy();
+  });
+
+  it('P6: 닫기는 마운트 동안 유지(재렌더·핀 변경·포커스 refresh에도 안 뜸), 새 마운트는 다시 뜬다', () => {
+    const { rerender, unmount } = renderDeniedReady();
+
+    fireEvent.press(screen.getByLabelText(COPY.dismissPermission));
+    expect(screen.queryByTestId('map-permission-banner')).toBeNull();
+
+    rerender(<MapTabScreen />);
+    useMuklogPinsMock.mockReturnValue({
+      state: { status: 'ready', pins: [pin()] },
+      refresh: muklogRefreshSpy,
+    });
+    rerender(<MapTabScreen />);
+    mockFocus.cb?.();
+    rerender(<MapTabScreen />);
+    expect(screen.queryByTestId('map-permission-banner')).toBeNull();
+
+    // 영속 저장 0 — 새 마운트(앱 재실행·재로그인에 해당)는 여전히 거부면 다시 보인다.
+    unmount();
+    renderDeniedReady();
+    expect(screen.getByTestId('map-permission-banner')).toBeTruthy();
+  });
+
+  it('P7: 닫은 뒤 현재위치 FAB 탭 → 배너 재노출, 위치 호출 0', async () => {
+    renderDeniedReady();
+    fireEvent.press(screen.getByLabelText(COPY.dismissPermission));
+    expect(screen.queryByTestId('map-permission-banner')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('map-locate-button'));
+
+    await waitFor(() => expect(screen.getByTestId('map-permission-banner')).toBeTruthy());
+    expect(requestSpy).not.toHaveBeenCalled();
+    expect(refreshCoordsSpy).not.toHaveBeenCalled();
+    expect(injectedScripts.some((s) => s.includes('"type":"RECENTER"'))).toBe(false);
+  });
+
+  it('P8: 거부 상태 FAB 탭 → 스크린리더에 권한 안내 문구를 정확히 1회 알린다', async () => {
+    renderDeniedReady();
+    fireEvent.press(screen.getByLabelText(COPY.dismissPermission));
+
+    fireEvent.press(screen.getByTestId('map-locate-button'));
+
+    await waitFor(() => expect(announceMock).toHaveBeenCalledTimes(1));
+    expect(announceMock).toHaveBeenCalledWith(COPY.permissionDenied);
+  });
+
+  it('P9: 배너가 보이는 채 FAB 탭 → 배너 1개(중복 0), 알림 1회, 위치 호출 0', async () => {
+    renderDeniedReady();
+    expect(screen.getAllByTestId('map-permission-banner')).toHaveLength(1);
+
+    fireEvent.press(screen.getByTestId('map-locate-button'));
+
+    await waitFor(() => expect(announceMock).toHaveBeenCalledTimes(1));
+    expect(announceMock).toHaveBeenCalledWith(COPY.permissionDenied);
+    expect(screen.getAllByTestId('map-permission-banner')).toHaveLength(1);
+    expect(requestSpy).not.toHaveBeenCalled();
+    expect(refreshCoordsSpy).not.toHaveBeenCalled();
+  });
+
+  it('P10: 거부가 아니면(허용·미결정·요청 중) READY 뒤에도 배너가 없다', () => {
+    const cases = [
+      { status: LocationPermissionStatus.Granted, coords: { lat: 37.5, lng: 127.0 } },
+      { status: LocationPermissionStatus.Undetermined, coords: null },
+      { status: LocationPermissionStatus.Requesting, coords: null },
+    ];
+    cases.forEach((permissionCase) => {
+      setPermission(permissionCase);
+      readyPins();
+      const { unmount } = renderWithTheme(<MapTabScreen />);
+      emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+      expect(screen.queryByTestId('map-permission-banner')).toBeNull();
+      expect(screen.queryByTestId('map-overlay-permission')).toBeNull();
+      unmount();
+    });
+  });
+
+  it.each([
+    ['닫지 않은 채', false],
+    ['닫은 뒤', true],
+  ])(
+    'P11: 거부 → 허용(설정에서 복귀, %s) → 배너가 사라지고 새 좌표로 RECENTER가 주입된다',
+    (_label, dismissFirst) => {
+      const { rerender } = renderDeniedReady();
+      if (dismissFirst) {
+        fireEvent.press(screen.getByLabelText(COPY.dismissPermission));
+      } else {
+        expect(screen.getByTestId('map-permission-banner')).toBeTruthy();
+      }
+      expect(injectedScripts.some((s) => s.includes('"type":"RECENTER"'))).toBe(false);
+
+      // 훅의 재활성화 재조회가 Granted + fresh 좌표로 전이시킨 상태.
+      setPermission({
+        status: LocationPermissionStatus.Granted,
+        coords: { lat: 37.61, lng: 127.02 },
+        coordsSource: LocationCoordsSource.Fresh,
+      });
+      rerender(<MapTabScreen />);
+
+      expect(screen.queryByTestId('map-permission-banner')).toBeNull();
+      const recenter = injectedScripts.filter((s) => s.includes('"type":"RECENTER"'));
+      expect(recenter.length).toBeGreaterThanOrEqual(1);
+      expect(recenter[recenter.length - 1]).toContain('"lat":37.61');
+      expect(recenter[recenter.length - 1]).toContain('"lng":127.02');
+    },
+  );
+
+  it('P12: 버튼 접근성 — 설정 열기(role button + 힌트), 닫기(role button + 라벨)', () => {
+    renderDeniedReady();
+    const action = screen.getByRole('button', { name: COPY.openSettings });
+    expect(action.props.accessibilityHint).toBe(COPY.openSettingsHint);
+    expect(screen.getByRole('button', { name: COPY.dismissPermission })).toBeTruthy();
+  });
+
+  it('E15: 닫힘 + 중앙 오류 중 FAB 탭 → 알림은 즉시, 배너는 오류가 풀린 뒤 다시 보인다', async () => {
+    const { rerender } = renderDeniedReady();
+    fireEvent.press(screen.getByLabelText(COPY.dismissPermission));
+    useMuklogPinsMock.mockReturnValue({
+      state: { status: 'error', message: '먹로그를 불러오지 못했어요' },
+      refresh: muklogRefreshSpy,
+    });
+    rerender(<MapTabScreen />);
+
+    fireEvent.press(screen.getByTestId('map-locate-button'));
+
+    await waitFor(() => expect(announceMock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('map-permission-banner')).toBeNull();
+
+    readyPins();
+    rerender(<MapTabScreen />);
+    expect(screen.getByTestId('map-permission-banner')).toBeTruthy();
   });
 });

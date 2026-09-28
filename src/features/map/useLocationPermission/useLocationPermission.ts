@@ -7,12 +7,19 @@
 //   현재위치 1회 재취득(탭당 1회, in-flight 가드). 폴링·watchPosition 미사용(비용·배터리).
 //   거부/모듈 throw는 denied로 흡수 → 지도는 차단하지 않는다(현재위치 마커만 생략, plan §4 denied).
 //
+// map-location-denied(U7): **거부 상태일 때만** AppState 'change' 리스너를 두고, 앱이 다시 앞으로 오는 순간
+//   ('active' — 설정 앱에서 돌아올 때 오는 1회성 신호, 폴링 아님) 비프롬프트 getter로 권한을 1회 재조회한다.
+//   허용으로 바뀌었으면 Granted로 올리고 request()의 허용 경로와 **같은 좌표 취득 절차**(warm 시드 → 정밀 픽스
+//   1회)를 밟는다. 여전히 거부·조회 실패면 상태를 바꾸지 않는다. 진행 중 재진입 1회 가드, 거부를 벗어나거나
+//   언마운트되면 리스너 해제(허용 → 거부 전환의 실행 중 반영은 범위 밖 — plan §6 E7).
+//
 // map-initial-location: 좌표는 "언제 손에 쥐었나"가 아니라 "얼마나 정밀한가"로 구분한다(coordsSource).
 //   warm  = OS 캐시(마지막 위치, 근사) — 앱 구동 워밍(LocationPrewarm) 또는 탭 진입 즉시 시드.
 //   fresh = 이번 세션의 실제 GPS 픽스(정밀).
 //   첫 렌더에 warm 캐시를 동기 시드해(useState lazy initializer) initialRegion이 렌더 1부터 실좌표를
 //   받게 하고, fresh가 도착하면 승격한다. fresh 실패 시엔 warm을 유지해 지도가 근사 위치로라도 뜬다(R3).
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 
 import * as Location from 'expo-location';
 
@@ -44,6 +51,8 @@ const toLocationFix = ({ state }: { state: CoordsState }): LocationFix | null =>
 
 /**
  * 현재위치 권한을 요청하고 상태·좌표를 제공하는 훅(expo-location 래핑).
+ * 거부 상태에서만 앱 재활성화('active') 시 권한을 1회 재조회해, 설정 앱에서 허용하고 돌아오면
+ * 앱을 다시 켜지 않아도 Granted로 전이하고 좌표를 취득한다(폴링·타이머 없음 — map-location-denied).
  * @returns status(권한 상태) · coords(warm 캐시 시드 또는 취득 좌표, 없으면 null)
  *   · coordsSource(warm|fresh, coords가 null이면 null) · request(권한 요청 함수)
  *   · refreshCoords(탭 시 현재위치 1회 재취득 함수)
@@ -64,6 +73,48 @@ export const useLocationPermission = () => {
   // 폴백용 최신 좌표·출처 보관(클로저 stale 방지 — refreshCoords가 실패 시 직전 값을 출처째로 참조).
   const coordsStateRef = useRef<CoordsState>(EMPTY_COORDS_STATE);
   coordsStateRef.current = coordsState;
+  // 앱 재활성화 재조회 in-flight 가드('active' 연속 전이 시 권한 getter 동시 1회 — plan §3.3-3·E12).
+  const recheckingRef = useRef(false);
+  // 마운트 여부 — 언마운트 뒤 늦게 끝난 재조회가 상태·좌표 취득을 시작하지 않게 한다(§3.3-7·E11).
+  //   재조회 effect의 cleanup은 "거부 탈출(deps 변경)"과 "언마운트"를 구분하지 못해 별도 ref로 둔다.
+  const mountedRef = useRef(true);
+
+  useEffect(function trackMounted() {
+    mountedRef.current = true;
+    return function markUnmounted() {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // 허용 직후 좌표 취득 절차 — request()의 허용 경로와 앱 재활성화 재조회가 공유한다(두 경로 동작 동일, plan §3.3-4).
+  const acquireCoordsAfterGrant = async () => {
+    // ① 앱 구동 워밍이 없었던 경우의 2차 안전망(R2 ①) — OS 캐시를 먼저 시드해 fresh 픽스를 기다리는
+    //    수백 ms~수 초 동안에도 지도가 폴백(서울시청)이 아닌 내 동네를 센터로 잡게 한다.
+    //    GPS를 깨우지 않으므로 배터리 비용 0. 이미 좌표를 쥐고 있으면 건너뛴다.
+    if (!coordsStateRef.current.coords) {
+      const warm = await warmLastKnownLocation();
+      if (warm) {
+        const seeded = { coords: warm, source: LocationCoordsSource.Warm };
+        coordsStateRef.current = seeded;
+        setCoordsState(seeded);
+      }
+    }
+
+    // ② 정밀 픽스 — 성공하면 fresh로 승격하고 캐시도 갱신(다음 마운트는 정밀 좌표로 시작, E14).
+    try {
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const next = { lat: position.coords.latitude, lng: position.coords.longitude };
+      const fixed = { coords: next, source: LocationCoordsSource.Fresh };
+      coordsStateRef.current = fixed;
+      setCoordsState(fixed);
+      writeWarmCoords({ coords: next });
+    } catch {
+      // granted지만 위치 획득 실패 → warm 좌표가 있으면 그대로 유지(R3), 없으면 coords null 유지
+      //   → initialRegion이 핀 bbox/DEFAULT_REGION으로 폴백(무한 로딩 금지).
+    }
+  };
 
   // 일반 함수(useCallback 지양). request는 MapTabScreen이 진입 시 1회 호출한다.
   const request = async () => {
@@ -94,34 +145,48 @@ export const useLocationPermission = () => {
     }
 
     setStatus(LocationPermissionStatus.Granted);
-
-    // ① 앱 구동 워밍이 없었던 경우의 2차 안전망(R2 ①) — OS 캐시를 먼저 시드해 fresh 픽스를 기다리는
-    //    수백 ms~수 초 동안에도 지도가 폴백(서울시청)이 아닌 내 동네를 센터로 잡게 한다.
-    //    GPS를 깨우지 않으므로 배터리 비용 0. 이미 좌표를 쥐고 있으면 건너뛴다.
-    if (!coordsStateRef.current.coords) {
-      const warm = await warmLastKnownLocation();
-      if (warm) {
-        const seeded = { coords: warm, source: LocationCoordsSource.Warm };
-        coordsStateRef.current = seeded;
-        setCoordsState(seeded);
-      }
-    }
-
-    // ② 정밀 픽스 — 성공하면 fresh로 승격하고 캐시도 갱신(다음 마운트는 정밀 좌표로 시작, E14).
-    try {
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      const next = { lat: position.coords.latitude, lng: position.coords.longitude };
-      const fixed = { coords: next, source: LocationCoordsSource.Fresh };
-      coordsStateRef.current = fixed;
-      setCoordsState(fixed);
-      writeWarmCoords({ coords: next });
-    } catch {
-      // granted지만 위치 획득 실패 → warm 좌표가 있으면 그대로 유지(R3), 없으면 coords null 유지
-      //   → initialRegion이 핀 bbox/DEFAULT_REGION으로 폴백(무한 로딩 금지).
-    }
+    await acquireCoordsAfterGrant();
   };
+
+  // 거부 상태에서만 앱 재활성화 시 권한 1회 재조회(plan §3.3 1~7, 비용 가드레일 §8 — 로컬 조회, 네트워크 0).
+  //   설정 앱에서 허용하고 돌아온 경우를 앱 재시작 없이 반영한다. 거부 외 상태에서는 리스너 자체가 없다.
+  useEffect(
+    function recheckPermissionOnForeground() {
+      if (status !== LocationPermissionStatus.Denied) return;
+      // 해제 뒤 늦게 도착한 이벤트(옛 핸들러) 차단 — remove 이후에는 재조회를 시작하지 않는다.
+      let listening = true;
+
+      const recheckPermission = async () => {
+        if (recheckingRef.current) return;
+        recheckingRef.current = true;
+        try {
+          const permission = await Location.getForegroundPermissionsAsync();
+          // 외부 API(expo-location) 값 — request()의 'granted' 비교와 같은 예외(code-convention §enum).
+          if (!mountedRef.current || permission.status !== 'granted') return;
+          setStatus(LocationPermissionStatus.Granted);
+          await acquireCoordsAfterGrant();
+        } catch {
+          // 비프롬프트 getter throw → 거부 유지(예외 전파 0). 다음 복귀에 다시 확인한다.
+        } finally {
+          recheckingRef.current = false;
+        }
+      };
+
+      const handleAppStateChange = (next: AppStateStatus) => {
+        // 외부 API(RN AppState) 값 — 'background'·'inactive'는 무시(설정 앱으로 떠나는 전이).
+        if (!listening || next !== 'active') return;
+        void recheckPermission();
+      };
+      const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+      return function stopForegroundRecheck() {
+        listening = false;
+        subscription.remove();
+      };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 거부 진입/탈출에만 구독을 붙였다 뗀다. 내부 함수는 ref·setter만 써 stale 없음.
+    [status],
+  );
 
   // 탭 시 현재위치를 1회 재취득한다(폴링/watchPosition 금지, 탭당 1회 — plan §3.6·§8).
   //   granted 아니면 null. in-flight 가드로 연타 중복 0. 실패/타임아웃 시 직전 좌표 폴백(없으면 null).
