@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-09-28 |
 | 브랜치 | feat/map-nearby-feedback |
-| PR | 미생성 |
+| PR | https://github.com/Guksu/muklog/pull/36 |
 | 관련 경로 | src/features/map/useNearbyPlaces/, src/features/map/components/MapResearchButton/, src/navigation/screens/MapTabScreen/, src/components/MotionPressable/, src/features/map/types/, src/features/map/nearbyTrace/, docs/design/architecture.md, docs/ux/ux-backlog.md |
 
 ## 1. 개요
