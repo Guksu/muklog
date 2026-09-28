@@ -15,7 +15,7 @@
 //   ⚠️ 비주얼 폴리시 대기(ui-publisher): searchBtn(mk-log:312)·placeChosen "변경"(mk-log:309). 검색뷰=PlaceSearchView(완료),
 //     저장버튼(mk-log:296, 적용완료). 본 패스는 구조/배선(상태머신)만 — accessibilityLabel/계약은 테스트 의존.
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Keyboard, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -287,8 +287,16 @@ export const MuklogEditor = ({
     ],
   );
 
+  // 메모 포커스 중 키보드 표시 → 폼을 맨 아래로(아래 revealMemoAboveKeyboard). 포커스는 메모의 onFocus/onBlur로 기록한다.
+  const formScroll = useRef<ScrollView>(null);
+  const memoFocused = useRef(false);
+
   // ── 장소검색 풀스크린 스왑(FLAG-1b) ──────────────────────────────────────────────────
-  const openSearch = () => setSearching(true);
+  // 포커스된 메모는 onBlur 없이 폼과 함께 언마운트된다 — 포커스 기록을 여기서 내려야 복귀 후 잘못 스크롤하지 않는다.
+  const openSearch = () => {
+    memoFocused.current = false;
+    setSearching(true);
+  };
 
   // 검색뷰 결과 선택 → 컨테이너에 전달(selectedPlace 세팅 → sync effect 자동채움) 후 폼 복귀.
   const handlePickInSearch = ({ item }: { item: PlaceSearchItem }) => {
@@ -358,6 +366,20 @@ export const MuklogEditor = ({
     savedNotified.current = true;
     onSaved();
   }, [saved, onSaved]);
+  // 메모 포커스 중 키보드가 뜨면 폼을 맨 아래로(킷 mk-log:454). 네이티브 자동 inset은 커서 한 줄만 맞춰
+  //   4줄 박스의 나머지가 키보드 뒤에 남는다. inset 적용이 끝난 keyboardDidShow에 1회 — 타이머·높이 추정 없음.
+  //   Android는 window resize 경로라 구독하지 않는다.
+  useEffect(function revealMemoAboveKeyboard() {
+    if (Platform.OS !== 'ios') return;
+    const scrollFormToEnd = () => {
+      if (!memoFocused.current) return;
+      formScroll.current?.scrollToEnd({ animated: true });
+    };
+    const subscription = Keyboard.addListener('keyboardDidShow', scrollFormToEnd);
+    return function stopRevealingMemo() {
+      subscription.remove();
+    };
+  }, []);
   const error = isEdit ? submitError : createError;
 
   const handleAddPhoto = async () => {
@@ -556,8 +578,12 @@ export const MuklogEditor = ({
             </Text>
           ) : null}
           <ScrollView
+            ref={formScroll}
             pointerEvents={loading || saved ? 'none' : 'auto'}
             keyboardShouldPersistTaps="handled"
+            // iOS는 네이티브가 키보드 높이만큼 하단 inset을 넣고 닫히면 되돌린다(메모 박스 전체 노출은 revealMemoAboveKeyboard).
+            //   Android는 기존 window resize(adjustResize)를 사용한다.
+            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
             style={styles.scroll}
             contentContainerStyle={{
               paddingHorizontal: theme.spacing[20],
@@ -703,6 +729,8 @@ export const MuklogEditor = ({
               accessibilityLabel="메모"
               value={memo}
               onChangeText={setMemo}
+              onFocus={() => { memoFocused.current = true; }}
+              onBlur={() => { memoFocused.current = false; }}
               maxLength={MEMO_MAX}
               multiline
               placeholder="무엇을 먹었고 어땠는지 그날의 기록을 남겨보세요"
