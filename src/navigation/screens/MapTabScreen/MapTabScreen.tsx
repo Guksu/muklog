@@ -5,19 +5,26 @@
 //   (MapWebView·MapLegend·MapStatusOverlay·SelectedSpotCard·MapLocateButton). 순수 유틸 mapHtml·
 //   pinsToMapMarkers·initialRegion·parseMapMessage·buildInitScript·buildSetMarkersScript·buildRecenterScript로
 //   WebView 메시지 계약(§3.5)을 배선한다. handleLocate: FAB 탭 → 위치 재취득 → RECENTER inject(map-locate-button).
+//   map-location-denied(U7·U13 ③): 위치 권한 거부는 중앙 오버레이가 아니라 FAB 위 하단 배너(MapPermissionBanner)로
+//   안내한다 — "설정 열기"(expo-linking openSettings, 실패 시 토스트) + 닫기(마운트 동안만, 비저장) + 거부 상태 FAB 탭 시
+//   배너 재노출·스크린리더 알림. 설정에서 허용하고 돌아온 반영은 useLocationPermission의 재활성화 재조회가 맡는다.
 //
 // 정책: 진입 1회 핀 조회 + 권한 1회 요청 + 명시적 refresh만(폴링/Realtime 없음, 비용 가드레일 §8).
 //   현재위치는 RN expo-location으로 받아 INIT.me로 주입(WebView geolocation 미사용 — plan §9.2).
 //   ⚠️ 비주얼은 ui-publisher 컴포넌트로만(임의 변경 금지). 상태→tone/message 판단만 여기서 한다.
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, StyleSheet, View } from 'react-native';
+import * as Linking from 'expo-linking';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useToastController } from '@/components';
 import {
   CategoryFilterBar,
   LogPickerSheet,
+  MAP_LOCATE_BUTTON_SIZE,
   MapLegend,
   MapLocateButton,
+  MapPermissionBanner,
   MapResearchButton,
   MapStatusOverlay,
   MapStatusTone,
@@ -74,9 +81,15 @@ import { useTheme } from '@/theme';
 import { useRefreshOnFocus } from '../../useRefreshOnFocus';
 
 // 상태 안내 카피(ui-spec §4 권고값 — 해요체, 차단 아님). 카피 단일 출처.
+//   map-location-denied(plan §3.4·D7): 권한 배너 문구·버튼·힌트·닫기 라벨·설정 열기 실패 토스트.
 const MAP_COPY = {
   loading: '지도를 불러오는 중이에요',
   permissionDenied: '위치 권한을 허용하면 현재 위치를 볼 수 있어요',
+  openSettings: '설정 열기',
+  openSettingsHint: '기기 설정에서 위치 권한을 허용할 수 있어요',
+  dismissPermission: '위치 안내 닫기',
+  // 375pt 폭에서도 토스트 1줄(≈268pt) — 2줄이면 배너의 "설정 열기"를 가린다(qa-visual QV-2). 동사는 배너와 같은 "허용".
+  openSettingsFailed: '설정을 열지 못했어요. 설정 앱에서 허용해 주세요',
   pinsError: '먹로그를 불러오지 못했어요',
   sdkError: '지도를 불러오지 못했어요',
   retry: '다시 시도',
@@ -109,6 +122,8 @@ export const MapTabScreen = () => {
   //   화면은 액션→requestAdd·시트(choosing) 렌더·선택→chooseLog 배선만 하고 비주얼은 컴포넌트가 소유(임의 변경 금지).
   //   onAdded: 담기 성공 직후 위시 핀 즉시 refresh(같은 화면 반영 — map-wish-pins §4.3).
   const nearbyWish = useAddNearbyWish({ onAdded: wishPins.refresh });
+  // map-location-denied: 설정 앱 열기 실패 안내(루트 토스트 — 배너는 그대로 남아 복구 경로를 유지한다).
+  const { showToast } = useToastController();
 
   // 선택 상태는 {id, kind} 쌍 — kind(saved|nearby|wish)로 id 네임스페이스 충돌 방지 + 카드 3분기(map-wish-pins §3.4).
   const [selected, setSelected] = useState<{ id: string; kind: MapPinKind } | null>(null);
@@ -116,6 +131,10 @@ export const MapTabScreen = () => {
   const [category, setCategory] = useState<MuklogCategoryKey | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapErrored, setMapErrored] = useState(false);
+  // map-location-denied(D3): 권한 배너 닫힘 — 이 마운트 동안만 산다(AsyncStorage 등 영속 저장 0).
+  //   바텀탭 화면은 첫 진입 뒤 언마운트되지 않아 사실상 로그인 세션 동안 유지되고, 재실행·재로그인이면 다시 보인다.
+  //   거부 상태에서 현재위치 FAB를 누르면 다시 false로 되돌린다(U13 ③).
+  const [permissionBannerDismissed, setPermissionBannerDismissed] = useState(false);
   const webviewRef = useRef<MapWebViewHandle>(null);
   // #4·map-initial-location: 지도 센터가 "지금 어떤 정밀도의 좌표로 그려져 있는지"를 기록한다
   //   (null=폴백 센터(서울/핀 bbox) · Warm=OS 캐시 근사 · Fresh=정밀 픽스).
@@ -205,13 +224,20 @@ export const MapTabScreen = () => {
   };
 
   // 현재위치 FAB 탭(plan §3.7) — 탭당 1회 위치 재취득 후 RECENTER inject(폴링 없음, 비용 가드 §8).
-  //   미결정이면 권한 요청 → 거부면 no-op(기존 permissionDenied 배너가 안내, 중복 금지).
+  //   거부(탭 시점 렌더 기준)면 위치 호출 0 — 대신 닫혀 있던 권한 배너를 되살리고 스크린리더로 이유를 알린다
+  //   (map-location-denied U13 ③: 무반응 → 행동 경로. FAB는 포커스를 옮기지 않아 알림이 필요 — plan §4.8·D4).
+  //   미결정이면 권한 요청 → 거기서 거부로 끝나면 클로저가 이전 값(Undetermined)이라 아래 refreshCoords가 null로
+  //   no-op이고, 배너는 status 전이로 자동 노출된다(OS 팝업이 이미 피드백 — 추가 알림 없음).
   //   refreshCoords가 granted 아니거나 실패+직전coords없음이면 null → no-op(무한 로딩·에러배너 없음).
   const handleLocate = async () => {
+    if (permission.status === LocationPermissionStatus.Denied) {
+      setPermissionBannerDismissed(false);
+      AccessibilityInfo.announceForAccessibility(MAP_COPY.permissionDenied);
+      return;
+    }
     if (permission.status === LocationPermissionStatus.Undetermined) {
       await permission.request();
     }
-    if (permission.status === LocationPermissionStatus.Denied) return;
     const fix = await permission.refreshCoords();
     if (!fix) return;
     // 지도 센터를 방금 리센터한 좌표의 **실제 출처**로 기록한다 — 자동 보정이 같은 좌표를 한 번 더
@@ -219,6 +245,18 @@ export const MapTabScreen = () => {
     //   그대로 살아있게 한다. "FAB로 받았으니 fresh"라고 단정하면 근사 좌표에 정밀 딱지가 붙는다.
     centeredSourceRef.current = fix.source;
     webviewRef.current?.injectJavaScript(buildRecenterScript({ me: fix.coords }));
+  };
+
+  // 권한 배너 "설정 열기"(U7 ①) — OS 앱 설정으로 보낸다(플랫폼 공통, Android 팝업 재요청 분기 없음 — D5).
+  //   탭당 1회, 네트워크 0. 실패하면 토스트로 직접 가는 길을 알리고 배너는 닫지 않는다(복구 경로 유지).
+  //   ⚠ `.catch()` 체인 금지 — RN jest 기본 목 등은 Promise가 아닌 값을 돌려줄 수 있어 try/await/catch로 흡수한다.
+  //   허용하고 돌아온 반영은 useLocationPermission의 AppState 'active' 재조회가 맡는다(여기서 폴링·타이머 0).
+  const handleOpenSettings = async () => {
+    try {
+      await Linking.openSettings();
+    } catch {
+      showToast({ message: MAP_COPY.openSettingsFailed, tone: 'neutral' });
+    }
   };
 
   // WebView → RN 메시지 디스패치(파싱은 parseMapMessage). 비JSON/미지는 조용히 무시.
@@ -367,9 +405,11 @@ export const MapTabScreen = () => {
   }));
   // 하단 스팟 카드 도킹 여부 — FAB가 카드에 가려지지 않게 위로 띄우는 데 사용(ui-spec §4).
 
-  // 상태 → 오버레이(tone/message) 판단(ui-spec §3 매핑).
-  //   우선순위: 지도 SDK 에러 → 핀 에러 → 로딩(핀 loading **또는** 지도 부팅 중) → 빈/권한안내.
-  const overlay = ((): {
+  // 상태 → 중앙 오버레이(tone/message) 판단(ui-spec §3 매핑). 지도 전체에 관한 상태만 정중앙에 둔다.
+  //   우선순위: 지도 SDK 에러 → 핀 에러 → 로딩(핀 loading **또는** 지도 부팅 중) → 없음.
+  //   map-location-denied(U7 ②): 권한 안내는 여기서 빠져 하단 배너(showPermissionBanner)로 옮겨 갔다 —
+  //   거부만으로는 지도 정중앙을 점유하지 않는다.
+  const centerOverlay = ((): {
     tone: MapStatusTone;
     message: string;
     actionLabel?: string;
@@ -393,17 +433,21 @@ export const MapTabScreen = () => {
     }
     // 지도 부팅(WebView + Kakao SDK, 실측 ≈1.2s) 동안에도 로딩을 알린다 — 핀은 캐시로 즉시 ready라
     //   핀 상태만 보면 부팅 구간이 통째로 무통지 흰 화면이 된다(map-feedback U5).
-    //   권한 안내보다 위인 이유: 지도가 아직 없는데 권한 얘기부터 하는 건 순서가 뒤집힌 것이다.
+    //   권한 배너보다 위인 이유: 지도가 아직 없는데 권한 얘기부터 하는 건 순서가 뒤집힌 것이다.
     //   SDK 실패는 ERROR → mapErrored가 맨 위에서 가로채므로 여기서 영구 잔류하지 않는다.
     if (state.status === 'loading' || !mapReady) {
       return { tone: MapStatusTone.Loading, message: MAP_COPY.loading };
     }
-    // ready: 권한 거부 안내만(빈 상태 안내는 제거 — 사용자 요청. 핀 0개여도 지도만 깔끔히 표시).
-    if (permission.status === LocationPermissionStatus.Denied) {
-      return { tone: MapStatusTone.Info, message: MAP_COPY.permissionDenied };
-    }
+    // ready: 중앙 안내 없음(빈 상태 안내는 제거 — 사용자 요청. 핀 0개여도 지도만 깔끔히 표시).
     return null;
   })();
+
+  // 권한 배너 노출(plan §3.4·§4.4) — 중앙 오버레이(오류·로딩)가 없을 때만(기존 우선순위 보존 — D2, 원칙 1:
+  //   한 번에 한 가지). 오류·로딩이 걷히면 그때 나타난다. 닫았으면 FAB 탭 전까지 숨긴다(D3·D4).
+  const showPermissionBanner =
+    centerOverlay === null &&
+    permission.status === LocationPermissionStatus.Denied &&
+    !permissionBannerDismissed;
 
   return (
     <View style={styles.root}>
@@ -445,19 +489,47 @@ export const MapTabScreen = () => {
           </View>
         ) : null}
 
-        {/* 상태 오버레이 — 차단 아님(지도 위 배너). */}
-        {overlay ? (
+        {/* 중앙 상태 오버레이(로딩·지도 오류·핀 오류) — 차단 아님(지도 위 배너). */}
+        {centerOverlay ? (
           <View pointerEvents="box-none" style={styles.overlay}>
             <MapStatusOverlay
-              tone={overlay.tone}
-              message={overlay.message}
-              actionLabel={overlay.actionLabel}
-              onAction={overlay.onAction}
+              tone={centerOverlay.tone}
+              message={centerOverlay.message}
+              actionLabel={centerOverlay.actionLabel}
+              onAction={centerOverlay.onAction}
             />
           </View>
         ) : null}
 
-        {/* 현재위치 FAB — 지도 영역(MapWebView) 우하단 16px 고정(킷 mk-home:290-298: 지도 div 내 right/bottom 16).
+        {/* 위치 권한 거부 배너(map-location-denied U7) — 현재위치 FAB 바로 위 하단 전폭(ui-spec §4).
+            bottom = FAB bottom 16 + FAB 한 변(MAP_LOCATE_BUTTON_SIZE) + 간격 10 — 리터럴 72 금지(FAB 크기 드리프트 방지).
+            ⚠ pointerEvents="box-none" — 래퍼 빈 영역이 지도 팬/탭을 삼키지 않게(재검색 pill 선례).
+            도킹 카드는 MapWebView 바깥 형제라 카드가 뜨면 FAB와 함께 올라가 겹치지 않는다. */}
+        {showPermissionBanner ? (
+          <View
+            testID="map-overlay-permission"
+            pointerEvents="box-none"
+            style={[
+              styles.permission,
+              {
+                left: theme.spacing[16],
+                right: theme.spacing[16],
+                bottom: theme.spacing[16] + MAP_LOCATE_BUTTON_SIZE + theme.spacing[10],
+              },
+            ]}
+          >
+            <MapPermissionBanner
+              message={MAP_COPY.permissionDenied}
+              actionLabel={MAP_COPY.openSettings}
+              actionHint={MAP_COPY.openSettingsHint}
+              onAction={handleOpenSettings}
+              dismissLabel={MAP_COPY.dismissPermission}
+              onDismiss={() => setPermissionBannerDismissed(true)}
+            />
+          </View>
+        ) : null}
+
+        {/* 현재위치 FAB — 지도 영역(MapWebView) 우하단 16px 고정(킷 mk-home.jsx:362-372: 지도 div 내 right/bottom 16).
             카드(SelectedSpot/NearbySpot)는 MapWebView 바깥 형제라, 도킹 시 MapWebView(flex:1)가 줄고
             FAB는 지도 영역 바닥 16px 고정이라 자동으로 카드 위에 온다 — offset 변동 없이 항상 같은 위치. */}
         <View
@@ -525,6 +597,8 @@ const styles = StyleSheet.create({
   // 재검색 pill 래퍼 — 전폭 절대배치 + 가로 중앙(pill 자신은 alignSelf:'center'라 폭을 채우지 않는다).
   research: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  // 위치 권한 배너 래퍼 — FAB 위 하단 전폭 절대배치(left/right/bottom은 인라인 토큰 합성, ui-spec §4).
+  permission: { position: 'absolute' },
   // 현재위치 FAB — 우하단 절대배치(right/bottom은 인라인 토큰, ui-spec §4.2).
   locate: { position: 'absolute' },
 });
