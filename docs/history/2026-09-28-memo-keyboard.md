@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-09-28 |
 | 브랜치 | fix/memo-keyboard-visibility |
-| PR | 미생성 |
+| PR | https://github.com/Guksu/muklog/pull/33 |
 | 관련 경로 | src/features/muklog/MuklogEditor/MuklogEditor.tsx, src/features/muklog/MuklogEditor/MuklogEditor.spec.tsx |
 
 ## 1. 개요
