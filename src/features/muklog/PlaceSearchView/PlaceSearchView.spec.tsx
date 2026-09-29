@@ -2,12 +2,12 @@
 // 장소검색 풀스크린 뷰 — 킷 mk-log.jsx:383-414 PlaceSearch 재현 (FLAG-1b).
 //   헤더(뒤로 + 검색 입력바) + 결과 리스트 + 상태(loading/empty/error). 표시 전용(controlled props).
 import React from 'react';
-import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { AccessibilityInfo, Platform, ScrollView, StyleSheet } from 'react-native';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
-import { PlaceSearchView } from './PlaceSearchView';
+import { PlaceSearchView, type PlaceSearchViewProps } from './PlaceSearchView';
 import { type PlaceSearchItem } from '../types';
 
 const item = (over?: Partial<PlaceSearchItem>): PlaceSearchItem => ({
@@ -215,6 +215,85 @@ describe('PlaceSearchView', () => {
       />,
     );
     expect(screen.getByLabelText('직접 입력')).toBeTruthy();
+  });
+});
+
+// ── 키보드 여백(place-search-keyboard K1~K3 / 킷 mk-log:502) ──────────────────────────────
+//   seam = 검색 화면 결과 ScrollView(UNSAFE_getByType)의 키보드 prop(plan §4). 형제 ScrollView가 생기면 예외로 드러난다.
+//     중첩된 안쪽 ScrollView는 조회되지 않으므로(findByType deep:false) 바깥 ScrollView의 prop 값 단언이 대신 드러낸다.
+//   실제 여백·스크롤 위치는 네이티브 동작이라 시뮬레이터(plan §5-2 S1~S6)에서 확인한다.
+//   A10 블록보다 앞에 둔다 — A10의 감소 모션 목은 restoreAllMocks로 풀리지 않아 뒤따르는 렌더에 act 경고를 남긴다.
+describe('PlaceSearchView 키보드 여백', () => {
+  const previousOS = Platform.OS;
+  const setOS = ({ os }: { os: typeof Platform.OS }) =>
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: os });
+  const resultScroll = () => screen.UNSAFE_getByType(ScrollView);
+  // 재현 경로(리더 브리프 §2)와 같은 결과 15건 — 수정 전 iOS에서는 12~15번째가 키보드 뒤에 남았다.
+  const cafeResults = Array.from({ length: 15 }, (_, index) =>
+    item({ kakaoPlaceId: `k${index + 1}`, placeName: `카페 ${index + 1}` }),
+  );
+  // K1 상태 6종 — 킷 502는 상태와 무관하게 여백을 둔다(제출 중 = 위시 담기 진행, LogScreen이 쓰는 상태).
+  //   expectState는 행 이름의 상태가 실제로 그려졌는지 먼저 확인한다(다른 상태로 통과하는 것 방지).
+  const stateCases: { label: string; props: Partial<PlaceSearchViewProps>; expectState: () => void }[] = [
+    {
+      label: 'idle(검색어 없음)',
+      props: {},
+      expectState: () => expect(screen.getByText('장소 이름을 검색해 보세요')).toBeTruthy(),
+    },
+    {
+      label: 'loading',
+      props: { status: 'loading', query: '카페' },
+      expectState: () => expect(screen.getByTestId('place-search-spinner')).toBeTruthy(),
+    },
+    {
+      label: 'ready 15건',
+      props: { status: 'ready', query: '카페', results: cafeResults },
+      expectState: () => expect(screen.getByTestId('place-result-14')).toBeTruthy(),
+    },
+    {
+      label: 'ready 0건 + 직접 입력',
+      props: { status: 'ready', query: '없는가게', results: [], onUseManualInput: jest.fn() },
+      expectState: () => {
+        expect(screen.getByTestId('place-search-empty')).toBeTruthy();
+        expect(screen.getByLabelText('직접 입력')).toBeTruthy();
+      },
+    },
+    {
+      label: 'error + 직접 입력',
+      props: { status: 'error', query: '카페', errorMessage: '장소 검색에 실패했어요.', onUseManualInput: jest.fn() },
+      expectState: () => {
+        expect(screen.getByTestId('place-search-error')).toBeTruthy();
+        expect(screen.getByLabelText('직접 입력')).toBeTruthy();
+      },
+    },
+    {
+      label: 'ready 15건 + 제출 중',
+      props: { status: 'ready', query: '카페', results: cafeResults, submitting: true },
+      expectState: () => expect(screen.getByTestId('place-search-submitting-spinner')).toBeTruthy(),
+    },
+  ];
+
+  afterEach(() => {
+    setOS({ os: previousOS });
+  });
+
+  it.each(stateCases)('K1: iOS $label 상태에서 결과 스크롤 영역이 키보드 여백을 자동으로 확보한다', ({ props, expectState }) => {
+    setOS({ os: 'ios' });
+    renderWithTheme(<PlaceSearchView {...baseProps} {...props} />);
+    expectState();
+    expect(resultScroll().props.automaticallyAdjustKeyboardInsets).toBe(true);
+  });
+
+  it('K2: Android는 자동 키보드 여백을 끈다(false) — 기존 adjustResize 유지', () => {
+    setOS({ os: 'android' });
+    renderWithTheme(<PlaceSearchView {...baseProps} status="ready" query="카페" results={cafeResults} />);
+    expect(resultScroll().props.automaticallyAdjustKeyboardInsets).toBe(false);
+  });
+
+  it('K3: 키보드가 열린 채 첫 탭으로 결과를 고르도록 keyboardShouldPersistTaps는 handled다(회귀 가드)', () => {
+    setOS({ os: 'ios' });
+    renderWithTheme(<PlaceSearchView {...baseProps} status="ready" query="카페" results={cafeResults} />);
+    expect(resultScroll().props.keyboardShouldPersistTaps).toBe('handled');
   });
 });
 

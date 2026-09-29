@@ -4,7 +4,7 @@
 //   표시 전용(controlled) — query/results/status/onSelectResult는 developer(usePlaceSearch)가 주입,
 //     searching 진입/복귀 상태머신은 컨테이너(MuklogEditor)가 소유(onBack=복귀). 토큰만(raw hex 0), 이모지 허용.
 import React from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, IconName, IconButton, MotionPressable, Screen, Text } from '@/components';
@@ -133,7 +133,13 @@ export const PlaceSearchView = ({
         </View>
       </View>
 
-      <ScrollView keyboardShouldPersistTaps="handled" style={styles.scroll}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        // 킷 mk-log:502(키보드가 열리면 결과 아래에 키보드 높이만큼 여백) — iOS는 네이티브가 가린 만큼 하단 inset을 넣고 닫히면 되돌린다.
+        //   Android는 기존 adjustResize(키보드만큼 창을 줄이는 방식)를 그대로 쓴다.
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        style={styles.scroll}
+      >
         {/* 섹션 라벨 — 킷 mk-log:397: q면 "'{q}' 검색 결과", 아니면 안내(목업 "연남동 주변 추천" 대체). */}
         <Text
           variant="meta"
