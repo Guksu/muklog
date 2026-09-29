@@ -6,6 +6,7 @@ import React from 'react';
 import { AccessibilityInfo, Modal, StyleSheet } from 'react-native';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
+import { findAccessibleAncestors } from '@/test/findAccessibleAncestors';
 import { renderWithTheme } from '@/test/renderWithTheme';
 
 import { OtaReadyDialog } from './OtaReadyDialog';
@@ -136,5 +137,72 @@ describe('OtaReadyDialog — 딤 전체 화면 커버 (dim-full-cover)', () => {
   it('A3 — Modal이 statusBarTranslucent를 켠다', () => {
     renderWithTheme(<OtaReadyDialog visible onApply={noop} onDismiss={noop} />);
     expect(screen.UNSAFE_getByType(Modal).props.statusBarTranslucent).toBe(true);
+  });
+});
+
+// ── 접근성: 버튼이 개별 요소로 노출된다(dialog-card-a11y) ───────────────────────────────
+//   RenameDialog와 같은 셸이라 같은 결함을 가졌다 — 카드가 Pressable(accessible 기본 true)이면
+//   iOS는 제목·본문·버튼을 하나의 요소로 합쳐 버튼을 개별로 조작할 수 없게 한다.
+//   seam: 호스트 요소의 접근성·터치 props(accessible·focusable·pointerEvents·라벨·역할)와 조상 사슬,
+//         탭의 핸들러 효과.
+//   카드 탭 → onDismiss 미호출은 위 "카드를 탭해도 닫히지 않는다"가 이미 잠갔다
+//   (이 블록은 카드·카드 안 자식 탭에서 onApply·onDismiss 둘 다 불리지 않음을 더한다).
+describe('OtaReadyDialog — 접근성: 버튼이 개별 요소로 노출된다 (dialog-card-a11y)', () => {
+  const renderDialog = ({
+    onApply = noop,
+    onDismiss = noop,
+  }: {
+    onApply?: () => void;
+    onDismiss?: () => void;
+  } = {}) => renderWithTheme(<OtaReadyDialog visible onApply={onApply} onDismiss={onDismiss} />);
+
+  it('카드 래퍼는 접근성 요소가 아니다', () => {
+    renderDialog();
+    expect(screen.getByTestId('ota-ready-card').props.accessible).not.toBe(true);
+  });
+
+  // Android는 focusable 뷰에 클릭 리스너를 달아 TalkBack이 "활성화할 수 있는 요소"로 멈춘다.
+  it('카드 래퍼는 포커스·클릭 대상도 아니다', () => {
+    renderDialog();
+    expect(screen.getByTestId('ota-ready-card').props.focusable).not.toBe(true);
+  });
+
+  // 딤과 카드는 형제 레이어라 카드가 터치를 받아야 카드 위 탭이 딤으로 빠지지 않는다.
+  //   fireEvent는 형제로 빠지는 경로를 흉내 내지 않으므로 props로 잠근다.
+  it('카드는 터치를 받는 뷰다(pointerEvents로 터치를 흘려보내지 않는다)', () => {
+    renderDialog();
+    const card = screen.getByTestId('ota-ready-card');
+    expect(card.props.pointerEvents ?? 'auto').toBe('auto');
+    expect(StyleSheet.flatten(card.props.style).pointerEvents ?? 'auto').toBe('auto');
+  });
+
+  // toStrictEqual — toEqual은 배열 안의 undefined를 무시한다. 헬퍼는 testID 없는 조상도 타입 이름으로 돌려준다.
+  it.each([
+    { label: '나중에', testId: 'ota-dismiss' },
+    { label: '지금 적용', testId: 'ota-apply' },
+  ])('$label의 조상에는 접근성 요소가 없다', ({ testId }) => {
+    renderDialog();
+    expect(findAccessibleAncestors({ element: screen.getByTestId(testId) })).toStrictEqual([]);
+  });
+
+  it('나중에·지금 적용이 각자의 접근성 라벨로 조회된다', () => {
+    renderDialog();
+    expect(screen.getByRole('button', { name: '나중에' }).props.testID).toBe('ota-dismiss');
+    expect(screen.getByRole('button', { name: '지금 적용' }).props.testID).toBe('ota-apply');
+  });
+
+  it('딤 배경은 "닫기" 버튼으로 노출된다(화면 읽기 기능의 닫기 경로)', () => {
+    renderDialog();
+    expect(screen.getByRole('button', { name: '닫기' }).props.testID).toBe('ota-ready-backdrop');
+  });
+
+  it('카드나 카드 안 제목을 탭해도 아무 콜백도 호출하지 않는다', () => {
+    const onApply = jest.fn();
+    const onDismiss = jest.fn();
+    renderDialog({ onApply, onDismiss });
+    fireEvent.press(screen.getByTestId('ota-ready-card'));
+    fireEvent.press(screen.getByText('개선사항을 받아뒀어요'));
+    expect(onApply).not.toHaveBeenCalled();
+    expect(onDismiss).not.toHaveBeenCalled();
   });
 });

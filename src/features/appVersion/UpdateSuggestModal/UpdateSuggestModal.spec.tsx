@@ -6,6 +6,7 @@ import React from 'react';
 import { AccessibilityInfo, Modal, StyleSheet } from 'react-native';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
+import { findAccessibleAncestors } from '@/test/findAccessibleAncestors';
 import { renderWithTheme } from '@/test/renderWithTheme';
 
 import { UpdateSuggestModal } from './UpdateSuggestModal';
@@ -152,5 +153,101 @@ describe('UpdateSuggestModal — 딤 전체 화면 커버 (dim-full-cover)', () 
       <UpdateSuggestModal visible storeUrl="https://store" onUpdatePress={noop} onDismiss={noop} />,
     );
     expect(screen.UNSAFE_getByType(Modal).props.statusBarTranslucent).toBe(true);
+  });
+});
+
+// ── 접근성: 버튼이 개별 요소로 노출된다(dialog-card-a11y) ───────────────────────────────
+//   RenameDialog와 같은 셸이라 같은 결함을 가졌다 — 카드가 Pressable(accessible 기본 true)이면
+//   iOS는 제목·본문·버튼을 하나의 요소로 합쳐 버튼을 개별로 조작할 수 없게 한다.
+//   seam: 호스트 요소의 접근성·터치 props(accessible·focusable·pointerEvents·라벨·역할)와 조상 사슬,
+//         탭의 핸들러 효과.
+describe('UpdateSuggestModal — 접근성: 버튼이 개별 요소로 노출된다 (dialog-card-a11y)', () => {
+  const renderModal = ({
+    storeUrl = 'https://store',
+    onUpdatePress = noop,
+    onDismiss = noop,
+  }: {
+    storeUrl?: string | null;
+    onUpdatePress?: () => void;
+    onDismiss?: () => void;
+  } = {}) =>
+    renderWithTheme(
+      <UpdateSuggestModal
+        visible
+        storeUrl={storeUrl}
+        onUpdatePress={onUpdatePress}
+        onDismiss={onDismiss}
+      />,
+    );
+
+  const ancestorsOf = ({ testId }: { testId: string }) =>
+    findAccessibleAncestors({ element: screen.getByTestId(testId) });
+
+  it('카드 래퍼는 접근성 요소가 아니다', () => {
+    renderModal();
+    expect(screen.getByTestId('update-suggest-card').props.accessible).not.toBe(true);
+  });
+
+  // Android는 focusable 뷰에 클릭 리스너를 달아 TalkBack이 "활성화할 수 있는 요소"로 멈춘다.
+  it('카드 래퍼는 포커스·클릭 대상도 아니다', () => {
+    renderModal();
+    expect(screen.getByTestId('update-suggest-card').props.focusable).not.toBe(true);
+  });
+
+  // 딤과 카드는 형제 레이어라 카드가 터치를 받아야 카드 위 탭이 딤으로 빠지지 않는다.
+  //   fireEvent는 형제로 빠지는 경로를 흉내 내지 않으므로 props로 잠근다.
+  it('카드는 터치를 받는 뷰다(pointerEvents로 터치를 흘려보내지 않는다)', () => {
+    renderModal();
+    const card = screen.getByTestId('update-suggest-card');
+    expect(card.props.pointerEvents ?? 'auto').toBe('auto');
+    expect(StyleSheet.flatten(card.props.style).pointerEvents ?? 'auto').toBe('auto');
+  });
+
+  // toStrictEqual — toEqual은 배열 안의 undefined를 무시한다. 헬퍼는 testID 없는 조상도 타입 이름으로 돌려준다.
+  it.each([
+    { label: '나중에', testId: 'update-suggest-dismiss' },
+    { label: '업데이트', testId: 'update-suggest-update' },
+  ])('$label의 조상에는 접근성 요소가 없다', ({ testId }) => {
+    renderModal();
+    expect(ancestorsOf({ testId })).toStrictEqual([]);
+  });
+
+  it('storeUrl이 null인 단일 확인 버튼의 조상에도 접근성 요소가 없다', () => {
+    renderModal({ storeUrl: null });
+    expect(ancestorsOf({ testId: 'update-suggest-dismiss' })).toStrictEqual([]);
+  });
+
+  it('나중에·업데이트가 각자의 접근성 라벨로 조회된다', () => {
+    renderModal();
+    expect(screen.getByRole('button', { name: '나중에' }).props.testID).toBe(
+      'update-suggest-dismiss',
+    );
+    expect(screen.getByRole('button', { name: '업데이트' }).props.testID).toBe(
+      'update-suggest-update',
+    );
+  });
+
+  it('storeUrl이 null이면 "확인"이 접근성 라벨로 조회된다', () => {
+    renderModal({ storeUrl: null });
+    expect(screen.getByRole('button', { name: '확인' }).props.testID).toBe(
+      'update-suggest-dismiss',
+    );
+  });
+
+  it('딤 배경은 "닫기" 버튼으로 노출된다(화면 읽기 기능의 닫기 경로)', () => {
+    renderModal();
+    expect(screen.getByRole('button', { name: '닫기' }).props.testID).toBe(
+      'update-suggest-backdrop',
+    );
+  });
+
+  it('카드나 카드 안 제목을 탭해도 닫히지 않는다(딤과 형제 레이어)', () => {
+    const onDismiss = jest.fn();
+    const onUpdatePress = jest.fn();
+    renderModal({ onDismiss, onUpdatePress });
+    fireEvent.press(screen.getByTestId('update-suggest-card'));
+    fireEvent.press(screen.getByText('새 버전이 나왔어요'));
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(onUpdatePress).not.toHaveBeenCalled();
   });
 });

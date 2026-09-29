@@ -59,12 +59,12 @@ export const OtaReadyDialog = ({ visible, onApply, onDismiss }: OtaReadyDialogPr
       />
       {/* 수직 정중앙 배치(입력 없음 → 오프셋 불요). 카드 밖 터치는 box-none으로 딤에 전달 */}
       <View style={styles.wrap} pointerEvents="box-none">
-        {/* 카드 — 탭해도 닫히지 않음(전파 차단) */}
-        <Pressable
-          testID="ota-ready-card"
-          onPress={() => {}}
-          style={[styles.card, card, theme.shadow.dialog]}
-        >
+        {/* 카드 — 탭해도 닫히지 않음. 딤과 형제 레이어라 카드 위 터치는 딤에 닿지 않는다(RenameDialog와 동일).
+            ⚠️ 카드를 Pressable·Touchable로 만들거나 버튼들을 접근성 요소 하나로 감싸지 말 것:
+               접근성 요소(Pressable은 accessible 기본 true)는 iOS에서 제목·본문·버튼을 하나로 합쳐 읽어
+               화면 읽기 기능에서 버튼을 개별로 누를 수 없게 한다.
+            ⚠️ 카드에 pointerEvents box-none·none을 주지 말 것: 카드 여백 탭이 딤으로 빠져 닫힌다. */}
+        <View testID="ota-ready-card" style={[styles.card, card, theme.shadow.dialog]}>
           <View
             style={[
               styles.body,
@@ -118,7 +118,7 @@ export const OtaReadyDialog = ({ visible, onApply, onDismiss }: OtaReadyDialogPr
               </Text>
             </MotionPressable>
           </View>
-        </Pressable>
+        </View>
       </View>
     </Modal>
   );
