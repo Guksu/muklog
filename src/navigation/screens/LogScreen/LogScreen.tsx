@@ -317,7 +317,12 @@ export const LogScreen = () => {
 
   // 기록하기(구 "다녀왔어요") → MuklogEditor 생성 모드 + 프리필 + fromWishlistId(생성 성공 시 위시 삭제, TC-5).
   //   프리필 7필드는 지도 위시 카드와 같은 공용 함수로 만든다(map-wish-card-visit — 두 진입의 에디터 계약 단일 출처).
+  //   로그 화면이 이미 포커스를 잃었으면(에디터로 넘어가는 중) 무시한다. 에디터는 처음 열릴 때 한 번만 프리필하고
+  //   같은 이름 navigate는 파라미터만 바꾸므로, 전환 중 다른 행이 실리면 화면의 가게와 지울 위시가 어긋난다(A로 저장했는데 B 위시가 지워짐).
+  //   isFocused()는 호출 순간을 읽는다(useIsFocused 렌더 값은 같은 렌더의 두 번째 탭을 못 막는다). 상태를 저장하지 않아
+  //   복귀 때 풀 것이 없다. 지도 위시 카드(MapTabScreen.handleVisitWish)와 같은 가드 — wishlist-visit-double-tap · U67.
   const handleVisitWish = ({ id }: { id: string }) => {
+    if (!navigation.isFocused()) return;
     const item =
       wishlistState.status === 'ready'
         ? wishlistState.items.find((w) => w.id === id)
