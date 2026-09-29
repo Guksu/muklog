@@ -29,7 +29,11 @@ jest.mock('@/lib/env', () => ({ env: { KAKAO_JS_KEY: 'TEST_KEY' } }));
 jest.mock('@/features/map/useMuklogPins', () => ({ useMuklogPins: jest.fn() }));
 jest.mock('@/features/map/useLocationPermission', () => ({ useLocationPermission: jest.fn() }));
 jest.mock('@/features/map/useWishPins', () => ({ useWishPins: jest.fn() }));
-jest.mock('@react-navigation/native', () => ({ useFocusEffect: () => {} }));
+// useNavigation: 우리 맛집 카드 → 먹로그 상세 배선(map-pin-card-detail)이 화면에서 호출한다. 여기선 이동을 보지 않아 no-op.
+jest.mock('@react-navigation/native', () => ({
+  useFocusEffect: () => {},
+  useNavigation: () => ({ navigate: jest.fn() }),
+}));
 jest.mock('@/features/wishlist', () => ({
   useAddNearbyWish: () => ({
     requestAdd: jest.fn(),

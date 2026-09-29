@@ -4,7 +4,7 @@
 //   네이티브 지도 렌더는 스모크(디바이스) → WebView는 MapWebView 모킹으로 대체, onMessage만 직접 호출.
 import React from 'react';
 import { AccessibilityInfo, StyleSheet } from 'react-native';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, screen, userEvent, waitFor, within } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
@@ -47,10 +47,14 @@ jest.mock('@/features/map/useNearbyPlaces', () => ({ useNearbyPlaces: jest.fn() 
 jest.mock('@/features/map/useWishPins', () => ({ useWishPins: jest.fn() }));
 // map-wish-pins: 포커스 refresh 배선 — 실제 NavigationContainer 없이 콜백만 캡처해 수동 발화.
 const mockFocus: { cb: null | (() => void) } = { cb: null };
+// map-pin-card-detail(U11): 우리 맛집 카드 → 먹로그 상세 이동 배선 지점. navigation 더블은 navigate만 가진다 —
+//   push·dispatch를 두지 않아서, 연타 1장 보장(navigate의 같은 화면 재사용)을 push로 바꾸면 TypeError로 실패한다.
+const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (cb: () => void) => {
     mockFocus.cb = cb;
   },
+  useNavigation: () => ({ navigate: mockNavigate }),
 }));
 
 // map-nearby-wish: 위시 담기 오케스트레이션 훅 모킹 — 분기·중복 pre-check·insert·토스트는
@@ -256,6 +260,7 @@ beforeEach(() => {
   mockNearbyWish.choosing = null;
   mockNearbyWish.submitting = false;
   mockTopInset.current = 0;
+  mockNavigate.mockReset();
   openSettingsMock.mockReset();
   announceMock.mockClear();
   setPermission();
@@ -2164,5 +2169,226 @@ describe('MapTabScreen — 주변 조회·지도 준비 피드백(map-nearby-fee
       expect(preloadSpy.mock.calls.length).toBe(preloadBefore);
       expect(muklogRefreshSpy).toHaveBeenCalledTimes(2); // 재시도 = 핀 재조회(기존 동작)
     });
+  });
+});
+
+// ── map-pin-card-detail (UX 백로그 U11) ───────────────────────────────
+//   우리 맛집 핀 카드를 누르면 먹로그 상세(MuklogDetail, { muklogId })로 가고, 이동해도 선택을 풀지 않아 복귀 시
+//   카드·핀 강조·필터가 그대로다. 복귀 반영은 기존 포커스 재조회 경로다.
+//   seam: 화면의 사용자 가시 동작(카드 버튼 role+name) + navigate 호출 인자 + 주입 스크립트 + 훅 spy 호출 수.
+//   카드 안에서 Pressable이 onPress에 실제로 이어졌는지는 SelectedSpotCard.spec이 userEvent로 잠근다 — 여기선 MT1만
+//   userEvent(실제 누름 경로 1건)로 두 컴포넌트의 이음새를 끝까지 태우고, 나머지는 fireEvent로 부모 콜백의 효과만 본다.
+//   네이티브 스택 전환·연타 시 라우터의 같은 화면 재사용·WebView 카메라 유지는 디바이스 스모크 몫이다.
+describe('MapTabScreen — 우리 맛집 카드 → 먹로그 상세(map-pin-card-detail · U11)', () => {
+  // 라우트 이름·접근성 이름은 문자 그대로 적는다 — 상수를 import하면 상수 오타가 spec까지 따라와 잠금이 풀린다.
+  const DETAIL_ROUTE = 'MuklogDetail';
+  const openLabel = ({ placeName }: { placeName: string }) => `${placeName} 기록 보기`;
+
+  /**
+   * 먹로그 핀 ready → 마운트 포커스 1회 → READY까지(주입 채널 활성).
+   * 실제 useFocusEffect는 탭이 처음 보일 때(마운트) 한 번 발화하지만, 파일 상단 모킹은 콜백을 저장만 한다.
+   * 여기서 그 첫 포커스를 흉내 내야 이후의 mockFocus.cb() 호출이 "상세에서 돌아온 포커스"가 된다 —
+   * 빠뜨리면 복귀 재조회를 첫 포커스에서만 하는 회귀(편집·삭제가 지도에 안 보임)가 MT5를 통과한다.
+   */
+  const renderReadyWithPins = ({ pins }: { pins: unknown[] }) => {
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins }, refresh: muklogRefreshSpy });
+    const view = renderWithTheme(<MapTabScreen />);
+    act(() => {
+      mockFocus.cb?.();
+    });
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+    return view;
+  };
+  const tapMarker = ({ id, kind }: { id: string; kind: MapPinKind }) =>
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id, kind }) });
+  const cardButton = ({ placeName }: { placeName: string }) =>
+    screen.getByRole('button', { name: openLabel({ placeName }) });
+  const pressCard = ({ placeName }: { placeName: string }) =>
+    fireEvent.press(cardButton({ placeName }));
+  /** 조회·주입 호출 수 스냅샷 — 카드 탭·복귀가 새 조회·새 주입을 만들지 않는지 비교한다. */
+  const snapshotCalls = () => ({
+    muklogRefresh: muklogRefreshSpy.mock.calls.length,
+    wishRefresh: wishRefreshSpy.mock.calls.length,
+    preload: preloadSpy.mock.calls.length,
+    research: researchSpy.mock.calls.length,
+    setBounds: setBoundsSpy.mock.calls.length,
+    injected: injectedScripts.length,
+  });
+  const lastSetSelected = () =>
+    injectedScripts.filter((s) => s.includes('"type":"SET_SELECTED"')).slice(-1)[0] ?? '';
+
+  const sushi = () =>
+    pin({ muklogId: 'm9', roomId: 'r1', placeName: '스시 오마카세', category: 'pasta', rating: 5 });
+
+  /**
+   * (마운트 포커스를 마친 화면에서) 필터 칩(파스타) → m9 탭 → 카드 누름(상세로) → 복귀 포커스 1회(이 화면의 두 번째 포커스).
+   * @returns 누른 직후(=상세에 있는 동안) 스냅샷과 rerender
+   */
+  const goToDetailAndBack = () => {
+    const view = renderReadyWithPins({ pins: [sushi()] });
+    fireEvent.press(screen.getByTestId('filter-chip-pasta'));
+    tapMarker({ id: 'm9', kind: MapPinKind.Saved });
+    pressCard({ placeName: '스시 오마카세' });
+    const beforeReturn = snapshotCalls();
+    act(() => {
+      mockFocus.cb?.();
+    });
+    return { ...view, beforeReturn };
+  };
+
+  it('MT1 우리 맛집 핀 탭 → 카드 버튼 "{가게명} 기록 보기"를 누르면 navigate(MuklogDetail, { muklogId }) 정확히 1회', async () => {
+    // 가짜 시간: 누름을 뗀 뒤 MotionPressable의 복귀 스프링을 act 안에서 끝낸다(안 그러면 act 밖 갱신 경고).
+    jest.useFakeTimers();
+    try {
+      renderReadyWithPins({ pins: [sushi()] });
+      tapMarker({ id: 'm9', kind: MapPinKind.Saved });
+
+      // 실제 누름 경로(호스트 터치 응답자) — 카드 컴포넌트와 화면 배선을 함께 태운다.
+      await userEvent.press(cardButton({ placeName: '스시 오마카세' }));
+      act(() => {
+        jest.advanceTimersByTime(3000);
+      });
+
+      expect(mockNavigate).toHaveBeenCalledTimes(1);
+      // roomId 등 다른 키가 섞이면 실패한다(상세는 muklogId만 받는다).
+      expect(mockNavigate).toHaveBeenCalledWith(DETAIL_ROUTE, { muklogId: 'm9' });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('MT2 다른 핀으로 선택을 옮긴 뒤 누르면 지금 선택한 먹로그로 간다', () => {
+    renderReadyWithPins({
+      pins: [sushi(), pin({ muklogId: 'm10', placeName: '우동 카덴', lat: 37.6, lng: 127.1 })],
+    });
+    tapMarker({ id: 'm9', kind: MapPinKind.Saved });
+    tapMarker({ id: 'm10', kind: MapPinKind.Saved });
+
+    expect(screen.queryByRole('button', { name: openLabel({ placeName: '스시 오마카세' }) })).toBeNull();
+    pressCard({ placeName: '우동 카덴' });
+
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith(DETAIL_ROUTE, { muklogId: 'm10' });
+  });
+
+  it('MT3 연타 2회 → 두 번 모두 같은 인자의 navigate(push 아님 — 같은 화면이면 쌓지 않는 이동)', () => {
+    renderReadyWithPins({ pins: [sushi()] });
+    tapMarker({ id: 'm9', kind: MapPinKind.Saved });
+
+    pressCard({ placeName: '스시 오마카세' });
+    pressCard({ placeName: '스시 오마카세' });
+
+    // 더블에 push가 없어서 push로 바꾼 구현은 여기까지 오지 못하고 TypeError로 실패한다.
+    expect(mockNavigate.mock.calls).toEqual([
+      [DETAIL_ROUTE, { muklogId: 'm9' }],
+      [DETAIL_ROUTE, { muklogId: 'm9' }],
+    ]);
+  });
+
+  it('MT4 카드를 눌러도 선택은 그대로고 조회·주입은 하나도 늘지 않는다(비용 가드레일)', () => {
+    renderReadyWithPins({ pins: [sushi()] });
+    tapMarker({ id: 'm9', kind: MapPinKind.Saved });
+    const before = snapshotCalls();
+
+    pressCard({ placeName: '스시 오마카세' });
+
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    // 핀·위시 refresh, 주변 preload·research·setBounds, WebView 주입(INIT·RECENTER·SET_MARKERS·SET_SELECTED) 모두 불변.
+    expect(snapshotCalls()).toEqual(before);
+    expect(screen.getByTestId('selected-spot-card')).toBeTruthy();
+    expect(cardButton({ placeName: '스시 오마카세' })).toBeTruthy();
+  });
+
+  it('MT5 상세에서 돌아오면(포커스 1회) 핀·위시만 1회씩 재조회하고, 지도 재생성·재센터·선택 해제 없이 카드·필터가 그대로다', () => {
+    const { beforeReturn } = goToDetailAndBack();
+
+    const after = snapshotCalls();
+    expect(after.muklogRefresh - beforeReturn.muklogRefresh).toBe(1);
+    expect(after.wishRefresh - beforeReturn.wishRefresh).toBe(1);
+    expect(after.preload).toBe(beforeReturn.preload);
+    expect(after.research).toBe(beforeReturn.research);
+    expect(after.setBounds).toBe(beforeReturn.setBounds);
+
+    // 복귀 뒤 새로 주입된 스크립트만 센다 — 누르기 전 INIT(READY)·SET_SELECTED(m9)가 대신 충족하지 않게.
+    const sinceReturn = injectedScripts.slice(beforeReturn.injected);
+    expect(sinceReturn.filter((s) => s.includes('"type":"INIT"'))).toHaveLength(0);
+    expect(sinceReturn.filter((s) => s.includes('"type":"RECENTER"'))).toHaveLength(0);
+    expect(sinceReturn.filter((s) => s.includes('"selectedId":null'))).toHaveLength(0);
+
+    expect(cardButton({ placeName: '스시 오마카세' })).toBeTruthy();
+    expect(screen.getByTestId('filter-chip-pasta').props.accessibilityState?.selected).toBe(true);
+    expect(lastSetSelected()).toContain('"selectedId":"m9"');
+  });
+
+  it('MT6 복귀 재조회로 가게명·별점이 바뀌면 카드가 새 값을 보이고, 누르면 여전히 같은 먹로그로 간다', () => {
+    const { rerender } = goToDetailAndBack();
+
+    useMuklogPinsMock.mockReturnValue({
+      state: {
+        status: 'ready',
+        pins: [pin({ ...sushi(), placeName: '스시 오마카세 본점', rating: 4 })],
+      },
+      refresh: muklogRefreshSpy,
+    });
+    rerender(<MapTabScreen />);
+
+    const card = screen.getByTestId('selected-spot-card');
+    expect(within(card).getByText('스시 오마카세 본점')).toBeTruthy();
+    expect(within(card).getAllByTestId('star-filled')).toHaveLength(4);
+    expect(screen.queryByRole('button', { name: openLabel({ placeName: '스시 오마카세' }) })).toBeNull();
+
+    pressCard({ placeName: '스시 오마카세 본점' });
+    expect(mockNavigate).toHaveBeenLastCalledWith(DETAIL_ROUTE, { muklogId: 'm9' });
+  });
+
+  it('MT7 복귀 재조회에서 그 먹로그가 빠지면(삭제) 카드가 닫히고 지도 선택도 해제된다', () => {
+    const { rerender } = goToDetailAndBack();
+
+    useMuklogPinsMock.mockReturnValue({
+      state: {
+        status: 'ready',
+        pins: [pin({ muklogId: 'm10', placeName: '우동 카덴', lat: 37.6, lng: 127.1 })],
+      },
+      refresh: muklogRefreshSpy,
+    });
+    rerender(<MapTabScreen />);
+
+    expect(screen.queryByTestId('selected-spot-card')).toBeNull();
+    expect(screen.queryByRole('button', { name: /기록 보기/ })).toBeNull();
+    expect(lastSetSelected()).toContain('"selectedId":null');
+    expect(mockNavigate).toHaveBeenCalledTimes(1); // 처음 누른 1회뿐 — 닫히며 이동을 만들지 않는다
+  });
+
+  it('MT8 주변·위시 카드는 대상이 아니다 — "기록 보기" 버튼이 없고 눌러도 이동하지 않는다', () => {
+    setNearby({ status: 'ready', items: [nearbyItem({ kakaoPlaceId: 'k7', lat: 37.7, lng: 127.2 })] });
+    setWishPins({ pins: [wishPin({ id: 'w7', lat: 37.8, lng: 127.3 })] });
+    renderReadyWithPins({ pins: [sushi()] });
+
+    tapMarker({ id: 'k7', kind: MapPinKind.Nearby });
+    expect(screen.getByTestId('nearby-spot-card')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /기록 보기/ })).toBeNull();
+    fireEvent.press(screen.getByTestId('nearby-spot-card'));
+
+    tapMarker({ id: 'w7', kind: MapPinKind.Wish });
+    expect(screen.getByTestId('wish-spot-card')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /기록 보기/ })).toBeNull();
+    fireEvent.press(screen.getByTestId('wish-spot-card'));
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['error', { status: 'error', message: '먹로그를 불러오지 못했어요' }],
+    ['loading', { status: 'loading' }],
+  ])('MT9 핀 상태가 %s일 때는 핀을 눌러도 카드가 없어 이동 경로도 없다', (_label, pinsState) => {
+    useMuklogPinsMock.mockReturnValue({ state: pinsState, refresh: muklogRefreshSpy });
+    renderWithTheme(<MapTabScreen />);
+    emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+
+    tapMarker({ id: 'm9', kind: MapPinKind.Saved });
+
+    expect(screen.queryByTestId('selected-spot-card')).toBeNull();
+    expect(screen.queryByRole('button', { name: /기록 보기/ })).toBeNull();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
