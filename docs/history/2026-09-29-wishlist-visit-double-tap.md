@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-09-29 |
 | 브랜치 | fix/wishlist-visit-double-tap |
-| PR | 미생성 |
+| PR | https://github.com/Guksu/muklog/pull/40 |
 | 관련 경로 | src/navigation/screens/LogScreen/, docs/design/architecture.md, docs/ux/ux-backlog.md |
 
 ## 1. 개요
