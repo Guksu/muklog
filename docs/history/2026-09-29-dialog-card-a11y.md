@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-09-29 |
 | 브랜치 | `fix/dialog-card-a11y` |
-| PR | (생성 후 갱신) |
+| PR | https://github.com/Guksu/muklog/pull/41 |
 | 관련 경로 | `src/components/RenameDialog/` · `src/features/appVersion/UpdateSuggestModal/` · `src/features/ota/OtaReadyDialog/` · `src/test/findAccessibleAncestors/` · `docs/testing-strategy.md` |
 
 ## 1. 개요
