@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-09-29 |
 | 브랜치 | feat/map-pin-card-detail |
-| PR | 미생성 |
+| PR | https://github.com/Guksu/muklog/pull/37 |
 | 관련 경로 | src/features/map/components/SelectedSpotCard/, src/navigation/screens/MapTabScreen/, docs/design/architecture.md, docs/ux/ux-backlog.md |
 
 ## 1. 개요
