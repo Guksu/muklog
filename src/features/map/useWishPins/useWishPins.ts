@@ -14,8 +14,11 @@ import { useOneShotQuery } from '@/lib/useOneShotQuery';
 import { toWishPin, type WishPinRow } from '../toWishPin';
 import { type WishPin, type WishPinsState } from '../types';
 
-// 위시 핀이 소비하는 컬럼(매핑 경계 단일 출처 — WishPinRow와 정합). 최소 카드용이라 note/added_by/kakao 미조회.
-const WISH_PIN_SELECT_COLUMNS = 'id, room_id, place_name, category, area, lat, lng';
+// 위시 핀이 소비하는 컬럼(매핑 경계 단일 출처 — WishPinRow와 정합). note/added_by는 지도에서 안 써서 미조회.
+//   map-wish-card-visit: road_address·kakao_place_id는 위시 카드 "기록하기"의 에디터 프리필용(위시 목록 경로와 같은 7필드).
+//   같은 조회에 컬럼만 더해 호출·행 수는 그대로다(행당 ≈+130바이트).
+const WISH_PIN_SELECT_COLUMNS =
+  'id, room_id, place_name, category, area, road_address, kakao_place_id, lat, lng';
 
 /**
  * 내가 속한 모든 로그의 좌표 있는 위시 핀을 마운트 1회 크로스-로그 조회하고 상태/재조회 함수를 제공하는 훅.

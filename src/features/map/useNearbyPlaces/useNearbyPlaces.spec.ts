@@ -28,7 +28,13 @@ import { supabase } from '@/lib/supabase';
 import { loadNearbyCache, saveNearbyCache, type NearbyCachePayload } from '../nearbyCache';
 import { searchNearby } from '../searchNearby';
 import { type Bounds } from '../bboxDrift';
-import { NEARBY_ACCUM_CAP, NEARBY_HYDRATE_MAX_SPANS, useNearbyPlaces } from './useNearbyPlaces';
+import { NearbyResearchOutcome, NearbyResearchState } from '../types';
+import {
+  NEARBY_ACCUM_CAP,
+  NEARBY_HYDRATE_MAX_SPANS,
+  useNearbyPlaces,
+  type UseNearbyPlacesResult,
+} from './useNearbyPlaces';
 
 const searchMock = searchNearby as jest.Mock;
 const loadCacheMock = loadNearbyCache as jest.Mock;
@@ -686,7 +692,8 @@ describe('명시 재검색 (A3-6·A3-7·A3-8)', () => {
       result.current.research();
     });
     expect(searchMock).toHaveBeenCalledTimes(2); // 첫 조회 1 + 연타 4회가 1회로 수렴
-    // 조회 중엔 버튼을 숨긴다(스피너가 아니라 미노출로 상태 수를 줄인다) — 이동은 그대로 임계 초과다.
+    // 조회 중엔 researchAvailable=false(식 불변) — 이동은 그대로 임계 초과다.
+    //   map-nearby-feedback 이후 화면은 이 값 대신 researchState(Searching)로 pill을 "검색하는 중"으로 남긴다(H1).
     expect(result.current.researchAvailable).toBe(false);
     await act(async () => {
       resolveSearch([item('1')]);
@@ -983,6 +990,583 @@ describe('비용 가드레일 C1~C9 (invoke 상한을 테스트가 강제)', () 
       jest.advanceTimersByTime(1000);
     });
     expect(searchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── map-nearby-feedback (UX 백로그 U10 ①②③) — researchState · research() 결과 계약 ──────────────
+//   seam: 훅 반환(researchState · research()가 resolve하는 결과 · researchAvailable · status · items) +
+//   searchNearby/nearbyCache 모킹 + 가짜 시간. pill 모양·토스트·스크린리더 알림은 MapTabScreen spec 몫이다.
+//   ★ researchAvailable 식은 바꾸지 않는다 — 위 U4·A3·C 케이스가 그대로 잠그고, 여기선 새 값이 그 별칭인지만 본다(H15).
+describe('재검색 상태·결과 (map-nearby-feedback H1~H19)', () => {
+  type HookResult = { current: UseNearbyPlacesResult };
+  /** 수동으로 응답을 정하는 searchNearby 호출 1건. */
+  type DeferredCall = { resolve: (value: unknown) => void; reject: (reason: unknown) => void };
+
+  /** 이후 searchNearby 호출마다 pending Promise를 만들고 그 resolve/reject를 호출 순서대로 모은다(수동 응답 제어). */
+  const deferSearches = () => {
+    const calls: DeferredCall[] = [];
+    searchMock.mockImplementation(
+      () =>
+        new Promise((resolve, reject) => {
+          calls.push({ resolve, reject });
+        }),
+    );
+    return calls;
+  };
+
+  /** 첫 조회(0틱)를 성공시키고 임계 초과로 이동해 "이 지역에서 검색"(Idle)까지 간다. invoke 1. */
+  const renderIdle = async () => {
+    const hook = renderHook(() => useNearbyPlaces());
+    act(() => hook.result.current.setBounds(bounds({ lat: 37.5 })));
+    await settle();
+    act(() => hook.result.current.setBounds(bounds({ lat: 38.0 })));
+    expect(hook.result.current.researchState).toBe(NearbyResearchState.Idle);
+    return hook;
+  };
+
+  /** research()를 동기 act 안에서 부르고 그 Promise를 돌려준다(응답 전 상태를 보기 위함). */
+  const startResearch = ({ result }: { result: HookResult }): Promise<NearbyResearchOutcome> => {
+    const box: { pending?: Promise<NearbyResearchOutcome> } = {};
+    act(() => {
+      box.pending = result.current.research();
+    });
+    if (!(box.pending instanceof Promise)) throw new Error('research()가 Promise를 돌려주지 않았다');
+    return box.pending;
+  };
+
+  /** research()를 끝까지 기다려 결과를 돌려준다(응답이 이미 준비된 경우). */
+  const runResearch = async ({ result }: { result: HookResult }) => {
+    const box: { outcome?: NearbyResearchOutcome } = {};
+    await act(async () => {
+      box.outcome = await result.current.research();
+    });
+    return box.outcome;
+  };
+
+  it('H1 누른 조회는 결과가 올 때까지 Searching이고, 성공(≥1건)하면 Hidden · Found로 끝난다', async () => {
+    const { result } = await renderIdle();
+    const searches = deferSearches();
+
+    const pending = startResearch({ result });
+
+    expect(result.current.researchState).toBe(NearbyResearchState.Searching);
+    expect(result.current.researchAvailable).toBe(false);
+    expect(result.current.status).toBe('loading');
+
+    await act(async () => {
+      searches[0].resolve([item('b')]);
+    });
+
+    expect(result.current.researchState).toBe(NearbyResearchState.Hidden);
+    await expect(pending).resolves.toBe(NearbyResearchOutcome.Found);
+  });
+
+  describe('H2 자동 조회(선로딩·첫 뷰포트·보정)가 도는 동안엔 Searching이 아니라 Hidden', () => {
+    it('선로딩 in-flight', async () => {
+      const searches = deferSearches();
+      const { result } = renderHook(() => useNearbyPlaces());
+      await settle();
+      act(() => result.current.preload({ bbox: bounds({ lat: 37.5 }) }));
+      await act(async () => {
+        jest.advanceTimersByTime(0);
+      });
+      act(() => result.current.setBounds(bounds({ lat: 37.5 }))); // 뷰포트 수신(보정 없음)
+
+      expect(searchMock).toHaveBeenCalledTimes(1);
+      expect(result.current.status).toBe('loading');
+      expect(result.current.researchState).toBe(NearbyResearchState.Hidden);
+
+      await act(async () => {
+        searches[0].resolve([item('a')]);
+      });
+      expect(result.current.researchState).toBe(NearbyResearchState.Hidden);
+    });
+
+    it('첫 뷰포트(first-bounds) in-flight', async () => {
+      deferSearches();
+      const { result } = renderHook(() => useNearbyPlaces());
+      act(() => result.current.setBounds(bounds({ lat: 37.5 })));
+      await act(async () => {
+        jest.advanceTimersByTime(0);
+      });
+
+      expect(searchMock).toHaveBeenCalledTimes(1);
+      expect(result.current.status).toBe('loading');
+      expect(result.current.researchState).toBe(NearbyResearchState.Hidden);
+    });
+
+    it('보정(correction) in-flight', async () => {
+      const { result } = renderHook(() => useNearbyPlaces());
+      await settle();
+      act(() => result.current.preload({ bbox: bounds({ lat: 37.5 }) }));
+      await settle(); // 선로딩 성공(invoke 1)
+      deferSearches();
+      act(() => result.current.setBounds(bounds({ lat: 38.0 }))); // 임계 초과 첫 뷰포트 → 보정 0틱 예약
+      await act(async () => {
+        jest.advanceTimersByTime(0);
+      });
+
+      expect(searchMock).toHaveBeenCalledTimes(2);
+      expect(result.current.status).toBe('loading');
+      expect(result.current.researchState).toBe(NearbyResearchState.Hidden);
+    });
+  });
+
+  it('H3 누른 조회 in-flight 중 research() 4회 더 → invoke 추가 0 · 추가 호출은 전부 Skipped · Searching 유지', async () => {
+    const { result } = await renderIdle();
+    const searches = deferSearches();
+
+    const first = startResearch({ result });
+    const extras = [0, 1, 2, 3].map(() => startResearch({ result }));
+
+    expect(searchMock).toHaveBeenCalledTimes(2); // 첫 조회 1 + 누른 조회 1
+    expect(result.current.researchState).toBe(NearbyResearchState.Searching);
+    await expect(Promise.all(extras)).resolves.toEqual([
+      NearbyResearchOutcome.Skipped,
+      NearbyResearchOutcome.Skipped,
+      NearbyResearchOutcome.Skipped,
+      NearbyResearchOutcome.Skipped,
+    ]);
+
+    await act(async () => {
+      searches[0].resolve([item('b')]);
+    });
+    await expect(first).resolves.toBe(NearbyResearchOutcome.Found);
+    expect(searchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('H4 누른 조회 실패 → Failed로 resolve · researchState Failed · status error · items 불변', async () => {
+    const { result } = await renderIdle();
+    searchMock.mockRejectedValueOnce(new Error('KAKAO_REQUEST_FAILED'));
+
+    const outcome = await runResearch({ result });
+
+    expect(outcome).toBe(NearbyResearchOutcome.Failed);
+    expect(result.current.researchState).toBe(NearbyResearchState.Failed);
+    expect(result.current.status).toBe('error');
+    expect(result.current.items.map((it) => it.kakaoPlaceId)).toEqual(['1']);
+  });
+
+  it('H5 자동 선로딩 실패도 Failed(Idle 아님) — 단 뷰포트를 받기 전엔 Hidden(U4-3 규칙 유지)', async () => {
+    searchMock.mockRejectedValue(new Error('net'));
+    const { result } = renderHook(() => useNearbyPlaces());
+    await settle();
+    act(() => result.current.preload({ bbox: bounds({ lat: 37.5 }) }));
+    await settle();
+
+    expect(result.current.status).toBe('error');
+    expect(result.current.researchState).toBe(NearbyResearchState.Hidden); // 뷰포트 미수신
+
+    act(() => result.current.setBounds(bounds({ lat: 37.5 }))); // 선로딩 bbox 그대로(보정 없음)
+
+    expect(result.current.researchState).toBe(NearbyResearchState.Failed);
+    expect(searchMock).toHaveBeenCalledTimes(1); // 자동 재시도 0
+  });
+
+  it('H6 Failed에서 다시 시도 → Searching → 성공하면 Hidden, invoke 정확히 +1', async () => {
+    searchMock.mockRejectedValueOnce(new Error('net'));
+    const { result } = renderHook(() => useNearbyPlaces());
+    await settle();
+    act(() => result.current.setBounds(bounds({ lat: 37.5 })));
+    await settle(); // 첫 조회 실패
+    expect(result.current.researchState).toBe(NearbyResearchState.Failed);
+    const searches = deferSearches();
+
+    const pending = startResearch({ result });
+
+    expect(result.current.researchState).toBe(NearbyResearchState.Searching);
+    expect(searchMock).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      searches[0].resolve([item('b')]);
+    });
+    expect(result.current.researchState).toBe(NearbyResearchState.Hidden);
+    await expect(pending).resolves.toBe(NearbyResearchOutcome.Found);
+    expect(searchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('H7 누른 조회 0건 → Empty로 resolve · Hidden · status ready', async () => {
+    const { result } = await renderIdle();
+    searchMock.mockResolvedValueOnce([]);
+
+    const outcome = await runResearch({ result });
+
+    expect(outcome).toBe(NearbyResearchOutcome.Empty);
+    expect(result.current.researchState).toBe(NearbyResearchState.Hidden);
+    expect(result.current.status).toBe('ready');
+  });
+
+  it('H8 자동 선로딩 0건은 결과를 내지 않는다 — status ready · Hidden · 추가 invoke 0', async () => {
+    searchMock.mockResolvedValueOnce([]);
+    const { result } = renderHook(() => useNearbyPlaces());
+    await settle();
+    act(() => result.current.preload({ bbox: bounds({ lat: 37.5 }) }));
+    await settle();
+    act(() => result.current.setBounds(bounds({ lat: 37.5 })));
+
+    expect(result.current.status).toBe('ready');
+    expect(result.current.researchState).toBe(NearbyResearchState.Hidden);
+    await act(async () => {
+      jest.advanceTimersByTime(60_000);
+    });
+    expect(searchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('H9 캐시 적중인데 그 area가 0건 → Empty · invoke 0 · Searching을 거치지 않는다', async () => {
+    const areaA = bounds({ lat: 37.5 });
+    const areaB = bounds({ lat: 37.53 }); // A에서 뷰포트 1.5폭 — 임계 초과, prune 반경(3폭) 안
+    loadCacheMock.mockResolvedValue(
+      cachePayload({
+        areas: [
+          { bounds: areaA, items: [item('a')] },
+          { bounds: areaB, items: [] },
+        ],
+      }),
+    );
+    const seen: NearbyResearchState[] = [];
+    const { result } = renderHook(() => {
+      const hookResult = useNearbyPlaces();
+      seen.push(hookResult.researchState);
+      return hookResult;
+    });
+    await settle();
+    act(() => result.current.setBounds(areaA)); // 첫 뷰포트 = 캐시 히트(invoke 0)
+    act(() => result.current.setBounds(areaB));
+    expect(result.current.researchState).toBe(NearbyResearchState.Idle);
+    seen.length = 0;
+
+    const outcome = await runResearch({ result });
+
+    expect(outcome).toBe(NearbyResearchOutcome.Empty);
+    expect(searchMock).not.toHaveBeenCalled();
+    expect(seen).not.toContain(NearbyResearchState.Searching);
+    expect(result.current.researchState).toBe(NearbyResearchState.Hidden);
+  });
+
+  it('H10 캐시 적중 area가 ≥1건 → Found · invoke 0(C8 상황)', async () => {
+    const { result } = await renderIdle();
+    expect(await runResearch({ result })).toBe(NearbyResearchOutcome.Found); // 38.0 네트워크 조회
+    expect(searchMock).toHaveBeenCalledTimes(2);
+    act(() => result.current.setBounds(bounds({ lat: 37.5 }))); // 첫 조회 area로 복귀
+
+    const outcome = await runResearch({ result });
+
+    expect(outcome).toBe(NearbyResearchOutcome.Found);
+    expect(searchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('H11 뷰포트를 받기 전 research() → Skipped · invoke 0', async () => {
+    const { result } = renderHook(() => useNearbyPlaces());
+    await settle();
+
+    const outcome = await runResearch({ result });
+
+    expect(outcome).toBe(NearbyResearchOutcome.Skipped);
+    expect(searchMock).not.toHaveBeenCalled();
+  });
+
+  it('H12 더 새 자동 요청(보정)에 밀린 research → Skipped · researchState는 자동 기준(Hidden)', async () => {
+    const { result } = renderHook(() => useNearbyPlaces());
+    await settle();
+    act(() => result.current.preload({ bbox: bounds({ lat: 37.5 }) }));
+    await settle(); // 선로딩 성공(invoke 1)
+    const searches = deferSearches();
+    act(() => result.current.setBounds(bounds({ lat: 38.0 }))); // 보정 0틱 예약(아직 미발사)
+
+    const pending = startResearch({ result }); // 즉시 발사(invoke 2)
+    expect(searchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.researchState).toBe(NearbyResearchState.Searching);
+
+    await act(async () => {
+      jest.advanceTimersByTime(0); // 보정 발사(invoke 3) — 가장 최근 요청이 자동이 된다
+    });
+    expect(searchMock).toHaveBeenCalledTimes(3);
+    expect(result.current.researchState).toBe(NearbyResearchState.Hidden);
+
+    await act(async () => {
+      searches[0].resolve([item('r')]); // 밀린 research 응답
+    });
+    await expect(pending).resolves.toBe(NearbyResearchOutcome.Skipped);
+    expect(result.current.researchState).toBe(NearbyResearchState.Hidden);
+
+    await act(async () => {
+      searches[1].resolve([item('c')]);
+    });
+    const ids = result.current.items.map((it) => it.kakaoPlaceId);
+    expect(ids).toContain('c');
+    expect(ids).not.toContain('r');
+  });
+
+  it.each([
+    ['성공 응답', (call: { resolve: (v: unknown) => void }) => call.resolve([item('late')])],
+    ['실패 응답', (call: { reject: (e: unknown) => void }) => call.reject(new Error('net'))],
+  ] as const)(
+    'H13 응답(%s) 전에 언마운트 → Skipped(Found·Failed 아님) · console.error 0',
+    async (_label, respond) => {
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const { result, unmount } = await renderIdle();
+      const searches = deferSearches();
+      const pending = startResearch({ result });
+
+      unmount();
+      await act(async () => {
+        respond(searches[0] as never);
+      });
+
+      await expect(pending).resolves.toBe(NearbyResearchOutcome.Skipped);
+      expect(errorSpy).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
+    },
+  );
+
+  it('H14 비용 — 누른 조회의 실패·0건 뒤 60초가 지나도 자동 재조회 0', async () => {
+    const { result } = await renderIdle();
+    searchMock.mockRejectedValueOnce(new Error('net'));
+    expect(await runResearch({ result })).toBe(NearbyResearchOutcome.Failed);
+    expect(searchMock).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      jest.advanceTimersByTime(60_000);
+    });
+    expect(searchMock).toHaveBeenCalledTimes(2);
+
+    searchMock.mockResolvedValueOnce([]);
+    expect(await runResearch({ result })).toBe(NearbyResearchOutcome.Empty);
+    expect(searchMock).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      jest.advanceTimersByTime(60_000);
+    });
+    expect(searchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('H15 모든 렌더에서 researchAvailable === (researchState가 Idle 또는 Failed) — 파생 별칭', async () => {
+    const seen: { state: NearbyResearchState; available: boolean }[] = [];
+    const { result } = renderHook(() => {
+      const hookResult = useNearbyPlaces();
+      seen.push({ state: hookResult.researchState, available: hookResult.researchAvailable });
+      return hookResult;
+    });
+    // 첫 조회 in-flight(Hidden) → 성공 → 이동(Idle)
+    act(() => result.current.setBounds(bounds({ lat: 37.5 })));
+    await settle();
+    act(() => result.current.setBounds(bounds({ lat: 38.0 })));
+    // 누른 조회 in-flight(Searching) → 실패(Failed)
+    const searches = deferSearches();
+    const failing = startResearch({ result });
+    await act(async () => {
+      searches[0].reject(new Error('net'));
+    });
+    await expect(failing).resolves.toBe(NearbyResearchOutcome.Failed);
+    // 다시 시도(Searching) → 0건(Hidden) → 다시 이동(Idle)
+    const retrying = startResearch({ result });
+    await act(async () => {
+      searches[1].resolve([]);
+    });
+    await expect(retrying).resolves.toBe(NearbyResearchOutcome.Empty);
+    act(() => result.current.setBounds(bounds({ lat: 38.5 })));
+
+    expect(new Set(seen.map((entry) => entry.state))).toEqual(
+      new Set([
+        NearbyResearchState.Hidden,
+        NearbyResearchState.Idle,
+        NearbyResearchState.Searching,
+        NearbyResearchState.Failed,
+      ]),
+    );
+    seen.forEach((entry) => {
+      expect(entry.available).toBe(
+        entry.state === NearbyResearchState.Idle || entry.state === NearbyResearchState.Failed,
+      );
+    });
+  });
+
+  // 검색 중에도 지도는 움직일 수 있다. 응답이 오면 기준선은 "검색한 지역"이 되고 현재 뷰포트는 이미 멀리 있으므로
+  //   pill은 Hidden이 아니라 Idle로 돌아와야 한다(새 지역을 다시 검색할 수 있게). 이 경로에서만 응답 처리 중의
+  //   중간 렌더가 "검색하는 중인데 누를 수 있음"이 될 수 있어(Promise 콜백 setState는 묶이지 않는다) 별칭도 함께 잠근다.
+  it('H16 검색 중 임계 초과로 옮기면 응답 뒤 Idle로 돌아오고, 그 사이 모든 렌더에서 별칭이 유지된다', async () => {
+    const seen: { state: NearbyResearchState; available: boolean }[] = [];
+    const { result } = renderHook(() => {
+      const hookResult = useNearbyPlaces();
+      seen.push({ state: hookResult.researchState, available: hookResult.researchAvailable });
+      return hookResult;
+    });
+    act(() => result.current.setBounds(bounds({ lat: 37.5 })));
+    await settle();
+    act(() => result.current.setBounds(bounds({ lat: 38.0 })));
+    const searches = deferSearches();
+    const pending = startResearch({ result }); // 38.0 검색 시작
+    act(() => result.current.setBounds(bounds({ lat: 38.5 }))); // 검색 중 멀리 이동
+    expect(result.current.researchState).toBe(NearbyResearchState.Searching);
+    seen.length = 0;
+
+    await act(async () => {
+      searches[0].resolve([item('b')]);
+    });
+
+    await expect(pending).resolves.toBe(NearbyResearchOutcome.Found);
+    expect(result.current.researchState).toBe(NearbyResearchState.Idle);
+    expect(seen.length).toBeGreaterThan(0);
+    seen.forEach((entry) => {
+      expect(entry.available).toBe(
+        entry.state === NearbyResearchState.Idle || entry.state === NearbyResearchState.Failed,
+      );
+    });
+  });
+
+  /** Promise가 지금까지 끝났는지 기록한다 — 끝나지 않는 Promise를 await해 시간 초과로 헤매지 않고 바로 실패시키기 위함. */
+  const trackOutcome = ({ pending }: { pending: Promise<NearbyResearchOutcome> }) => {
+    const box: { outcome: NearbyResearchOutcome | null } = { outcome: null };
+    void pending.then((outcome) => {
+      box.outcome = outcome;
+    });
+    return box;
+  };
+
+  // H12의 실패 응답 변형(qa-logic L2) — 밀린 요청의 onError도 결과를 정확히 한 번 알려야 한다.
+  //   빠지면 research() Promise가 영원히 끝나지 않는다(화면의 handleResearch가 매달린 채 남는다).
+  it('H12b 더 새 자동 요청(보정)에 밀린 research가 실패로 끝나도 → Skipped(Failed 아님) · status·researchState는 자동 기준', async () => {
+    const { result } = renderHook(() => useNearbyPlaces());
+    await settle();
+    act(() => result.current.preload({ bbox: bounds({ lat: 37.5 }) }));
+    await settle(); // 선로딩 성공(invoke 1)
+    const searches = deferSearches();
+    act(() => result.current.setBounds(bounds({ lat: 38.0 }))); // 보정 0틱 예약(아직 미발사)
+    const settled = trackOutcome({ pending: startResearch({ result }) }); // 즉시 발사(invoke 2)
+    await act(async () => {
+      jest.advanceTimersByTime(0); // 보정 발사(invoke 3) — research가 밀린다
+    });
+    expect(searchMock).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      searches[0].reject(new Error('net')); // 밀린 research의 실패 응답
+    });
+
+    expect(settled.outcome).toBe(NearbyResearchOutcome.Skipped);
+    expect(result.current.status).toBe('loading'); // 밀린 실패가 보정 진행 중 상태를 error로 덮지 않는다
+    expect(result.current.researchState).toBe(NearbyResearchState.Hidden);
+  });
+
+  /** 연속으로 같은 모양은 하나로 접는다 — 렌더 횟수가 아니라 "모양이 바뀐 순서"만 본다. */
+  const collapseRuns = ({ states }: { states: NearbyResearchState[] }): NearbyResearchState[] =>
+    states.filter((state, index) => index === 0 || state !== states[index - 1]);
+
+  // qa-logic L1 — 응답 처리의 setState가 하나씩 렌더되면(Promise 콜백 — 구 아키텍처·테스트 렌더러 모두 묶지 않는다)
+  //   Searching과 최종 모양 사이에 Hidden 렌더가 끼고, 화면은 그 렌더에서 pill을 언마운트했다가 새로 만든다.
+  //   방금 누른 버튼의 기기 뷰가 바뀌어 스크린리더 포커스가 떠난다 → 모양은 Searching에서 최종 모양으로 곧장 가야 한다.
+  it.each([
+    {
+      label: '실패',
+      moveWhileSearching: false,
+      respond: ({ call }: { call: DeferredCall }) => call.reject(new Error('net')),
+      expected: [NearbyResearchState.Searching, NearbyResearchState.Failed],
+    },
+    {
+      label: '검색 중 멀리 옮긴 뒤 실패',
+      moveWhileSearching: true,
+      respond: ({ call }: { call: DeferredCall }) => call.reject(new Error('net')),
+      expected: [NearbyResearchState.Searching, NearbyResearchState.Failed],
+    },
+    {
+      label: '검색 중 멀리 옮긴 뒤 성공',
+      moveWhileSearching: true,
+      respond: ({ call }: { call: DeferredCall }) => call.resolve([item('b')]),
+      expected: [NearbyResearchState.Searching, NearbyResearchState.Idle],
+    },
+    {
+      label: '제자리 성공',
+      moveWhileSearching: false,
+      respond: ({ call }: { call: DeferredCall }) => call.resolve([item('b')]),
+      expected: [NearbyResearchState.Searching, NearbyResearchState.Hidden],
+    },
+    {
+      label: '제자리 0건',
+      moveWhileSearching: false,
+      respond: ({ call }: { call: DeferredCall }) => call.resolve([]),
+      expected: [NearbyResearchState.Searching, NearbyResearchState.Hidden],
+    },
+  ])(
+    'H17 누른 조회의 응답($label)은 pill 모양을 한 번에 바꾼다 — 검색 중과 최종 모양 사이 중간 모양 0',
+    async ({ moveWhileSearching, respond, expected }) => {
+      const seen: NearbyResearchState[] = [];
+      const { result } = renderHook(() => {
+        const hookResult = useNearbyPlaces();
+        seen.push(hookResult.researchState);
+        return hookResult;
+      });
+      act(() => result.current.setBounds(bounds({ lat: 37.5 })));
+      await settle();
+      act(() => result.current.setBounds(bounds({ lat: 38.0 })));
+      const searches = deferSearches();
+      void startResearch({ result });
+      if (moveWhileSearching) act(() => result.current.setBounds(bounds({ lat: 38.5 })));
+      const before = result.current.researchState;
+      seen.length = 0;
+
+      await act(async () => {
+        respond({ call: searches[0] });
+      });
+
+      expect(collapseRuns({ states: [before, ...seen] })).toEqual(expected);
+    },
+  );
+
+  // researching을 status와 한 덩어리로 옮기면서 정한 것 — 캐시 적중(자동 경로)은 status만 ready로 바꾸고
+  //   진행 중인 누른 조회의 "검색하는 중"은 건드리지 않는다. 여기서 내리면 pill이 Searching → Hidden → (응답 뒤) Idle로
+  //   두 번 바뀌어 L1과 같은 재마운트가 생긴다. 그 요청의 응답이 아직 적용될 차례(seq 그대로)이기 때문이다.
+  it('H18 누른 조회가 진행 중일 때 대기하던 자동 조회가 캐시 적중으로 끝나도 응답이 올 때까지 Searching', async () => {
+    const { result } = renderHook(() => useNearbyPlaces());
+    await settle();
+    act(() => result.current.preload({ bbox: bounds({ lat: 37.5 }) }));
+    await settle(); // 선로딩 성공(invoke 1) — 37.5 area 보유
+    const searches = deferSearches();
+    act(() => result.current.setBounds(bounds({ lat: 38.0 }))); // 보정 0틱 예약(미발사)
+    const pending = startResearch({ result }); // 38.0 누른 조회 발사(invoke 2)
+    act(() => result.current.setBounds(bounds({ lat: 37.5 }))); // 대기 중 보정이 37.5로 재조준 → 캐시 적중(invoke 0)
+
+    expect(searchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.status).toBe('ready');
+    expect(result.current.researchState).toBe(NearbyResearchState.Searching);
+
+    act(() => result.current.setBounds(bounds({ lat: 38.5 }))); // 응답 전에 멀리 이동 — 드리프트 초과
+    expect(result.current.researchState).toBe(NearbyResearchState.Searching);
+
+    await act(async () => {
+      searches[0].resolve([item('r')]);
+    });
+    await expect(pending).resolves.toBe(NearbyResearchOutcome.Found);
+    expect(result.current.researchState).toBe(NearbyResearchState.Idle);
+  });
+
+  // H18과 같은 결정의 하이드레이션 쪽 — 세션·저장소 읽기가 느리면 첫 조회·이동·탭이 먼저 끝날 수 있다.
+  //   늦게 끝난 하이드레이션은 status만 ready로 바꾸고, 진행 중인 누른 조회의 "검색하는 중"은 그 응답이 내린다.
+  it('H19 캐시 하이드레이션이 누른 조회 진행 중에 늦게 끝나도 응답이 올 때까지 Searching', async () => {
+    const session: { release: (value: unknown) => void } = { release: () => {} };
+    getSessionMock.mockReturnValue(
+      new Promise((resolve) => {
+        session.release = resolve;
+      }),
+    );
+    loadCacheMock.mockResolvedValue(
+      cachePayload({ areas: [{ bounds: bounds({ lat: 37.52 }), items: [item('cached')] }] }),
+    );
+    const { result } = renderHook(() => useNearbyPlaces());
+    act(() => result.current.setBounds(bounds({ lat: 37.5 })));
+    await settle(); // 첫 조회(first-bounds) 성공 — 하이드레이션은 아직 세션을 기다린다
+    act(() => result.current.setBounds(bounds({ lat: 38.0 })));
+    const searches = deferSearches();
+    const pending = startResearch({ result });
+    expect(result.current.researchState).toBe(NearbyResearchState.Searching);
+
+    await act(async () => {
+      session.release({ data: { session: { user: { id: 'u1' } } } });
+    });
+
+    // 하이드레이션이 실제로 적용됐는지 먼저 본다(공허한 통과 방지).
+    expect(result.current.items.map((it) => it.kakaoPlaceId)).toContain('cached');
+    expect(result.current.researchState).toBe(NearbyResearchState.Searching);
+
+    await act(async () => {
+      searches[0].resolve([item('b')]);
+    });
+    await expect(pending).resolves.toBe(NearbyResearchOutcome.Found);
   });
 });
 

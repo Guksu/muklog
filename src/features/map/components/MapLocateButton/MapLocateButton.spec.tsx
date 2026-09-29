@@ -7,9 +7,21 @@ import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 
-import { MapLocateButton } from './MapLocateButton';
+import { MAP_LOCATE_BUTTON_SIZE, MapLocateButton } from './MapLocateButton';
 
 describe('MapLocateButton', () => {
+  it('UP5: FAB 한 변은 export 상수(킷 46)이고 렌더 치수도 그 상수를 쓴다(권한 배너 bottom 합성의 단일 출처)', () => {
+    // 킷 mk-home.jsx:364 width:46 height:46. 배너 bottom = FAB bottom 16 + 이 상수 + 간격 10(plan §4.1).
+    expect(MAP_LOCATE_BUTTON_SIZE).toBe(46);
+    renderWithTheme(<MapLocateButton onPress={() => {}} />);
+    const style = StyleSheet.flatten(screen.getByLabelText('내 위치로 이동').props.style) as {
+      width?: number;
+      height?: number;
+    };
+    expect(style.width).toBe(MAP_LOCATE_BUTTON_SIZE);
+    expect(style.height).toBe(MAP_LOCATE_BUTTON_SIZE);
+  });
+
   it('내 위치로 이동 버튼(접근성 라벨)을 렌더한다', () => {
     renderWithTheme(<MapLocateButton onPress={() => {}} />);
     expect(screen.getByLabelText('내 위치로 이동')).toBeTruthy();

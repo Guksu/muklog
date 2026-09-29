@@ -186,6 +186,57 @@ describe('MuklogEditorRoute — 위시 "다녀왔어요" prefill(muklogId 없음
   });
 });
 
+// map-wish-card-visit(U12): 지도 위시 카드 "기록하기"가 보내는 params 모양 그대로 — 기존 동작 잠금(처음부터 green이 정상).
+//   지도는 여러 로그를 함께 보여 roomId가 "그 위시의 로그"다. 에디터가 그 로그로 저장하고(ER1), 도로명·카카오 id까지
+//   장소를 시드하며(ER2), 위시 출처가 있어도 취소면 위시를 지우지 않는다(ER3 — 지금까지 이 조합을 직접 잠근 케이스가 없었다).
+describe('MuklogEditorRoute — 지도 위시 카드 진입(map-wish-card-visit · U12)', () => {
+  const mapWishParams = () => ({
+    roomId: 'r2',
+    prefill: {
+      placeName: '연남 파스타',
+      category: 'pasta',
+      area: '연남동',
+      roadAddress: '서울 마포구 동교로 1',
+      lat: 37.8,
+      lng: 127.3,
+      kakaoPlaceId: '777',
+    },
+    fromWishlistId: 'w8',
+  });
+
+  it('ER1 저장 대상 로그는 params의 roomId(그 위시의 로그)다', () => {
+    mockRouteParams = mapWishParams();
+    renderWithTheme(<MuklogEditorRoute />);
+    expect(screen.getByText('editor:create')).toBeTruthy();
+    expect(lastEditorProps.roomId).toBe('r2');
+  });
+
+  it('ER2 프리필 7필드가 장소 선택으로 시드된다(주소는 위시에 없어 null, 도로명·카카오 id·좌표 포함)', () => {
+    mockRouteParams = mapWishParams();
+    renderWithTheme(<MuklogEditorRoute />);
+    expect(lastEditorProps.selectedPlace).toEqual({
+      placeName: '연남 파스타',
+      category: 'pasta',
+      area: '연남동',
+      address: null,
+      roadAddress: '서울 마포구 동교로 1',
+      kakaoPlaceId: '777',
+      lat: 37.8,
+      lng: 127.3,
+    });
+  });
+
+  it('ER3 위시 출처가 있어도 취소(뒤로)면 위시를 지우지 않고 돌아가기만 한다', async () => {
+    mockRouteParams = mapWishParams();
+    renderWithTheme(<MuklogEditorRoute />);
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('probe-back'));
+    });
+    expect(mockRemoveWishlist).not.toHaveBeenCalled();
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('MuklogEditorRoute — 편집 모드(muklogId 있음)', () => {
   beforeEach(() => {
     mockRouteParams = { roomId: 'r1', muklogId: 'm1' };

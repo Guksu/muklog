@@ -1,6 +1,8 @@
 // src/features/map/toWishPin.ts
 // wishlist_items snake row → WishPin(camel) 매핑 (map-wish-pins §3.3 / T2, 경계면 §7-2).
-//   생산자: useWishPins 크로스-로그 select(snake). 소비자: wishToMapMarkers.
+//   생산자: useWishPins 크로스-로그 select(snake). 소비자: wishToMapMarkers · MapTabScreen(위시 카드·에디터 프리필).
+//   map-wish-card-visit: road_address·kakao_place_id → roadAddress·kakaoPlaceId. 키가 빠진 행도 undefined가 아니라
+//     null로 맞춘다 — 에디터 프리필 계약(MuklogEditorPrefill)이 string | null이라 undefined가 라우트 파라미터로 새지 않게.
 //   좌표 방어: 쿼리가 lat/lng not null을 보장하나, null/문자열/비유한이 새어도 null 반환(호출측이 필터)로 지도 핀 보호.
 //   먹로그 핀 트리오(toMuklogPin) 미러 — id=wishlist_items.id(kind 판별자로 탭 컬렉션 구분).
 import { type WishPin } from '../types';
@@ -12,6 +14,8 @@ export type WishPinRow = {
   place_name: string;
   category: string | null;
   area: string | null;
+  road_address: string | null;
+  kakao_place_id: string | null;
   lat: number | null;
   lng: number | null;
 };
@@ -32,6 +36,8 @@ export const toWishPin = ({ row }: { row: WishPinRow }): WishPin | null => {
     placeName: row.place_name,
     category: row.category,
     area: row.area,
+    roadAddress: row.road_address ?? null,
+    kakaoPlaceId: row.kakao_place_id ?? null,
     lat,
     lng,
   };

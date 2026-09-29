@@ -66,6 +66,15 @@ describe('traceNearby (A0-1·A0-2)', () => {
     expect(NearbyTraceEvent.InvokeEnd).toBe('invoke:end');
     expect(NearbyTraceEvent.MapReady).toBe('map:ready');
     expect(NearbyTraceEvent.FirstRender).toBe('render:first');
+    // map-nearby-feedback(U10 ④): 디바이스 스모크에서 "SDK ERROR가 아니라 지도 준비 제한 시간이 울렸다"를 가르는 키.
+    expect(NearbyTraceEvent.MapBootTimeout).toBe('map:boot-timeout');
+  });
+
+  it('map:boot-timeout도 __DEV__=false면 no-op이다(프로덕션 오버헤드 0)', () => {
+    setDevMode({ isDev: false });
+    const spies = consoleSpies();
+    traceNearby({ event: NearbyTraceEvent.MapBootTimeout, detail: { ms: 10_000 } });
+    expect(spies.log).not.toHaveBeenCalled();
   });
 });
 

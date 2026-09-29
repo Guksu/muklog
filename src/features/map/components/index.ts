@@ -14,8 +14,18 @@ export {
 } from './LogPickerSheet';
 export { MapLegend } from './MapLegend';
 export { MuklogMiniMap, type MuklogMiniMapProps } from './MuklogMiniMap';
-export { MapLocateButton, type MapLocateButtonProps } from './MapLocateButton';
-export { MapResearchButton, type MapResearchButtonProps } from './MapResearchButton';
+export {
+  MapLocateButton,
+  MAP_LOCATE_BUTTON_SIZE,
+  type MapLocateButtonProps,
+} from './MapLocateButton';
+export { MapPermissionBanner, type MapPermissionBannerProps } from './MapPermissionBanner';
+export {
+  MapResearchButton,
+  MapResearchButtonState,
+  MAP_RESEARCH_COPY,
+  type MapResearchButtonProps,
+} from './MapResearchButton';
 export {
   MapStatusOverlay,
   MapStatusTone,

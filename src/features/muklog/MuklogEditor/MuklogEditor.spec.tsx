@@ -3,7 +3,7 @@
 //   저장→createMuklog→onSaved (plan §6.3 / §5 T9, AC2·AC3·AC12). useCreateMuklog 모킹으로 폼 동작만 검증.
 //   ⚠️ 시트(MuklogEntrySheet)→풀스크린 전환: visible 제거, onClose→onBack. 폼/저장/사진/장소 로직은 불변.
 import React from 'react';
-import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { AccessibilityInfo, DeviceEventEmitter, Keyboard, Platform, ScrollView, StyleSheet } from 'react-native';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 
 import { SWAP_TRANSITION_TEST_ID } from '@/components/SwapTransition';
@@ -1182,5 +1182,135 @@ describe('MuklogEditor — 미저장 이탈과 저장 보호', () => {
     fireEvent.press(screen.getByLabelText('계속 작성하기'));
     await act(async () => fireEvent.press(screen.getByLabelText('저장')));
     expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+});
+
+// 네이티브 키보드 회피 경계: 실제 가림/복구는 시뮬레이터에서 별도 검증한다.
+describe('MuklogEditor 키보드 회피', () => {
+  const previousOS = Platform.OS;
+  const setOS = ({ os }: { os: typeof Platform.OS }) =>
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: os });
+  const searchControl = (): MuklogPlaceSearchControl => ({
+    query: '',
+    onChangeQuery: jest.fn(),
+    status: 'idle',
+    results: [],
+  });
+  // 운영 배선(MuklogEditorRoute)은 항상 placeSearch를 주입한다 — 폼 안의 입력은 메모 하나뿐이다.
+  const renderWiredEditor = () =>
+    renderWithTheme(
+      <MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} placeSearch={searchControl()} />,
+    );
+  // 폼 ScrollView — 검색뷰(PlaceSearchView)의 ScrollView도 keyboardShouldPersistTaps="handled"라 자동 inset prop으로 구분한다.
+  const formOf = ({ view }: { view: ReturnType<typeof renderEditor> }) =>
+    view
+      .UNSAFE_queryAllByType(ScrollView)
+      .find((node) => node.props.automaticallyAdjustKeyboardInsets !== undefined);
+  // RN jest 목의 scrollToEnd(프로토타입 공유 jest.fn) — 어느 인스턴스에서 불렸는지는 mock.contexts로 본다.
+  const scrollToEnd = () =>
+    (ScrollView as unknown as { prototype: { scrollToEnd: jest.Mock } }).prototype.scrollToEnd;
+  // 네이티브가 이벤트를 보내는 경로 그대로 — 해제된 리스너는 불리지 않는다.
+  const showKeyboard = () =>
+    act(() => {
+      DeviceEventEmitter.emit('keyboardDidShow', {
+        duration: 250,
+        easing: 'keyboard',
+        endCoordinates: { screenX: 0, screenY: 508, width: 393, height: 344 },
+      });
+    });
+  const subscriptionCount = () => DeviceEventEmitter.listenerCount('keyboardDidShow');
+
+  afterEach(() => {
+    setOS({ os: previousOS });
+    jest.restoreAllMocks();
+  });
+
+  it.each(['ios', 'android'] as const)('%s는 플랫폼에 맞게 자동 키보드 inset을 적용한다', (os) => {
+    setOS({ os });
+    const view = renderEditor();
+    const form = view
+      .UNSAFE_getAllByType(ScrollView)
+      .find((node) => node.props.keyboardShouldPersistTaps === 'handled');
+    expect(form?.props.automaticallyAdjustKeyboardInsets).toBe(os === 'ios');
+  });
+
+  describe('메모 포커스 중 키보드 표시', () => {
+    it('A1: iOS에서 메모에 포커스한 채 키보드가 뜨면 폼을 맨 아래로 스크롤한다', () => {
+      const view = renderEditor();
+      fireEvent(screen.getByLabelText('메모'), 'focus');
+      showKeyboard();
+      expect(scrollToEnd()).toHaveBeenCalledTimes(1);
+      expect(scrollToEnd()).toHaveBeenCalledWith({ animated: true });
+      expect(scrollToEnd().mock.contexts[0]).toBe(formOf({ view })?.instance);
+    });
+
+    it('A1: 운영 배선(편집 + 장소검색 주입)에서도 같게 동작한다', () => {
+      const view = renderWithTheme(
+        <MuklogEditor
+          roomId="r1"
+          onBack={onBack}
+          onSaved={onSaved}
+          initial={editInitial()}
+          onSubmit={jest.fn()}
+          placeSearch={searchControl()}
+        />,
+      );
+      fireEvent(screen.getByLabelText('메모'), 'focus');
+      fireEvent.changeText(screen.getByLabelText('메모'), '인생 까르보나라!'); // 입력(재렌더) 뒤에도 포커스 판정 유지
+      showKeyboard();
+      expect(scrollToEnd()).toHaveBeenCalledTimes(1);
+      expect(scrollToEnd().mock.contexts[0]).toBe(formOf({ view })?.instance);
+    });
+
+    // '장소 이름' 입력에는 포커스 핸들러가 없다 — 실질은 "메모에 포커스가 없는 상태"의 검증이다.
+    it('A2: 메모에 포커스가 없으면(다른 입력 포커스 포함) 스크롤하지 않는다', () => {
+      renderEditor();
+      fireEvent(screen.getByLabelText('장소 이름'), 'focus');
+      showKeyboard();
+      expect(scrollToEnd()).not.toHaveBeenCalled();
+    });
+
+    it('A2: 메모에서 포커스가 빠진 뒤에는 스크롤하지 않는다', () => {
+      renderEditor();
+      fireEvent(screen.getByLabelText('메모'), 'focus');
+      fireEvent(screen.getByLabelText('메모'), 'blur');
+      showKeyboard();
+      expect(scrollToEnd()).not.toHaveBeenCalled();
+    });
+
+    it('A2: 메모 포커스 상태로 장소검색에 들어가면 검색 중에도, 폼으로 돌아온 뒤에도 스크롤하지 않는다', () => {
+      const view = renderWiredEditor();
+      fireEvent(screen.getByLabelText('메모'), 'focus');
+      fireEvent.press(screen.getByLabelText('장소 검색하기')); // 포커스된 메모가 onBlur 없이 언마운트된다
+      expect(formOf({ view })).toBeUndefined();
+      expect(() => showKeyboard()).not.toThrow(); // 검색 입력 자동 포커스의 키보드 이벤트(폼 ref는 null)
+      fireEvent.press(screen.getByLabelText('검색 취소')); // 폼 재마운트 — 메모에는 포커스가 없다
+      expect(formOf({ view })).toBeDefined();
+      showKeyboard();
+      expect(scrollToEnd()).not.toHaveBeenCalled();
+    });
+
+    it('A3: Android는 키보드 리스너를 구독하지 않는다(기존 resize 유지)', () => {
+      setOS({ os: 'android' });
+      const addListener = jest.spyOn(Keyboard, 'addListener');
+      const before = subscriptionCount();
+      renderEditor();
+      expect(addListener).not.toHaveBeenCalled();
+      expect(subscriptionCount()).toBe(before);
+    });
+
+    it('A4: 구독은 마운트 동안 keyboardDidShow 1건뿐이고 언마운트하면 해제된다', () => {
+      const addListener = jest.spyOn(Keyboard, 'addListener');
+      const before = subscriptionCount();
+      const view = renderEditor();
+      fireEvent(screen.getByLabelText('메모'), 'focus');
+      fireEvent.changeText(screen.getByLabelText('메모'), '가'); // 재렌더가 재구독을 만들지 않는다
+      expect(addListener.mock.calls.map(([event]) => event)).toEqual(['keyboardDidShow']);
+      expect(subscriptionCount()).toBe(before + 1);
+      view.unmount();
+      expect(subscriptionCount()).toBe(before);
+      showKeyboard();
+      expect(scrollToEnd()).not.toHaveBeenCalled();
+    });
   });
 });
