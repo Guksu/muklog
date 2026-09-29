@@ -31,6 +31,16 @@ Jest의 `fakeTimers.doNotFake`는 `setImmediate`와 `clearImmediate`를 함께 �
 
 RN 0.76의 `StatusBar`는 실행이 끝난 immediate 핸들도 보관한다. 가짜 시간에서 만든 핸들이 `useRealTimers()` 뒤 native `clearImmediate`로 넘어가면 Node의 즉시 실행 큐를 손상시켜 다른 테스트 종료까지 지연시킬 수 있다. 두 함수를 개별 spec에서 다시 가짜 함수로 바꾸지 않는다. `advanceTimersByTime`으로 immediate 완료를 기대하지 말고 필요한 비동기 결과를 `await`한다. 경계 회귀는 `src/test/timerEnvironment/timerEnvironment.spec.ts`에서 검증한다.
 
+### 로컬 워크트리와 경로 격리
+
+Claude 세션은 `.claude/worktrees/<이름>/`에 저장소 사본(워크트리)을 만들고, 사본마다 `__mocks__`와 `node_modules`를 둔다. `node_modules`는 심볼릭 링크가 아닌 실제 디렉터리일 수도 있다. Jest 설정의 `modulePathIgnorePatterns`와 `testPathIgnorePatterns`는 `<rootDir>/\.claude/`로 이 폴더를 함께 제외한다.
+
+- **모듈 맵 제외(`modulePathIgnorePatterns`)**: 모듈 맵은 Jest가 수동 mock과 모듈 위치를 모아 두는 색인이다. 여기서 빠지지 않으면 루트 `__mocks__`와 같은 이름의 mock이 중복된다. 워크트리 쪽 mock이 선택되면 그 사본의 초기화되지 않은 `react-native`를 불러 스위트가 시작하지 못한다(`__fbBatchedBridgeConfig is not set`). 어느 쪽이 선택될지는 캐시 갱신 순서에 달려 있어 간헐적으로 보인다.
+- **`<rootDir>` 고정**: 패턴을 `/\.claude/`처럼 쓰면 워크트리 안에서 실행할 때 절대 경로 자체에 `/.claude/`가 들어 있어 모든 테스트가 제외된다. 두 패턴 모두 반드시 `<rootDir>`로 시작한다.
+- `.claude/` 아래 파일(스킬·훅·스크립트)은 테스트에서 import하지 않는다.
+
+CI에는 워크트리가 없어 실행으로 재현되지 않으므로 `src/test/jestPathIsolation/jestPathIsolation.spec.ts`가 두 패턴을 메인 트리·워크트리 두 루트에서 판정해 계약을 잠근다.
+
 ## 무엇을, 어느 깊이로 테스트하나
 
 | 대상 | 테스트 | 비고 |
