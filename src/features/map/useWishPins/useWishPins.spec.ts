@@ -2,6 +2,7 @@
 // 크로스-로그 위시 핀 조회 훅 — from('wishlist_items').select(컬럼).not(lat,is,null).not(lng,is,null)
 //   .order('created_at',desc) 계약. room 필터 없음(RLS가 크로스-로그 스코프), 마운트 1회 + refresh(폴링 없음).
 //   (map-wish-pins §3.2·§7-1 / T4) SQL/RLS는 단위 대상 아님 → supabase 체이닝 모킹.
+//   map-wish-card-visit(U12): 지도 위시 카드 프리필용 road_address·kakao_place_id를 같은 조회에서 읽는다(UW1·UW2 — 호출 수 불변).
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 jest.mock('@/lib/supabase', () => ({
@@ -23,6 +24,8 @@ const row = (over?: Record<string, unknown>) => ({
   place_name: '성수 칼국수',
   category: 'noodle',
   area: '성수동',
+  road_address: '서울 성동구 연무장길 1',
+  kakao_place_id: '12345',
   lat: 37.544,
   lng: 127.055,
   ...over,
@@ -88,6 +91,40 @@ describe('useWishPins', () => {
     // lat=null 행은 toWishPin이 제외 → 유효 1건.
     expect(state.pins.map((p) => p.id)).toEqual(['w1']);
     expect(state.pins[0].roomId).toBe('r1');
+  });
+
+  it('UW1 select 컬럼은 정확히 9개 — 에디터 프리필용 road_address·kakao_place_id 포함(순서 무관)', async () => {
+    mockQueryResult({ data: [row()], error: null });
+    renderHook(() => useWishPins());
+    await waitFor(() => expect(selectMock).toHaveBeenCalledTimes(1));
+    const columns = String(selectMock.mock.calls[0][0])
+      .split(',')
+      .map((c) => c.trim())
+      .filter((c) => c.length > 0);
+    expect(columns).toHaveLength(9);
+    expect(new Set(columns)).toEqual(
+      new Set([
+        'id',
+        'room_id',
+        'place_name',
+        'category',
+        'area',
+        'road_address',
+        'kakao_place_id',
+        'lat',
+        'lng',
+      ]),
+    );
+  });
+
+  it('UW2 조회 행의 도로명·카카오 장소 id가 핀의 roadAddress·kakaoPlaceId로 나온다', async () => {
+    mockQueryResult({ data: [row({ road_address: '서울 마포구 동교로 1', kakao_place_id: '777' })], error: null });
+    const { result } = renderHook(() => useWishPins());
+    await waitFor(() => expect(result.current.state.status).toBe('ready'));
+    const state = result.current.state;
+    if (state.status !== 'ready') throw new Error('expected ready');
+    expect(state.pins[0].roadAddress).toBe('서울 마포구 동교로 1');
+    expect(state.pins[0].kakaoPlaceId).toBe('777');
   });
 
   it('조회 실패 시 error 상태로 전이한다', async () => {

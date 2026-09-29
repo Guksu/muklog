@@ -66,6 +66,7 @@ import {
 } from '@/features/wishlist';
 import { useTheme } from '@/theme';
 
+import { pickEditorPrefill } from '../../pickEditorPrefill';
 import { Routes, type AppStackParamList } from '../../routes';
 import { useRefreshOnFocus } from '../../useRefreshOnFocus';
 
@@ -314,7 +315,8 @@ export const LogScreen = () => {
     });
   };
 
-  // 다녀왔어요 → MuklogEditor 생성 모드 + 프리필 + fromWishlistId(생성 성공 시 위시 삭제, plan §4.5·TC-5).
+  // 기록하기(구 "다녀왔어요") → MuklogEditor 생성 모드 + 프리필 + fromWishlistId(생성 성공 시 위시 삭제, TC-5).
+  //   프리필 7필드는 지도 위시 카드와 같은 공용 함수로 만든다(map-wish-card-visit — 두 진입의 에디터 계약 단일 출처).
   const handleVisitWish = ({ id }: { id: string }) => {
     const item =
       wishlistState.status === 'ready'
@@ -323,15 +325,7 @@ export const LogScreen = () => {
     if (!item) return;
     navigation.navigate(Routes.MuklogEditor, {
       roomId,
-      prefill: {
-        placeName: item.placeName,
-        category: item.category,
-        area: item.area,
-        roadAddress: item.roadAddress,
-        lat: item.lat,
-        lng: item.lng,
-        kakaoPlaceId: item.kakaoPlaceId,
-      },
+      prefill: pickEditorPrefill({ wish: item }),
       fromWishlistId: id,
     });
   };

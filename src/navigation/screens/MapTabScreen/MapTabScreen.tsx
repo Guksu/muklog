@@ -13,6 +13,9 @@
 //   READY·ERROR를 하나도 보내지 않으면 1회성 제한 시간이 SDK 오류 안내로 바꾼다(늦은 READY는 자동 복구).
 //   map-pin-card-detail(U11): 우리 맛집 카드 → MuklogDetail({ muklogId }) 이동. 이동해도 선택을 풀지 않아 복귀 시
 //   카드·핀 강조·필터가 그대로고, 편집·삭제 반영은 기존 포커스 재조회(핀·위시 각 1회)가 맡는다.
+//   map-wish-card-visit(U12): 위시 카드 "기록하기" → MuklogEditor({ 위시의 로그, 프리필 7필드, fromWishlistId }) —
+//   위시 목록 "기록하기"와 같은 에디터 계약. 지도 탭이 포커스를 잃은 뒤의 재탭은 무시하고, 선택은 유지하며,
+//   저장(위시 삭제)·취소 반영은 같은 포커스 재조회가 맡는다(위시가 빠지면 기존 선택 정리가 카드를 닫는다).
 //
 // 정책: 진입 1회 핀 조회 + 권한 1회 요청 + 명시적 refresh만(폴링/Realtime 없음, 비용 가드레일 §8).
 //   현재위치는 RN expo-location으로 받아 INIT.me로 주입(WebView geolocation 미사용 — plan §9.2).
@@ -88,6 +91,7 @@ import { useAddNearbyWish } from '@/features/wishlist';
 import { env } from '@/lib/env';
 import { useTheme } from '@/theme';
 
+import { pickEditorPrefill } from '../../pickEditorPrefill';
 import { Routes, type AppStackParamList } from '../../routes';
 import { useRefreshOnFocus } from '../../useRefreshOnFocus';
 
@@ -462,6 +466,23 @@ export const MapTabScreen = () => {
     }
   };
 
+  // 위시 카드 "기록하기"(map-wish-card-visit · U12) — 위시 목록 "기록하기"(LogScreen)와 같은 에디터 계약.
+  //   · roomId는 그 위시의 로그다. 지도는 여러 로그를 함께 보여 "지금 로그"가 없다 — 다른 로그로 저장되면 안 된다.
+  //   · 프리필은 공용 pickEditorPrefill(7필드만, 두 진입이 같은 값). muklogId를 넣지 않는다(넣으면 편집 모드).
+  //   · 지도 탭이 이미 포커스를 잃었으면(에디터로 넘어가는 중) 무시한다. 에디터는 처음 열릴 때 한 번만 프리필하므로,
+  //     같은 이름 navigate의 파라미터 교체로 다른 위시가 실리면 화면의 가게와 저장 로그·지울 위시가 어긋난다.
+  //     isFocused()는 호출 순간의 네비게이션 상태를 읽는다(useIsFocused 렌더 값은 같은 렌더 안의 두 번째 탭을 못 막는다).
+  //     상태를 저장하지 않는 읽기라 복귀 때 풀 것이 없다 — 돌아오면 다시 포커스라 자연히 누를 수 있다.
+  //   · push가 아니라 navigate, 선택(setSelected)을 풀지 않음, 조회·주입 없음(U11 카드와 같은 규칙).
+  const handleVisitWish = ({ wish }: { wish: WishPin }) => {
+    if (!navigation.isFocused()) return;
+    navigation.navigate(Routes.MuklogEditor, {
+      roomId: wish.roomId,
+      prefill: pickEditorPrefill({ wish }),
+      fromWishlistId: wish.id,
+    });
+  };
+
   // kind 3분기: saved → SelectedSpotCard / nearby → NearbySpotCard / wish → WishSpotCard(각 컬렉션 lookup).
   const selectedPin =
     selected?.kind === MapPinKind.Saved
@@ -668,14 +689,16 @@ export const MapTabScreen = () => {
         />
       ) : null}
 
-      {/* 위시 스팟 카드 — wish 핀 탭 시 하단 도킹(이름·카테고리·area, 별점/heart/거리/액션 없음).
-          coverEmoji는 핀(wishToMapMarkers)과 동일한 wishPinEmoji로 산출·주입(카드↔핀 단일 출처, plan §7-6). */}
+      {/* 위시 스팟 카드 — wish 핀 탭 시 하단 도킹(이름·카테고리·area, 별점/heart/거리 없음).
+          coverEmoji는 핀(wishToMapMarkers)과 동일한 wishPinEmoji로 산출·주입(카드↔핀 단일 출처).
+          카드 아래 "기록하기"(onVisit) → 이 위시로 새 먹로그 작성(map-wish-card-visit · U12, handleVisitWish). */}
       {selectedWish ? (
         <WishSpotCard
           placeName={selectedWish.placeName}
           category={selectedWish.category}
           coverEmoji={wishPinEmoji({ category: selectedWish.category })}
           area={selectedWish.area}
+          onVisit={() => handleVisitWish({ wish: selectedWish })}
         />
       ) : null}
 

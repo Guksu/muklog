@@ -12,6 +12,8 @@ const wishPin = (over?: Partial<WishPin>): WishPin => ({
   placeName: '성수 칼국수',
   category: 'noodle',
   area: '성수동',
+  roadAddress: null,
+  kakaoPlaceId: null,
   lat: 37.5,
   lng: 127.0,
   ...over,
