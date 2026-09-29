@@ -30,9 +30,10 @@ jest.mock('@/features/map/useMuklogPins', () => ({ useMuklogPins: jest.fn() }));
 jest.mock('@/features/map/useLocationPermission', () => ({ useLocationPermission: jest.fn() }));
 jest.mock('@/features/map/useWishPins', () => ({ useWishPins: jest.fn() }));
 // useNavigation: 우리 맛집 카드 → 먹로그 상세 배선(map-pin-card-detail)이 화면에서 호출한다. 여기선 이동을 보지 않아 no-op.
+//   isFocused: 위시 카드 "기록하기"의 전환 중 재탭 가드가 읽는다(map-wish-card-visit) — 실제 API 모양만 맞춘다.
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: () => {},
-  useNavigation: () => ({ navigate: jest.fn() }),
+  useNavigation: () => ({ navigate: jest.fn(), isFocused: () => true }),
 }));
 jest.mock('@/features/wishlist', () => ({
   useAddNearbyWish: () => ({

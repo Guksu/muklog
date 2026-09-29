@@ -19,8 +19,9 @@ export const Routes = {
   NotifSettings: 'NotifSettings',
 } as const;
 
-// 위시 "다녀왔어요" → MuklogEditor 생성 모드 프리필(wishlist plan §4.5). 위시 항목의 place 필드를 그대로 싣어
+// 위시 "기록하기"(구 "다녀왔어요") → MuklogEditor 생성 모드 프리필. 위시의 place 필드를 그대로 실어
 //   재검색 없이 작성 화면에 채운다. address는 위시에 미저장 → 생성 시 null(좌표/road만 보존).
+//   진입 2곳(위시 목록 · 지도 위시 카드, map-wish-card-visit)이 같은 7필드를 pickEditorPrefill로 만든다.
 export type MuklogEditorPrefill = {
   placeName: string;
   category: string | null;
@@ -40,7 +41,8 @@ export type AppStackParamList = {
   // 상세는 muklogId만 받고 자체 조회(roomId는 조회 결과의 room_id로 충분, RLS가 권한 차단). plan §4.1.
   [Routes.MuklogDetail]: { muklogId: string };
   // 에디터: roomId(저장 대상) + muklogId(있으면 편집 프리필 조회, 없으면 작성). FLAG-1.
-  //   wishlist: 위시 "다녀왔어요" → muklogId 없음 + prefill 있음 = 생성 모드 + 프리필. 생성 성공 시 fromWishlistId 위시 삭제.
+  //   wishlist: 위시 "기록하기"(위시 목록·지도 위시 카드) → muklogId 없음 + prefill 있음 = 생성 모드 + 프리필.
+  //   생성 성공 시 fromWishlistId 위시 삭제.
   [Routes.MuklogEditor]: {
     roomId: string;
     muklogId?: string;

@@ -60,13 +60,17 @@ export type MapMarker = {
 };
 
 /** 위시 핀 1건(camelCase, map-wish-pins §3.3). wishlist_items 크로스-로그 select → toWishPin 매핑 결과.
- *  lat/lng는 쿼리 필터로 non-null 보장(toWishPin이 finite 방어). id = wishlist_items.id(kind 판별자로 탭 컬렉션 구분). */
+ *  lat/lng는 쿼리 필터로 non-null 보장(toWishPin이 finite 방어). id = wishlist_items.id(kind 판별자로 탭 컬렉션 구분).
+ *  map-wish-card-visit: roadAddress·kakaoPlaceId는 지도 위시 카드 "기록하기"의 에디터 프리필(pickEditorPrefill) 출처 —
+ *  위시 목록 경로와 같은 7필드를 채우려고 같은 조회에서 함께 읽는다(호출 수 불변). */
 export type WishPin = {
   id: string;
   roomId: string;
   placeName: string;
   category: string | null; // CAT key | null(폴백 이모지)
   area: string | null;
+  roadAddress: string | null; // 도로명 주소(지도에서 담은 위시 등은 null)
+  kakaoPlaceId: string | null; // 카카오 장소 id(직접 입력 위시는 null)
   lat: number;
   lng: number;
 };
