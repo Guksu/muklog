@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-09-28 |
 | 브랜치 | chore/jest-ignore-claude-worktrees |
-| PR | 미생성 |
+| PR | https://github.com/Guksu/muklog/pull/39 |
 | 관련 경로 | package.json, src/test/jestPathIsolation/jestPathIsolation.spec.ts, docs/testing-strategy.md |
 
 ## 1. 개요
@@ -47,12 +47,14 @@
 | A/B 증분 갱신(메인 트리 배치) | 같은 캐시에서 워크트리 mock 파일의 수정 시각만 갱신 후 재실행 | 수정 전 fail(Invariant, 워크트리 mock 선택) / 수정 후 pass, 경고 0 |
 | 전체(메인 트리 배치) | 수정 후 설정 주입, `npx jest` 전체 | pass — 233 suites / 2651 tests, 중복 경고 0, 로그에 워크트리 경로 0건 |
 | 독립 QA | qa-logic 읽기 전용 검토(스펙·컨벤션 2축) | 차단 이슈 0. 스펙 축 권고 1(`node_modules` 케이스 무하중 → 반영), 참고 4(아래 §5에 반영). 컨벤션 축 위반 0. 실제 Jest API(`readConfig`·`Runtime.createHasteMap`·`SearchSource`)로 스크래치 가짜 저장소에서 수정 전 실패·수정 후 정상을 독립 재현 |
+| PR 병합 가능 여부 | `gh pr view 39`(앱 PR 상태 포함) | MERGEABLE / CLEAN, 충돌 없음. 저장소에 설정된 CI 검사 0건 |
+| main 병합 상태 | PR 생성 시점 `origin/main`(이 브랜치보다 6커밋 앞섬, 겹치는 파일 0)에 이 브랜치 변경 4파일을 얹어 스크래치에서 `npx jest` 전체·`npx tsc --noEmit` | pass — 237 suites / 2849 tests, 타입 검사 통과 |
 
 테스트 수 차이(2660 대 2651)는 두 체크아웃의 소스 차이다. 이 브랜치에는 신규 spec 18건이 있고, 메인 트리 브랜치에는 이 브랜치에 없는 커밋이 있다. 메인 트리 배치 전체 실행은 spec 수정 전에 했지만, 주입한 jest 설정은 이후 바뀌지 않았다.
 
 ## 4. 확인 필요 · 후속
 
-- 커밋·PR은 사용자가 직접 한다(요청 시에만 대행). 메인 트리는 이 변경이 main에 병합된 뒤 브랜치를 갱신하면 적용된다. 설정이 바뀌면 Jest 캐시 키가 달라져 새 모듈 맵을 만들므로 캐시 삭제는 필요 없다.
+- 커밋·푸시·PR 생성은 사용자 요청으로 대행했다. PR 병합은 사용자가 한다. 메인 트리는 이 변경이 main에 병합된 뒤 브랜치를 갱신하면 적용된다. 설정이 바뀌면 Jest 캐시 키가 달라져 새 모듈 맵을 만들므로 캐시 삭제는 필요 없다.
 - 후속(범위 밖): `testPathIgnorePatterns`의 `/supabase/`도 루트에 고정되지 않았다. 목적은 Deno로 도는 `supabase/functions/` 테스트 제외인데, 지금 패턴은 `src/lib/supabase/` 아래 spec도 조용히 제외한다. 현재 그 폴더에 spec이 없어 피해는 없다. 그곳에 테스트를 추가하는 작업에서 `<rootDir>/supabase/`로 고정한다.
 
 ## 5. 주의사항
