@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-09-29 |
 | 브랜치 | feat/map-wish-card-visit |
-| PR | 미생성 |
+| PR | https://github.com/Guksu/muklog/pull/38 |
 | 관련 경로 | src/features/map/components/WishSpotCard/, src/navigation/screens/MapTabScreen/, src/navigation/pickEditorPrefill/(신규), src/features/map/useWishPins/, src/features/map/toWishPin/, src/features/map/types/, src/navigation/screens/LogScreen/, docs/design/architecture.md, docs/ux/ux-backlog.md |
 
 ## 1. 개요
