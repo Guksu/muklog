@@ -9,26 +9,101 @@ import { renderWithTheme } from '@/test/renderWithTheme';
 
 const mockParams: { current: unknown } = { current: { roomId: 'r1' } };
 const mockGoBack = jest.fn();
+// wishlist-visit-double-tap(U67): 위시 "기록하기"의 전환 중 재탭 가드가 읽는 isFocused()를 더한다(지도 탭 spec과 같은 흉내).
+//   실제처럼 navigate가 일어나면 로그 화면이 포커스를 잃는다(beforeEach의 mockImplementation — blur 정리 함수까지) —
+//   항상 true인 더블은 가드를 지워도 green이라 잠그지 못한다. push·dispatch는 두지 않는다(push로 바꾼 구현은 TypeError로 실패한다).
 const mockNavigate = jest.fn();
+const mockNavState: { focused: boolean } = { focused: true };
 // room-lifecycle(T9~T11) — useLeaveRoom/useCancelRoomDeletion 더블 + loading/error 가변 상태.
 const mockLeaveRoom = jest.fn();
 const mockCancelRoomDeletion = jest.fn();
 const mockLeaveHookState: { loading: boolean; error: string | null } = { loading: false, error: null };
 const mockCancelHookState: { loading: boolean; error: string | null } = { loading: false, error: null };
-// useFocusEffect: 마운트 시 콜백 1회 실행(첫 포커스). refireFocus로 재포커스(에디터/상세 복귀) 흉내.
-let lastFocusCb: (() => void) | null = null;
-const refireFocus = () => lastFocusCb?.();
-jest.mock('@react-navigation/native', () => ({
-  useRoute: () => ({ params: mockParams.current }),
-  useNavigation: () => ({ goBack: mockGoBack, navigate: mockNavigate }),
-  useFocusEffect: (cb: () => void) => {
-    const ReactLib = require('react');
-    ReactLib.useEffect(() => {
-      lastFocusCb = cb;
-      cb();
-    }, [cb]);
-  },
-}));
+// useFocusEffect 더블 — 실제 useFocusEffect(@react-navigation/core)처럼 ① 화면이 등록한 포커스 효과를 훅 자리마다 **전부**
+//   보관하고 ② 마운트(또는 효과가 바뀔 때) 화면이 포커스면 바로 발화해 반환된 정리 함수를 저장했다가(첫 포커스)
+//   ③ 로그 화면이 포커스를 잃을 때(blur = navigate) 부른다. 복귀는 focusLogScreen이 쉬던 효과를 다시 발화한다.
+//   마지막 콜백 하나만 보관하고 정리 함수를 버리던 더블은 "화면을 떠날 때 세그를 '기록'으로 되돌리거나 검색뷰를 여는"
+//   회귀(blur 정리 함수)를 통과시켰다 — 에디터에서 돌아오면 위시 목록이 사라지는데 green이었다
+//   (wishlist-visit-double-tap QA 반영, 지도 탭 spec의 map-wish-card-visit 더블과 같은 방식).
+type MockFocusEntry = {
+  effect: () => void | (() => void);
+  cleanup: void | (() => void);
+  active: boolean;
+};
+const mockFocus: { entries: MockFocusEntry[] } = { entries: [] };
+jest.mock('@react-navigation/native', () => {
+  const ReactLib = require('react');
+  return {
+    useRoute: () => ({ params: mockParams.current }),
+    useNavigation: () => ({
+      goBack: mockGoBack,
+      navigate: mockNavigate,
+      isFocused: () => mockNavState.focused,
+    }),
+    // 훅 자리마다 항목 하나(useRef). 매 렌더 최신 효과로 바꿔 끼운다.
+    //   효과가 바뀌면(실제 deps [effect]) 이전 정리 함수를 부르고, 화면이 포커스면 새 효과를 발화한다.
+    //   언마운트 때 정리 함수를 부르고 목록에서 뺀다(실제 useFocusEffect의 effect cleanup과 같은 순서).
+    useFocusEffect: (effect: () => void | (() => void)) => {
+      const entryRef = ReactLib.useRef(null);
+      if (entryRef.current === null) {
+        entryRef.current = { effect, cleanup: undefined, active: false };
+        mockFocus.entries.push(entryRef.current);
+      }
+      entryRef.current.effect = effect;
+      ReactLib.useEffect(
+        function runFocusEffectIfFocused() {
+          const entry = entryRef.current;
+          if (mockNavState.focused) {
+            entry.cleanup = effect();
+            entry.active = true;
+          }
+          return function cleanupFocusEffect() {
+            if (entry.active && typeof entry.cleanup === 'function') entry.cleanup();
+            entry.cleanup = undefined;
+            entry.active = false;
+          };
+        },
+        [effect],
+      );
+      ReactLib.useEffect(function unregisterFocusEntryOnUnmount() {
+        const entry = entryRef.current;
+        return function dropFocusEntry() {
+          mockFocus.entries = mockFocus.entries.filter((it: MockFocusEntry) => it !== entry);
+        };
+      }, []);
+    },
+  };
+});
+
+/**
+ * 로그 화면 포커스(다른 화면에서 복귀) — isFocused()를 true로 되돌리고, 포커스를 잃어 쉬던 효과를 전부 발화해
+ * 정리 함수를 저장한다. 이미 포커스 상태로 발화한 효과는 다시 부르지 않는다(실제 focus 리스너의 중복 가드).
+ */
+const focusLogScreen = () => {
+  mockNavState.focused = true;
+  for (const entry of mockFocus.entries) {
+    if (entry.active) continue;
+    entry.cleanup = entry.effect();
+    entry.active = true;
+  }
+};
+
+/** 로그 화면 blur(에디터·상세가 위에 쌓임) — isFocused()를 false로 바꾸고 저장된 정리 함수를 부른 뒤 비운다. */
+const blurLogScreen = () => {
+  mockNavState.focused = false;
+  for (const entry of mockFocus.entries) {
+    if (!entry.active) continue;
+    if (typeof entry.cleanup === 'function') entry.cleanup();
+    entry.cleanup = undefined;
+    entry.active = false;
+  }
+};
+
+/** 재포커스(에디터·상세에 다녀옴) 흉내 — 떠났다가(blur) 돌아온다(focus). 이미 떠난 상태면 blur는 할 일이 없다. */
+const refireFocus = () => {
+  blurLogScreen();
+  focusLogScreen();
+};
 
 // safe-area: 헤더 top inset 동적 반영(킷 MK_STATUS_PAD=56 고정 → insets.top 번역) 검증용으로 가변 모킹.
 //   네이티브 헤더 OFF(headerShown:false)로 사라진 top inset을 자체 헤더가 보전하는지 lock.
@@ -335,6 +410,13 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockGoBack.mockClear();
   mockNavigate.mockClear();
+  // 실제 순서 흉내: 이동하면 로그 화면은 포커스를 잃는다(에디터·상세가 위에 쌓임) — isFocused() false + 포커스 효과의
+  //   정리 함수 호출(blur). 복귀는 returnToLogScreen(focusLogScreen)이 되돌린다.
+  mockFocus.entries = [];
+  mockNavState.focused = true;
+  mockNavigate.mockImplementation(() => {
+    blurLogScreen();
+  });
   refresh.mockReset();
   renameRoom.mockReset();
   refreshMuklogs.mockReset();
@@ -834,6 +916,108 @@ describe('LogScreen — 위시리스트 세그먼트(wishlist, TC-6/B7 · TC-1·
         kakaoPlaceId: '12345',
       },
       fromWishlistId: 'w7',
+    });
+  });
+
+  // ── 전환 중 재탭 가드(wishlist-visit-double-tap · U67) ──────────────────────────────────────
+  //   seam = 위시 행 "기록하기" 누름(WishlistView probe의 onVisit({ id })) → navigate 호출 인자·횟수 + isFocused 더블.
+  //   에디터는 프리필을 처음 열릴 때 한 번만 읽고 같은 이름 navigate는 params만 바꾸므로, 전환 중 다른 행이 실리면
+  //   화면의 가게(첫 위시)와 저장 뒤 지워지는 위시(두 번째)가 어긋난다. 인자는 toEqual로 정확 일치(여분 키 누설도 잡는다).
+  describe('전환 중 재탭(U67, 원칙 3·9)', () => {
+    const W7_EDITOR_PARAMS = {
+      roomId: 'r1',
+      prefill: {
+        placeName: '성수동 베이커리',
+        category: 'cafe',
+        area: '성수동',
+        roadAddress: '서울 성동구 연무장길 1',
+        lat: 37.544,
+        lng: 127.055,
+        kakaoPlaceId: '12345',
+      },
+      fromWishlistId: 'w7',
+    };
+    // 두 번째 위시는 7필드가 전부 w7과 다르다 — 어느 필드가 섞여도 정확 일치 비교에서 드러난다.
+    const w8Item = () =>
+      wishItem({
+        id: 'w8',
+        placeName: '연남 칼국수',
+        category: 'noodle',
+        area: '연남동',
+        roadAddress: '서울 마포구 동교로 2',
+        lat: 37.561,
+        lng: 126.925,
+        kakaoPlaceId: '67890',
+      });
+    const W8_EDITOR_PARAMS = {
+      roomId: 'r1',
+      prefill: {
+        placeName: '연남 칼국수',
+        category: 'noodle',
+        area: '연남동',
+        roadAddress: '서울 마포구 동교로 2',
+        lat: 37.561,
+        lng: 126.925,
+        kakaoPlaceId: '67890',
+      },
+      fromWishlistId: 'w8',
+    };
+
+    const openWishSegment = ({ items }: { items: unknown[] }) => {
+      mockUseWishlist.mockReturnValue({ state: { status: 'ready', items }, refresh: refreshWishlist });
+      renderWithTheme(<LogScreen />);
+      fireEvent.press(screen.getByText(`위시리스트 ${items.length}`));
+    };
+
+    /**
+     * 에디터에서 돌아옴(‹·가장자리 스와이프) — 로그 화면이 다시 스택 맨 위(isFocused true) + navigate의 blur로 쉬던
+     * 포커스 효과 재발화. 떠날 때는 blur 정리 함수가 이미 불렸다(beforeEach의 navigate 흉내).
+     */
+    const returnToLogScreen = () => {
+      act(() => {
+        focusLogScreen();
+      });
+    };
+
+    it('LV1 같은 행 "기록하기" 연타 — 두 번째는 로그 화면이 이미 포커스를 잃은 뒤라 무시되고 이동은 1회다', () => {
+      openWishSegment({ items: [wishItem({ id: 'w7' })] });
+
+      fireEvent.press(screen.getByLabelText('wish-visit-w7'));
+      fireEvent.press(screen.getByLabelText('wish-visit-w7'));
+
+      expect(mockNavigate).toHaveBeenCalledTimes(1);
+      expect(mockNavigate.mock.calls).toEqual([['MuklogEditor', W7_EDITOR_PARAMS]]);
+    });
+
+    it('LV2 에디터로 넘어가는 중 다른 행 "기록하기" — 무시해서 첫 위시(w7)만 실리고, 삭제·재조회·토스트 없이 조용하다', () => {
+      openWishSegment({ items: [wishItem({ id: 'w7' }), w8Item()] });
+      const wishRefreshBefore = refreshWishlist.mock.calls.length;
+
+      fireEvent.press(screen.getByLabelText('wish-visit-w7'));
+      fireEvent.press(screen.getByLabelText('wish-visit-w8'));
+
+      // 더블에 push가 없어서 push로 바꾼 구현은 여기까지 오지 못하고 TypeError로 실패한다.
+      expect(mockNavigate.mock.calls).toEqual([['MuklogEditor', W7_EDITOR_PARAMS]]);
+      expect(mockRemoveWishlist).not.toHaveBeenCalled();
+      expect(refreshWishlist.mock.calls.length).toBe(wishRefreshBefore);
+      expect(screen.queryByTestId('toast-pill')).toBeNull();
+    });
+
+    it('LV3 에디터에서 돌아오면 가드가 풀려 다른 행을 누를 수 있다 — 잠금이 아니라 누르는 순간의 포커스 읽기다', () => {
+      openWishSegment({ items: [wishItem({ id: 'w7' }), w8Item()] });
+      fireEvent.press(screen.getByLabelText('wish-visit-w7'));
+      fireEvent.press(screen.getByLabelText('wish-visit-w8'));
+
+      returnToLogScreen();
+      // 떠날 때(blur 정리 함수) 세그·검색뷰를 바꾸지 않아서, 돌아오면 떠나기 전의 위시 목록이 그대로 보인다.
+      expect(screen.getByLabelText('wishlist-view')).toBeTruthy();
+      expect(screen.queryByLabelText('place-search')).toBeNull();
+      fireEvent.press(screen.getByLabelText('wish-visit-w8'));
+
+      expect(mockNavigate.mock.calls).toEqual([
+        ['MuklogEditor', W7_EDITOR_PARAMS],
+        ['MuklogEditor', W8_EDITOR_PARAMS],
+      ]);
     });
   });
 
