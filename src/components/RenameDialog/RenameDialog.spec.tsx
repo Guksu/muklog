@@ -6,6 +6,7 @@ import React from 'react';
 import { AccessibilityInfo, Modal, StatusBar, StyleSheet, Text } from 'react-native';
 import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 
+import { findAccessibleAncestors } from '@/test/findAccessibleAncestors';
 import { renderWithTheme } from '@/test/renderWithTheme';
 
 import { resolveModalTopInset } from '../modalInsets';
@@ -281,7 +282,8 @@ describe('RenameDialog — 취소/저장 액션 눌림 피드백(motion-press-sw
 // ── 프레스 부여 C9(motion-press-c T4 / ui-spec §2) ────────────────────────
 //   seam = testID `rename-dialog-clear` 노드의 flatten style transform/opacity 키 유무.
 //   P4(console.warn 0건)는 위 A1·A2 블록이 같은 렌더 트리(value 있음 → ✕ 렌더)로 이미 커버한다.
-//   Category B 2지점(:133 딤 · :146 전파차단 카드)은 이 스프린트에서 건드리지 않는다.
+//   Category B(딤 오버레이)는 이 스프린트에서 건드리지 않는다.
+//   (당시 함께 Category B였던 전파차단 카드는 dialog-card-a11y에서 누름 요소가 아닌 View로 바뀌었다.)
 describe('RenameDialog — 입력 지우기 ✕ 눌림 피드백(motion-press-c C9)', () => {
   const mockReduceMotion = ({ enabled }: { enabled: boolean }) => {
     jest
@@ -360,5 +362,83 @@ describe('RenameDialog — 딤 전체 화면 커버 + 상단 위치 보정 (dim-
     } finally {
       StatusBar.currentHeight = original;
     }
+  });
+});
+
+// ── 접근성: 컨트롤이 개별 요소로 노출된다(dialog-card-a11y) ─────────────────────────────
+//   증상: iOS 접근성 트리에서 입력란·지우기·취소·저장이 "닉네임 닉네임 지우기 취소 저장" 요소 하나로 노출됐다.
+//   원인: 카드가 Pressable(accessible 기본 true)이었다 — iOS는 접근성 요소의 자식을 화면 읽기 기능에 노출하지 않는다.
+//   seam: 호스트 요소의 접근성·터치 props(accessible·focusable·pointerEvents·라벨·역할)와 조상 사슬,
+//         탭의 핸들러 효과(onCancel).
+//   딤 탭 → onCancel / 카드 탭 → 미호출은 위 AC1.3 두 케이스가 이미 잠갔다(이 블록은 카드 안 자식 탭을 더한다).
+describe('RenameDialog — 접근성: 컨트롤이 개별 요소로 노출된다 (dialog-card-a11y)', () => {
+  // 지우기 ✕는 value가 있어야 렌더된다 → 값이 있는 상태로 네 컨트롤을 모두 띄운다.
+  const renderDialog = ({ onCancel = noop }: { onCancel?: () => void } = {}) =>
+    renderWithTheme(
+      <RenameDialog
+        open
+        title="닉네임"
+        value="국수"
+        onChange={noop}
+        onCancel={onCancel}
+        onSave={noop}
+      />,
+    );
+
+  const CONTROLS = [
+    { label: '입력란', testId: 'rename-dialog-input' },
+    { label: '지우기', testId: 'rename-dialog-clear' },
+    { label: '취소', testId: 'rename-dialog-cancel' },
+    { label: '저장', testId: 'rename-dialog-save' },
+  ];
+
+  it('카드 래퍼는 접근성 요소가 아니다', () => {
+    renderDialog();
+    expect(screen.getByTestId('rename-dialog-card').props.accessible).not.toBe(true);
+  });
+
+  // Android는 focusable 뷰에 클릭 리스너를 달아 TalkBack이 "활성화할 수 있는 요소"로 멈춘다
+  //   (ReactViewManager.setFocusable). Pressable을 남기고 accessible만 끄면 focusable 기본값(true)이 남는다.
+  it('카드 래퍼는 포커스·클릭 대상도 아니다', () => {
+    renderDialog();
+    expect(screen.getByTestId('rename-dialog-card').props.focusable).not.toBe(true);
+  });
+
+  // 딤과 카드는 형제 레이어라 카드가 터치를 받아야 카드 위 탭이 딤으로 빠지지 않는다.
+  //   카드가 터치를 흘려보내면(box-none·none) 실기기에서는 카드 여백 탭이 딤에 닿아 대화상자가 닫힌다
+  //   — fireEvent는 형제로 빠지는 경로를 흉내 내지 않으므로 props로 잠근다.
+  it('카드는 터치를 받는 뷰다(pointerEvents로 터치를 흘려보내지 않는다)', () => {
+    renderDialog();
+    const card = screen.getByTestId('rename-dialog-card');
+    expect(card.props.pointerEvents ?? 'auto').toBe('auto');
+    expect(StyleSheet.flatten(card.props.style).pointerEvents ?? 'auto').toBe('auto');
+  });
+
+  // toStrictEqual — toEqual은 배열 안의 undefined를 무시한다. 헬퍼는 testID 없는 조상도 타입 이름으로 돌려준다.
+  it.each(CONTROLS)('$label의 조상에는 접근성 요소가 없다', ({ testId }) => {
+    renderDialog();
+    expect(findAccessibleAncestors({ element: screen.getByTestId(testId) })).toStrictEqual([]);
+  });
+
+  it('입력란·지우기·취소·저장이 각자의 접근성 라벨로 조회된다', () => {
+    renderDialog();
+    expect(screen.getByLabelText('닉네임').props.testID).toBe('rename-dialog-input');
+    expect(screen.getByRole('button', { name: '지우기' }).props.testID).toBe('rename-dialog-clear');
+    expect(screen.getByRole('button', { name: '취소' }).props.testID).toBe('rename-dialog-cancel');
+    expect(screen.getByRole('button', { name: '저장' }).props.testID).toBe('rename-dialog-save');
+  });
+
+  it('딤 배경은 "닫기" 버튼으로 노출된다(화면 읽기 기능의 닫기 경로)', () => {
+    renderDialog();
+    expect(screen.getByRole('button', { name: '닫기' }).props.testID).toBe(
+      'rename-dialog-backdrop',
+    );
+  });
+
+  it('카드 안 제목을 탭해도 onCancel을 호출하지 않는다', () => {
+    const onCancel = jest.fn();
+    renderDialog({ onCancel });
+    fireEvent.press(screen.getByText('닉네임'));
+    expect(onCancel).not.toHaveBeenCalled();
   });
 });

@@ -169,10 +169,14 @@ export const RenameDialog = ({
         ]}
         pointerEvents="box-none"
       >
-        {/* 카드 — 탭해도 닫히지 않음(전파 차단, 킷 stopPropagation) */}
-        <Pressable
+        {/* 카드 — 탭해도 닫히지 않음(킷 stopPropagation). 딤과 형제 레이어라 카드 위 터치는 딤에 닿지 않는다
+            (터치는 손가락 아래 맨 위 뷰와 그 조상에게만 간다 — Sheet의 딤·패널과 같은 형제 구조).
+            ⚠️ 카드를 Pressable·Touchable로 만들거나 컨트롤 여러 개를 접근성 요소 하나로 감싸지 말 것:
+               접근성 요소(Pressable은 accessible 기본 true)는 iOS에서 입력란·지우기·취소·저장을 하나로 합쳐 읽어
+               화면 읽기 기능의 개별 조작을 막는다. Android에서는 카드가 클릭 대상으로 잡힌다.
+            ⚠️ 카드에 pointerEvents box-none·none을 주지 말 것: 카드가 터치를 받지 않으면 카드 여백 탭이 딤으로 빠져 닫힌다. */}
+        <View
           testID="rename-dialog-card"
-          onPress={() => {}}
           style={[
             styles.card,
             {
@@ -285,7 +289,7 @@ export const RenameDialog = ({
               )}
             </MotionPressable>
           </View>
-        </Pressable>
+        </View>
       </View>
     </Modal>
   );

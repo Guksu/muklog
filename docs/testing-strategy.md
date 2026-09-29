@@ -41,6 +41,18 @@ Claude 세션은 `.claude/worktrees/<이름>/`에 저장소 사본(워크트리)
 
 CI에는 워크트리가 없어 실행으로 재현되지 않으므로 `src/test/jestPathIsolation/jestPathIsolation.spec.ts`가 두 패턴을 메인 트리·워크트리 두 루트에서 판정해 계약을 잠근다.
 
+### 접근성 단언 — 조회 성공만으로는 부족하다
+
+iOS는 접근성 요소(`accessible`이 true인 뷰)의 하위 뷰를 화면 읽기 기능(VoiceOver)에 노출하지 않는다. 라벨이 없으면 자식 라벨을 이어붙여 요소 하나로 읽는다. `Pressable`은 `accessible` 기본값이 true다. 그래서 여러 컨트롤을 `Pressable`로 감싸면 안쪽 컨트롤을 개별로 조작할 수 없다.
+
+RNTL(React Native 테스트 라이브러리)의 `getByRole`·`getByLabelText`는 이 가림을 흉내 내지 않는다. 조상이 접근성 요소여도 자식이 조회된다. 따라서 조회 성공은 "개별 조작 가능"의 증거가 아니다. 컨트롤이 개별로 노출돼야 하는 화면은 `src/test/findAccessibleAncestors`로 조상 사슬을 확인한다. 빈 배열이어야 통과다.
+
+빈 배열 단언은 `toStrictEqual([])`로 쓴다. `toEqual`은 배열 안의 `undefined` 원소를 무시해서 `[undefined]`를 `[]`와 같다고 본다. 그러면 값을 `testID`처럼 없을 수 있는 속성으로 바꿔 비교할 때, 이름표 없는 요소가 단언을 빠져나간다. 헬퍼가 노드 대신 이름표(testID, 없으면 호스트 타입 이름)를 돌려주는 것도 같은 이유다.
+
+이 헬퍼는 iOS 규칙만 본다. 호스트 `Text` 조상과 숨김 속성은 판정하지 않는다. 숨김은 RNTL 기본 쿼리가 알아서 제외한다. Android는 규칙이 다르므로, 래퍼의 `focusable`(클릭 대상 여부)을 따로 단언한다.
+
+터치 전파를 막으려고 빈 `onPress`를 단 `Pressable`을 쓰지 않는다. 딤(대화상자 뒤 반투명 배경)과 카드를 형제 레이어로 두면 카드 위 터치는 딤에 닿지 않는다(`Sheet`·`RenameDialog` 구조). 단, 카드는 터치를 받는 뷰여야 한다. 카드에 `pointerEvents` `box-none`·`none`을 주면 카드 여백 탭이 딤으로 빠진다.
+
 ## 무엇을, 어느 깊이로 테스트하나
 
 | 대상 | 테스트 | 비고 |
