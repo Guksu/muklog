@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-09-29 |
 | 브랜치 | fix/place-search-keyboard-visibility |
-| PR | 미생성 |
+| PR | https://github.com/Guksu/muklog/pull/42 |
 | 관련 경로 | src/features/muklog/PlaceSearchView/PlaceSearchView.tsx, src/features/muklog/PlaceSearchView/PlaceSearchView.spec.tsx, src/features/muklog/MuklogEditor/MuklogEditor.spec.tsx, docs/ux/ux-backlog.md |
 
 ## 1. 개요
