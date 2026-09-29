@@ -11,12 +11,15 @@
 //   map-nearby-feedback(U10): 재검색 pill은 훅 researchState(검색 중·실패 포함)로 그리고, 지도 가운데 안내가 있으면 숨긴다.
 //   누른 조회의 0건은 토스트+스크린리더, 실패는 스크린리더만 알린다(pill이 이미 실패를 보여 준다). 지도 SDK가 10초 안에
 //   READY·ERROR를 하나도 보내지 않으면 1회성 제한 시간이 SDK 오류 안내로 바꾼다(늦은 READY는 자동 복구).
+//   map-pin-card-detail(U11): 우리 맛집 카드 → MuklogDetail({ muklogId }) 이동. 이동해도 선택을 풀지 않아 복귀 시
+//   카드·핀 강조·필터가 그대로고, 편집·삭제 반영은 기존 포커스 재조회(핀·위시 각 1회)가 맡는다.
 //
 // 정책: 진입 1회 핀 조회 + 권한 1회 요청 + 명시적 refresh만(폴링/Realtime 없음, 비용 가드레일 §8).
 //   현재위치는 RN expo-location으로 받아 INIT.me로 주입(WebView geolocation 미사용 — plan §9.2).
 //   ⚠️ 비주얼은 ui-publisher 컴포넌트로만(임의 변경 금지). 상태→tone/message 판단만 여기서 한다.
 import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, StyleSheet, View } from 'react-native';
+import { useNavigation, type NavigationProp } from '@react-navigation/native';
 import * as Linking from 'expo-linking';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -85,6 +88,7 @@ import { useAddNearbyWish } from '@/features/wishlist';
 import { env } from '@/lib/env';
 import { useTheme } from '@/theme';
 
+import { Routes, type AppStackParamList } from '../../routes';
 import { useRefreshOnFocus } from '../../useRefreshOnFocus';
 
 // 상태 안내 카피(ui-spec §4 권고값 — 해요체, 차단 아님). 카피 단일 출처.
@@ -141,6 +145,9 @@ const rankCoordsSource = ({ source }: { source: LocationCoordsSource | null }): 
 
 export const MapTabScreen = () => {
   const theme = useTheme();
+  // map-pin-card-detail: 이 화면은 HomeTabs 안의 탭이다. MuklogDetail은 부모 AppStack 라우트라 탭 라우터가 처리하지 못한
+  //   navigate가 부모 스택으로 올라간다(LogListScreen → LogScreen과 같은 선례).
+  const navigation = useNavigation<NavigationProp<AppStackParamList>>();
   // map-headerless: 이 탭은 네이티브 헤더가 없어(HomeTabs headerShown:false) 지도가 상태바까지 차오른다.
   //   헤더가 흡수하던 top inset을 상단 오버레이(필터 바·범례)가 승계해야 노치/다이나믹 아일랜드/펀치홀에
   //   씹히지 않는다. ⚠ 컨테이너를 SafeAreaView로 감싸면 지도까지 내려와 풀블리드가 깨진다 — 오버레이만 흡수.
@@ -628,13 +635,20 @@ export const MapTabScreen = () => {
         </View>
       </MapWebView>
 
-      {/* 선택 스팟 카드 — saved 핀 탭 시 하단 도킹(내 맛집). */}
+      {/* 선택 스팟 카드 — saved 핀 탭 시 하단 도킹(내 맛집). 카드 탭 → 먹로그 상세(map-pin-card-detail · U11).
+          · push가 아니라 navigate: 맨 위가 이미 같은 상세면 새로 쌓지 않아 연타해도 상세는 한 장이다(화면 잠금 없음 —
+            잠금은 복귀 때 풀어야 해서 안 풀리면 카드가 죽는 새 실패를 만든다).
+          · 선택(setSelected)을 풀지 않는다: 복귀 시 같은 카드·핀 강조·필터를 그대로 보인다.
+          · 조회·주입 없음: 상세 조회는 MuklogDetailRoute가, 복귀 반영은 useRefreshOnFocus의 핀·위시 재조회가 맡는다. */}
       {selectedPin ? (
         <SelectedSpotCard
           placeName={selectedPin.placeName}
           rating={selectedPin.rating}
           category={selectedPin.category}
           area={selectedPin.area}
+          onPress={() =>
+            navigation.navigate(Routes.MuklogDetail, { muklogId: selectedPin.muklogId })
+          }
         />
       ) : null}
 
