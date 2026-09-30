@@ -10,7 +10,10 @@
 //   배너 재노출·스크린리더 알림. 설정에서 허용하고 돌아온 반영은 useLocationPermission의 재활성화 재조회가 맡는다.
 //   map-nearby-feedback(U10): 재검색 pill은 훅 researchState(검색 중·실패 포함)로 그리고, 지도 가운데 안내가 있으면 숨긴다.
 //   누른 조회의 0건은 토스트+스크린리더, 실패는 스크린리더만 알린다(pill이 이미 실패를 보여 준다). 지도 SDK가 10초 안에
-//   READY·ERROR를 하나도 보내지 않으면 1회성 제한 시간이 SDK 오류 안내로 바꾼다(늦은 READY는 자동 복구).
+//   READY·ERROR를 하나도 보내지 않으면 제한 시간이 SDK 오류 안내로 바꾼다(WebView 세대마다 1개, 늦은 READY는 자동 복구).
+//   map-webview-recovery(U71·U62): OS가 WebView 프로세스를 끝내거나, SDK를 받지 못한 페이지에서 "다시 시도"를 누르면
+//   안쪽 WebView만 새로 만든다(재마운트 — 선택·필터·카드는 RN 상태라 그대로고 핀은 READY 뒤 기존 INIT 경로가 다시 그린다).
+//   지도 탭 마운트당 3회까지, 넘으면 "앱을 껐다가 다시 켜 주세요"(버튼 없음). 화면 밖에서 끝나면 돌아올 때 1회 한다.
 //   map-pin-card-detail(U11): 우리 맛집 카드 → MuklogDetail({ muklogId }) 이동. 이동해도 선택을 풀지 않아 복귀 시
 //   카드·핀 강조·필터가 그대로고, 편집·삭제 반영은 기존 포커스 재조회(핀·위시 각 1회)가 맡는다.
 //   map-wish-card-visit(U12): 위시 카드 "기록하기" → MuklogEditor({ 위시의 로그, 프리필 7필드, fromWishlistId }) —
@@ -63,6 +66,7 @@ import { mergeMapMarkers } from '@/features/map/mergeMapMarkers';
 import { nearbyCategoryEmoji } from '@/features/map/nearbyCategoryEmoji';
 import { NEARBY_FALLBACK_SPAN, nearbyPreloadBbox } from '@/features/map/nearbyPreloadBbox';
 import {
+  MapWebViewRemountReason,
   NearbyTraceEvent,
   nearbyRenderGapMs,
   traceNearby,
@@ -114,6 +118,10 @@ const MAP_COPY = {
   //   지금 ≈233pt = 320pt까지 한 줄, 360pt 이상 FAB와 안 겹침. 구분은 가운뎃점 대신 마침표 — 같은 문구를 스크린리더
   //   알림에도 쓰므로 기호 이름을 읽지 않게(openSettingsFailed와 같은 꼴). "등록된"(누가?)·"맛집"(우리 맛집 오해)은 뺐다.
   nearbyEmpty: '음식점이 없어요. 지도를 옮겨보세요',
+  // map-webview-recovery(Q2): 재마운트 상한을 다 쓴 뒤의 안내 — 버튼 없음(눌러도 복구할 수 없다). 지도 탭 상태가 살아 있어
+  //   앱을 잠깐 나갔다 와서는 풀리지 않으므로 "껐다가 다시 켜"를 분명히 한다. 줄바꿈은 문장 단위 — 카드 글자 폭(≈280pt)에
+  //   이어 쓰면 "주세요"만 둘째 줄로 떨어진다. 스크린리더는 줄바꿈을 쉼으로 읽는다.
+  restartApp: '지도를 불러오지 못했어요.\n앱을 껐다가 다시 켜 주세요',
 } as const;
 
 /**
@@ -128,12 +136,21 @@ const RESEARCH_BUTTON_STATE_BY_NEARBY: Record<NearbyResearchState, MapResearchBu
 };
 
 /**
- * 지도 준비 제한 시간(ms) — 지도 탭 마운트 뒤 이 시간 안에 WebView의 첫 READY·ERROR가 하나도 없으면
- * SDK 오류 안내로 바꾼다(map-nearby-feedback · U10 ④). 실측 부팅 최악 ≈2.9s(프리워밍 없음)의 약 3.4배라
- * 느린 셀룰러의 SDK 다운로드 여유를 두면서 사용자가 기다림에 주의를 유지하는 10초를 넘지 않는다.
- * 늦게 READY가 오면 안내가 스스로 걷히므로 느린 망의 오탐 비용은 작다.
+ * 지도 준비 제한 시간(ms) — WebView 세대마다(지도 탭 마운트 뒤, 그리고 재마운트 뒤마다) 이 시간 안에 그 WebView의
+ * 첫 READY·ERROR가 하나도 없으면 SDK 오류 안내로 바꾼다(map-nearby-feedback · U10 ④, map-webview-recovery).
+ * 실측 부팅 최악 ≈2.9s(프리워밍 없음)의 약 3.4배라 느린 셀룰러의 SDK 다운로드 여유를 두면서 사용자가 기다림에
+ * 주의를 유지하는 10초를 넘지 않는다. 늦게 READY가 오면 안내가 스스로 걷히므로 느린 망의 오탐 비용은 작다.
  */
 export const MAP_BOOT_TIMEOUT_MS = 10_000;
+
+/**
+ * 지도 WebView 재마운트 상한 — 지도 탭 마운트당 3회(map-webview-recovery · UX 백로그 U71·U62).
+ * 비용 가드레일: 재마운트 1회 = 카카오 지도 SDK 페이지 재요청 1회라, 탭 마운트당 SDK 로드는 최초 1 + 재마운트 3 = 최대 4다.
+ * 재마운트는 종료 신호·사용자의 "다시 시도" 탭·(화면 밖 종료 뒤) 지도 탭 복귀에서만 일어난다 — 타이머·폴링·자동 반복 0.
+ * 넘으면 재마운트 대신 앱을 다시 켜 달라는 안내를 띄운다(버튼 없음). 상한은 컴포넌트 상태라 로그아웃·앱 재시작으로
+ * 지도 탭이 다시 마운트되면 처음부터 센다(모듈 전역 금지).
+ */
+export const MAP_WEBVIEW_REMOUNT_LIMIT = 3;
 
 /**
  * 좌표 출처를 정밀도 순위로 환산한다(폴백 0 < warm 1 < fresh 2).
@@ -174,11 +191,21 @@ export const MapTabScreen = () => {
   const [category, setCategory] = useState<MuklogCategoryKey | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapErrored, setMapErrored] = useState(false);
+  // map-webview-recovery: WebView 세대 — 0에서 시작해 재마운트마다 1씩 오른다. MapWebView의 webviewKey이자
+  //   이 탭 마운트에서 쓴 재마운트 횟수다(남은 상한 = MAP_WEBVIEW_REMOUNT_LIMIT - 세대).
+  const [webviewGeneration, setWebviewGeneration] = useState(0);
+  // 끝난 WebView를 떼어 냈는지(렌더하지 않음). 상한이 남았으면 화면 밖에서 끝나 지도 탭 복귀를 기다리는 중이고(Q1-B),
+  //   다 썼으면 소진이다 — 지도 탭이 다시 마운트될 때까지 이 상태로 끝난다(D4).
+  const [webviewDetached, setWebviewDetached] = useState(false);
   // map-location-denied(D3): 권한 배너 닫힘 — 이 마운트 동안만 산다(AsyncStorage 등 영속 저장 0).
   //   바텀탭 화면은 첫 진입 뒤 언마운트되지 않아 사실상 로그인 세션 동안 유지되고, 재실행·재로그인이면 다시 보인다.
   //   거부 상태에서 현재위치 FAB를 누르면 다시 false로 되돌린다(U13 ③).
   const [permissionBannerDismissed, setPermissionBannerDismissed] = useState(false);
   const webviewRef = useRef<MapWebViewHandle>(null);
+  // map-webview-recovery: 재마운트를 시작했거나 소진으로 떼어 낸 마지막 세대. 한 세대의 종료·"다시 시도"·복귀 포커스는
+  //   몇 번이 와도 1회만 처리한다 — 같은 렌더 안의 두 번째 호출은 같은 클로저 값(세대·떼어 냄)을 봐서 상태만으로는 막지
+  //   못하고, 그러면 계측이 두 줄 남거나 상한을 두 번 쓴다(plan §3.4 · MR15).
+  const handledGenerationRef = useRef<number | null>(null);
   // #4·map-initial-location: 지도 센터가 "지금 어떤 정밀도의 좌표로 그려져 있는지"를 기록한다
   //   (null=폴백 센터(서울/핀 bbox) · Warm=OS 캐시 근사 · Fresh=정밀 픽스).
   //   더 정밀한 좌표가 도착할 때만 1회 보정하므로(단조 승격) 별도의 "자동 센터링 1회" 플래그가 필요 없다 —
@@ -206,6 +233,10 @@ export const MapTabScreen = () => {
   const center = initialRegion({ coords: permission.coords, pins });
   // HTML은 1회 생성(키 주입). INIT/SET_MARKERS는 injectJavaScript로 주입(SDK 재로드 없음).
   const html = mapHtml({ jsKey: env.KAKAO_JS_KEY });
+  // map-webview-recovery: 남은 재마운트 수, 그리고 "SDK를 받지 못한 페이지의 오류"(READY 전 ERROR·제한 시간 만료).
+  //   READY 뒤 ERROR는 INIT 예외라 SDK가 살아 있다(mapHtml __muklogInit catch) — INIT만 다시 넣으면 된다.
+  const remountsLeft = MAP_WEBVIEW_REMOUNT_LIMIT - webviewGeneration;
+  const mapBootFailed = mapErrored && !mapReady;
 
   // 진입 시 위치 권한 1회 요청(undetermined일 때). request 내부에 중복 가드가 있어 재호출 안전.
   useEffect(
@@ -334,24 +365,117 @@ export const MapTabScreen = () => {
       return;
     }
     if (message.type === MapInboundType.Error) {
+      // map-webview-recovery(D3): READY 전 첫 오류(SDK를 받지 못한 페이지)인데 재마운트 상한을 다 썼다 — "다시 시도" 대신
+      //   소진 안내가 뜬다. 디바이스 로그로 구분한다(만료로 같은 상태가 되면 watchMapBoot가 같은 줄을 남긴다).
+      if (!mapReady && !mapErrored && remountsLeft === 0) {
+        traceNearby({
+          event: NearbyTraceEvent.MapWebViewExhausted,
+          detail: { reason: MapWebViewRemountReason.Retry },
+        });
+      }
       setMapErrored(true);
     }
   };
 
-  // map-nearby-feedback(U10 ④): 지도 준비 제한 시간 — SDK 스크립트 요청이 멈추면 READY도 ERROR도 오지 않아
-  //   `!mapReady` 로딩 카드가 영구히 남는다(map-feedback E6). 첫 READY·ERROR를 기다리는 **1회성** 타이머 하나로 막는다.
-  //   · 무엇을: 마운트 이후 WebView의 첫 READY 또는 첫 ERROR. 폴링·반복·재시도 없음, 네트워크 호출 0.
-  //   · 몇 번: 마운트당 최대 1회 — mapBootSettled는 한 번 true면 다시 false가 되지 않는다(mapReady는 true로만 가고,
-  //     mapErrored는 READY 수신이나 READY 뒤 재시도로만 내려간다). 그래서 deps가 바뀌어도 재무장되지 않는다.
-  //   · 언제 해제: READY 수신 · ERROR 수신 · 만료 · 언마운트 중 먼저 오는 것.
-  //   만료하면 SDK ERROR와 같은 안내·같은 재시도로 합류한다. "다시 시도"는 이 타이머를 끄지도 다시 켜지도 않는다 —
-  //   끄면 부팅 중 핀 오류 재시도 뒤 SDK가 멈췄을 때 다시 영구 로딩에 갇힌다. 늦게 READY가 오면 READY 처리가 카드를 걷는다.
+  // ── map-webview-recovery(U71·U62): 지도 WebView 재마운트 ──────────────────────────────
+  //   재마운트 = 안쪽 WebView만 새 인스턴스로 바꿔 카카오 SDK 페이지를 처음부터 다시 불러오는 것(MapWebView webviewKey).
+  //   · 되돌리는 것: 지도 준비·오류 상태 → 가운데 "지도를 불러오는 중이에요", 그리고 새 세대의 10초 제한 시간(watchMapBoot).
+  //   · 그대로인 것: 선택·카테고리 필터·권한 배너 닫힘·핀·위시·주변 결과(전부 RN 상태). READY가 오면 기존 경로가 INIT을,
+  //     이어서 mapReady 게이트 효과들이 SET_MARKERS·SET_SELECTED를 새 인스턴스에 넣는다 — 재조회 0. 지도 위치는 INIT의
+  //     기본 센터로 돌아간다(이전 위치·줌 복원은 범위 밖 — Q3).
+  //   · 재마운트 순간에는 아무것도 주입하지 않는다 — ref가 아직 옛 인스턴스를 가리킬 수 있다.
+  //   · 비용: 1회 = 카카오 SDK 페이지 재요청 1회. 상한 MAP_WEBVIEW_REMOUNT_LIMIT, 자동 반복 없음(규칙 8).
+  const remountWebView = ({ reason }: { reason: MapWebViewRemountReason }) => {
+    const nextGeneration = webviewGeneration + 1;
+    setMapReady(false);
+    setMapErrored(false);
+    setWebviewDetached(false);
+    setWebviewGeneration(nextGeneration);
+    traceNearby({
+      event: NearbyTraceEvent.MapWebViewRemount,
+      detail: { reason, count: nextGeneration },
+    });
+  };
+
+  // 끝난 WebView를 떼어 낸다 — 프로세스가 끝난 WebView는 다시 쓸 수 없다(Android는 라이브러리가 늘 "처리함"을 돌려줘
+  //   앱은 살지만 그 WebView는 죽은 채 남는다). 떼어 낸 동안은 webviewRef가 비어 주입 0, watchMapBoot도 타이머를 걸지 않는다.
+  const detachWebView = () => {
+    setMapReady(false);
+    setMapErrored(false);
+    setWebviewDetached(true);
+  };
+
+  /**
+   * 지금 세대의 WebView를 처리할 차례를 1회만 가져간다(handledGenerationRef).
+   * @returns 이번 호출이 처음이면 true, 같은 세대를 이미 처리했으면 false
+   */
+  const claimGeneration = (): boolean => {
+    if (handledGenerationRef.current === webviewGeneration) return false;
+    handledGenerationRef.current = webviewGeneration;
+    return true;
+  };
+
+  // OS가 WebView 프로세스를 끝냈다(iOS 콘텐츠 프로세스·Android 렌더 프로세스 — MapWebView가 인자 없이 올린다).
+  //   · 지도 탭이 화면에 없고 상한이 남았으면: 떼어 두고 지도 탭이 다시 보일 때 1회 재마운트한다(Q1-B — 사진 선택·다른 탭
+  //     중에 화면 밖에서 상한과 제한 시간을 쓰면 돌아왔을 때 오류 카드만 남는다). 이 세대는 복귀 포커스가 처리하도록 남긴다.
+  //     isFocused()는 호출 순간의 네비게이션 상태를 읽는다(handleVisitWish와 같은 방식). 앱 백그라운드는 보지 않는다.
+  //   · 상한을 다 썼으면: 떼어 내고 소진 안내를 띄운다(D4).
+  //   · 그 밖: 곧바로 재마운트한다. 스크린리더 알림은 없다 — 사용자 행동이 아니고 다른 화면에 있을 수 있다(D5).
+  const handleWebViewTerminated = () => {
+    if (webviewDetached) return; // 이미 떼어 낸 WebView의 늦은 신호
+    if (remountsLeft > 0 && !navigation.isFocused()) {
+      detachWebView();
+      return;
+    }
+    if (!claimGeneration()) return;
+    if (remountsLeft === 0) {
+      detachWebView();
+      traceNearby({
+        event: NearbyTraceEvent.MapWebViewExhausted,
+        detail: { reason: MapWebViewRemountReason.Terminated },
+      });
+      return;
+    }
+    remountWebView({ reason: MapWebViewRemountReason.Terminated });
+  };
+
+  // Q1-B: 화면 밖에서 떼어 둔 WebView를 지도 탭이 다시 보이는 순간 1회 재마운트한다. 포커스 단위 이벤트라 폴링·타이머가
+  //   아니다(규칙 8). 떼어 둔 것이 없거나 소진이면 아무것도 하지 않는다 — 평소의 포커스(상세·에디터에서 복귀)는 지도를
+  //   건드리지 않는다. 첫 포커스도 같은 판단이라 skipFirst:false(마운트 때는 떼어 둔 것이 없어 no-op).
+  useRefreshOnFocus({
+    refresh: () => {
+      if (!webviewDetached || remountsLeft === 0) return;
+      if (!claimGeneration()) return;
+      remountWebView({ reason: MapWebViewRemountReason.Terminated });
+    },
+    skipFirst: false,
+  });
+
+  // map-nearby-feedback(U10 ④) · map-webview-recovery: 지도 준비 제한 시간 — SDK 스크립트 요청이 멈추면 READY도 ERROR도
+  //   오지 않아 `!mapReady` 로딩 카드가 영구히 남는다(map-feedback E6). WebView **세대마다** 첫 READY·ERROR를 기다리는
+  //   1회성 타이머 하나로 막는다.
+  //   · 무엇을: 지금 세대 WebView의 첫 READY 또는 첫 ERROR. 폴링·반복·자동 재시도 없음, 네트워크 호출 0.
+  //   · 몇 번: 세대마다 최대 1개, 동시에 1개 — 재마운트가 세대를 올리고 준비·오류 상태를 되돌릴 때만 다시 걸린다(탭
+  //     마운트당 최초 1 + 재마운트 3 = 최대 4개). 떼어 낸 WebView(소진·화면 밖 대기)에는 걸지 않는다(plan I2).
+  //   · 언제 해제: READY 수신 · ERROR 수신 · 만료 · 재마운트(옛 세대) · 떼어 냄 · 언마운트 중 먼저 오는 것.
+  //   만료하면 SDK ERROR와 같은 안내·같은 재시도로 합류한다(상한이 남았으면 "다시 시도"가 재마운트, 다 썼으면 소진 안내).
+  //   불변식 I1: "준비 전" 로딩이 보이는 동안에는 그 세대의 타이머가 정확히 1개 돈다 — 그래서 영구 로딩 경로가 없다.
+  //   부팅 중 핀 오류 카드의 "다시 시도"는 이 타이머를 끄지도 다시 켜지도 않는다(끄면 그 뒤 SDK가 멈췄을 때 영구 로딩).
+  //   map-nearby-feedback D8·D9("재시도는 지도 웹 화면을 다시 불러오지 않고 타이머를 다시 켜지 않는다")는
+  //   map-webview-recovery가 대체했다 — SDK 없는 페이지의 재시도는 재마운트로 새 세대를 만들고, 새 세대에 새 타이머가 걸린다.
   const mapBootSettled = mapReady || mapErrored;
   useEffect(
     function watchMapBoot() {
-      if (mapBootSettled) return undefined;
+      if (mapBootSettled || webviewDetached) return undefined;
       const expireMapBoot = () => {
         traceNearby({ event: NearbyTraceEvent.MapBootTimeout, detail: { ms: MAP_BOOT_TIMEOUT_MS } });
+        if (webviewGeneration >= MAP_WEBVIEW_REMOUNT_LIMIT) {
+          // 상한을 다 쓴 세대의 만료 — "다시 시도" 대신 소진 안내가 뜬다(D3). ERROR 경로와 같은 줄로 구분한다.
+          traceNearby({
+            event: NearbyTraceEvent.MapWebViewExhausted,
+            detail: { reason: MapWebViewRemountReason.Retry },
+          });
+        }
         setMapErrored(true);
       };
       const timerId = setTimeout(expireMapBoot, MAP_BOOT_TIMEOUT_MS);
@@ -359,7 +483,7 @@ export const MapTabScreen = () => {
         clearTimeout(timerId);
       };
     },
-    [mapBootSettled],
+    [mapBootSettled, webviewGeneration, webviewDetached],
   );
 
   // nearby 마커 변경(또는 saved 핀 변경) 시 SET_MARKERS 재주입 — READY 이후에만(SDK 준비 전 무의미).
@@ -436,15 +560,23 @@ export const MapTabScreen = () => {
     [mapReady, myCoords, myCoordsSource],
   );
 
-  // 재시도: 핀 에러는 refresh, 지도 SDK 에러는 INIT 재주입(SDK가 살아있으면 즉시 복구) + 핀 재조회.
-  //   ⚠️ 배너 해제는 **READY를 한 번이라도 받은** 경우에만 한다(qa-logic F1). SDK 로드 자체가 실패한
-  //   페이지에는 `__muklogInit`이 없어 재주입해도 READY도 ERROR도 다시 오지 않는데, 여기서 미리
-  //   mapErrored를 내리면 `!mapReady` 로딩 분기가 배너를 대체해 스피너가 영구 잔류하고 재시도
-  //   버튼까지 사라진다(바텀탭은 언마운트되지 않아 세션 내내 갇힌다). 배너를 남겨 어포던스를 지킨다.
-  //   실제로 복구되면 READY 수신부가 mapErrored를 false로 되돌리므로 정상 경로는 그대로다.
-  //   처음부터 READY·ERROR가 오지 않는 경우는 위 지도 준비 제한 시간(watchMapBoot)이 맡는다 — 재시도는 그 타이머를
-  //   끄지도 다시 켜지도 않고, 지도 웹 화면을 다시 불러오지도 않는다(카카오 SDK 재요청 증가 — 비용 가드레일).
+  // 재시도 — 가운데 오류 카드의 "다시 시도". 무엇이 실패했는지에 따라 셋으로 나뉜다(map-webview-recovery D2).
+  //   · SDK를 받지 못한 페이지(READY 전 ERROR·제한 시간 만료): 그 페이지에는 `__muklogInit`이 없어 INIT을 다시 넣어도
+  //     READY도 ERROR도 오지 않는다(U62) — WebView를 재마운트해 페이지를 처음부터 다시 불러온다(상한 1회 사용, 새 세대의
+  //     제한 시간). 핀도 1번 다시 조회하고(기존 동작), 누른 버튼이 로딩 카드로 바뀌어 포커스를 잃으므로 스크린리더에 로딩을
+  //     1회 알린다(D5). INIT은 누르는 순간 넣지 않는다 — READY가 오면 기존 경로가 새 인스턴스에 넣는다. 상한을 다 썼으면
+  //     버튼 자체가 없다(D3 — centerOverlay).
+  //     ⚠️ 이 경로에서 재마운트 없이 mapErrored만 내리면 `!mapReady` 로딩이 배너를 대체해 스피너가 영구 잔류한다(qa-logic F1).
+  //   · SDK가 살아 있는 오류(READY 뒤 ERROR = INIT 예외): 지금처럼 오류를 걷고 핀 재조회 + INIT 재주입(재마운트 0, 상한 무관).
+  //   · 핀 오류: 핀 재조회 + INIT 재주입(재마운트 0). 부팅 중이어도 제한 시간(watchMapBoot)은 건드리지 않는다.
   const handleRetry = () => {
+    if (mapBootFailed) {
+      if (remountsLeft === 0 || !claimGeneration()) return;
+      remountWebView({ reason: MapWebViewRemountReason.Retry });
+      void refresh();
+      AccessibilityInfo.announceForAccessibility(MAP_COPY.loading);
+      return;
+    }
     if (mapReady) setMapErrored(false);
     void refresh();
     sendInit();
@@ -507,7 +639,7 @@ export const MapTabScreen = () => {
   // 하단 스팟 카드 도킹 여부 — FAB가 카드에 가려지지 않게 위로 띄우는 데 사용(ui-spec §4).
 
   // 상태 → 중앙 오버레이(tone/message) 판단(ui-spec §3 매핑). 지도 전체에 관한 상태만 정중앙에 둔다.
-  //   우선순위: 지도 SDK 에러 → 핀 에러 → 로딩(핀 loading **또는** 지도 부팅 중) → 없음.
+  //   우선순위: 재마운트 상한 소진 → 지도 SDK 에러 → 핀 에러 → 로딩(핀 loading **또는** 지도 부팅 중) → 없음.
   //   map-location-denied(U7 ②): 권한 안내는 여기서 빠져 하단 배너(showPermissionBanner)로 옮겨 갔다 —
   //   거부만으로는 지도 정중앙을 점유하지 않는다.
   const centerOverlay = ((): {
@@ -516,6 +648,12 @@ export const MapTabScreen = () => {
     actionLabel?: string;
     onAction?: () => void;
   } | null => {
+    // map-webview-recovery(D3·D4): 상한을 다 쓴 뒤 WebView를 떼어 냈거나(소진 뒤 종료) SDK를 받지 못한 오류가 났으면
+    //   "다시 시도" 대신 앱을 다시 켜 달라는 안내만 띄운다(버튼 없음 — 눌러도 복구할 수 없다). SDK 오류 쪽은 WebView를
+    //   남겨 두므로 늦게 READY가 오면 이 안내도 스스로 걷힌다. 화면 밖 대기로 떼어 둔 동안은(상한 남음) 로딩이 보인다.
+    if (remountsLeft === 0 && (webviewDetached || mapBootFailed)) {
+      return { tone: MapStatusTone.Error, message: MAP_COPY.restartApp };
+    }
     if (mapErrored) {
       return {
         tone: MapStatusTone.Error,
@@ -558,7 +696,14 @@ export const MapTabScreen = () => {
 
   return (
     <View style={styles.root}>
-      <MapWebView html={html} onMessage={handleMessage} webviewRef={webviewRef}>
+      <MapWebView
+        html={html}
+        onMessage={handleMessage}
+        webviewRef={webviewRef}
+        onTerminated={handleWebViewTerminated}
+        webviewKey={webviewGeneration}
+        webviewMounted={!webviewDetached}
+      >
         {/* 카테고리 필터 바 — 최상단 full-width strip(ui-spec §2: top 12, edge-bleed 가로 스크롤). 위치는 부모가 배치.
             map-headerless: 기준선만 상태바 아래로(+insets.top), 간격 12는 그대로. inset 0이면 현행과 동일. */}
         <View

@@ -6,7 +6,12 @@ import { join } from 'path';
 
 import { setDevMode } from '@/test/setDevMode';
 
-import { NearbyTraceEvent, nearbyRenderGapMs, traceNearby } from './nearbyTrace';
+import {
+  MapWebViewRemountReason,
+  NearbyTraceEvent,
+  nearbyRenderGapMs,
+  traceNearby,
+} from './nearbyTrace';
 
 // console 전 채널을 감시한다 — 가드가 빠지면 어느 채널로든 새어나가므로 log만 보면 놓친다.
 const consoleSpies = () => ({
@@ -68,6 +73,15 @@ describe('traceNearby (A0-1·A0-2)', () => {
     expect(NearbyTraceEvent.FirstRender).toBe('render:first');
     // map-nearby-feedback(U10 ④): 디바이스 스모크에서 "SDK ERROR가 아니라 지도 준비 제한 시간이 울렸다"를 가르는 키.
     expect(NearbyTraceEvent.MapBootTimeout).toBe('map:boot-timeout');
+    // map-webview-recovery(U71·U62): 디바이스 스모크에서 재마운트 줄 수 = 카카오 SDK 페이지 재요청 수, 소진 안내 판정 키.
+    expect(NearbyTraceEvent.MapWebViewRemount).toBe('map:webview-remount');
+    expect(NearbyTraceEvent.MapWebViewExhausted).toBe('map:webview-exhausted');
+  });
+
+  it('재마운트 사유 토큰은 enum-style 상수로 고정된다(terminated · retry)', () => {
+    expect(MapWebViewRemountReason.Terminated).toBe('terminated');
+    expect(MapWebViewRemountReason.Retry).toBe('retry');
+    expect(Object.keys(MapWebViewRemountReason)).toHaveLength(2);
   });
 
   it('map:boot-timeout도 __DEV__=false면 no-op이다(프로덕션 오버헤드 0)', () => {

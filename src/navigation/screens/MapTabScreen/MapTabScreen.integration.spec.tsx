@@ -54,16 +54,22 @@ jest.mock('@/lib/supabase', () => ({
   supabase: { auth: { getSession: jest.fn(() => Promise.resolve({ data: { session: null } })) } },
 }));
 // MapWebView 모킹 — onMessage를 testID로 노출해 READY·BOUNDS_CHANGED를 직접 발화한다(MapTabScreen.spec과 같은 방식).
+//   map-webview-recovery: onTerminated(종료 신호 발화)·webviewKey(재마운트가 실제로 일어났는지)도 노출한다.
 jest.mock('@/features/map/components', () => {
   const Rn = require('react-native');
   const ReactLib = require('react');
   const actual = jest.requireActual('@/features/map/components');
   return {
     ...actual,
-    MapWebView: ({ onMessage, webviewRef, children }: any) => {
+    MapWebView: ({ onMessage, webviewRef, children, onTerminated, webviewKey }: any) => {
       ReactLib.useImperativeHandle(webviewRef, () => ({ injectJavaScript: jest.fn() }));
       return (
-        <Rn.View testID="map-webview-mock" onMessage={onMessage}>
+        <Rn.View
+          testID="map-webview-mock"
+          onMessage={onMessage}
+          onTerminated={onTerminated}
+          webviewKey={webviewKey}
+        >
           {children}
         </Rn.View>
       );
@@ -258,5 +264,44 @@ describe('MapTabScreen × useNearbyPlaces — 재검색 pill은 전환 내내 �
     expect(announceMock).toHaveBeenCalledWith(COPY.nearbyEmpty);
     expect(screen.queryByTestId('map-research-button')).toBeNull();
     expect(searchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+// map-webview-recovery(plan §5-1 D MRN1·MRN2): WebView 재마운트는 useNearbyPlaces를 다시 마운트하지 않는다 —
+//   첫 조회 허용분·보정 1회권이 훅 마운트당이라 되살아나지 않고, 재마운트 뒤 READY·영역 통지가 와도 조회가 늘지 않는다.
+//   지도 탭은 화면에 있다(isFocused true)라 종료는 즉시 재마운트된다.
+describe('MapTabScreen × useNearbyPlaces — WebView 재마운트는 주변 조회를 만들지 않는다(map-webview-recovery)', () => {
+  /** 더블이 노출한 onTerminated로 종료 신호 1건을 보낸다. */
+  const terminate = () => fireEvent(screen.getByTestId('map-webview-mock'), 'terminated');
+  const webviewKeyNow = (): unknown => screen.getByTestId('map-webview-mock').props.webviewKey;
+
+  it('MRN1 첫 조회를 마친 뒤 종료 → READY → 영역 통지가 와도 searchNearby는 1번 그대로다', async () => {
+    await renderToIdle();
+    const keyBefore = webviewKeyNow();
+
+    terminate();
+    // 재마운트가 실제로 일어났다 — 종료가 무시되면 아래 단언이 공허하게 초록이다.
+    expect(webviewKeyNow()).not.toBe(keyBefore);
+    emit({ message: { type: 'READY' } });
+    emitBounds({ lat: 37.5 });
+    await flush();
+
+    expect(searchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('MRN2 첫 영역 통지 전에 종료 → READY → 첫 영역 통지면 searchNearby는 재마운트 전후 합쳐 정확히 1번이다', async () => {
+    searchMock.mockResolvedValue([item({ id: '1' })]);
+    renderWithTheme(<MapTabScreen />);
+    await flush();
+    emit({ message: { type: 'READY' } });
+    const keyBefore = webviewKeyNow();
+
+    terminate();
+    expect(webviewKeyNow()).not.toBe(keyBefore);
+    emit({ message: { type: 'READY' } });
+    emitBounds({ lat: 37.5 });
+    await flush();
+
+    expect(searchMock).toHaveBeenCalledTimes(1);
   });
 });

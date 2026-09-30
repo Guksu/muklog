@@ -159,20 +159,33 @@ const injectedScripts: string[] = [];
 
 // MapWebView 모킹 — onMessage를 testID로 노출해 직접 발화(MARKER_TAP 등)하고,
 //   webviewRef.injectJavaScript를 캡처해 SET_MARKERS 주입을 검증한다.
+//   map-webview-recovery: onTerminated·webviewKey·webviewMounted도 prop으로 노출한다(종료 신호 발화·재마운트 관찰 지점).
+//   webviewMounted=false면 핸들을 null로 둔다 — 실물 MapWebView가 떼어 낸 WebView의 ref를 비우는 것과 같은 규칙(충실도).
+//   key → 새 인스턴스 → ref 재연결은 흉내 내지 않는다(그 연결은 MapTabScreen.recovery.spec이 실물 MapWebView로 본다).
 jest.mock('@/features/map/components', () => {
   const Rn = require('react-native');
   const ReactLib = require('react');
   const actual = jest.requireActual('@/features/map/components');
   return {
     ...actual,
-    MapWebView: ({ onMessage, webviewRef, children }: any) => {
-      ReactLib.useImperativeHandle(webviewRef, () => ({
-        injectJavaScript: (script: string) => {
-          injectedScripts.push(script);
-        },
-      }));
+    MapWebView: ({ onMessage, webviewRef, children, onTerminated, webviewKey, webviewMounted }: any) => {
+      ReactLib.useImperativeHandle(webviewRef, () =>
+        webviewMounted === false
+          ? null
+          : {
+              injectJavaScript: (script: string) => {
+                injectedScripts.push(script);
+              },
+            },
+      );
       return (
-        <Rn.View testID="map-webview-mock" onMessage={onMessage}>
+        <Rn.View
+          testID="map-webview-mock"
+          onMessage={onMessage}
+          onTerminated={onTerminated}
+          webviewKey={webviewKey}
+          webviewMounted={webviewMounted}
+        >
           {children}
         </Rn.View>
       );
@@ -196,7 +209,7 @@ import {
   type MapMarker,
 } from '@/features/map/types';
 
-import { MAP_BOOT_TIMEOUT_MS, MapTabScreen } from './MapTabScreen';
+import { MAP_BOOT_TIMEOUT_MS, MAP_WEBVIEW_REMOUNT_LIMIT, MapTabScreen } from './MapTabScreen';
 
 const openSettingsMock = Linking.openSettings as jest.Mock;
 // RN jest 기본 목(react-native/jest/setup.js) — 호출 인자·횟수만 본다.
@@ -1521,38 +1534,11 @@ describe('MapTabScreen — nearby 선로딩·재검색 버튼 배선', () => {
   });
 
   // ── qa-logic F1: SDK 로드 실패 후 "다시 시도"가 영구 로딩 dead-end로 끝나지 않는다 ────────────
-  //   SDK가 죽은 페이지에는 __muklogInit이 없어 READY도 ERROR도 다시 오지 않는다. 그 상태에서
-  //   mapErrored를 미리 내리면 로딩 분기(!mapReady)가 배너를 대체해 스피너가 영구 잔류하고
-  //   재시도 버튼이 사라진다(바텀탭은 언마운트되지 않아 세션 내내 갇힌다).
-  //   READY·ERROR가 처음부터 하나도 오지 않는 경우(E6)는 map-nearby-feedback의 10초 1회 제한 시간이 맡는다(S11~S19).
-  //   재시도는 그 제한 시간을 끄지도 다시 켜지도 않는다 — 여기 F1 동작은 그대로다.
-  it('F1-1 READY 전 SDK 에러에서 "다시 시도"를 눌러도 에러 배너·재시도 버튼이 유지된다', () => {
-    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
-    setNearby({ status: 'ready' });
-    renderWithTheme(<MapTabScreen />);
-    emitMessage({ raw: JSON.stringify({ type: 'ERROR', reason: 'SDK_LOAD_FAILED' }) });
-    expect(screen.getByText('지도를 불러오지 못했어요')).toBeTruthy();
-
-    fireEvent.press(screen.getByText('다시 시도'));
-
-    expect(screen.getByText('지도를 불러오지 못했어요')).toBeTruthy();
-    expect(screen.getByTestId('map-status-action')).toBeTruthy();
-    // 로딩 스피너가 배너를 대체하면 재시도 수단이 사라진 dead-end다.
-    expect(screen.queryByTestId('map-status-spinner')).toBeNull();
-  });
-
-  it('F1-2 "다시 시도"는 배너 유지와 무관하게 INIT을 재주입한다(SDK가 살아있으면 즉시 복구)', () => {
-    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
-    setNearby({ status: 'ready' });
-    renderWithTheme(<MapTabScreen />);
-    emitMessage({ raw: JSON.stringify({ type: 'ERROR', reason: 'SDK_LOAD_FAILED' }) });
-    expect(injectedScripts.filter((s) => s.includes('INIT'))).toHaveLength(0);
-
-    fireEvent.press(screen.getByText('다시 시도'));
-
-    expect(injectedScripts.filter((s) => s.includes('INIT'))).toHaveLength(1);
-  });
-
+  //   SDK가 죽은 페이지에는 __muklogInit이 없어 INIT을 다시 넣어도 READY도 ERROR도 오지 않는다.
+  //   map-webview-recovery(U62)부터 그 페이지의 "다시 시도"는 WebView를 새로 만들고 새 세대의 10초 제한 시간을 건다 —
+  //   로딩이 영구히 남는 길이 없다(옛 F1-1 "배너·버튼 유지"·F1-2 "INIT 재주입"은 MR4로 대체).
+  //   여기엔 두 경로의 결과만 남긴다: 재시도 뒤 READY면 지도만 남고(F1-3), READY 뒤 늦게 온 ERROR(SDK 생존)는
+  //   재시도로 즉시 걷힌다(F1-4).
   it('F1-3 재시도 후 실제로 READY가 오면 배너가 사라지고 지도만 남는다(정상 복구 경로 회귀 0)', () => {
     useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: jest.fn() });
     setNearby({ status: 'ready' });
@@ -2089,7 +2075,7 @@ describe('MapTabScreen — 주변 조회·지도 준비 피드백(map-nearby-fee
     });
   });
 
-  describe('④ 지도 준비 제한 시간(1회성 워치독)', () => {
+  describe('④ 지도 준비 제한 시간(WebView 세대당 1회)', () => {
     let logSpy: jest.SpyInstance;
 
     beforeEach(() => {
@@ -2173,19 +2159,8 @@ describe('MapTabScreen — 주변 조회·지도 준비 피드백(map-nearby-fee
       expect(bootTimeoutTraces({ logSpy })).toBe(0);
     });
 
-    it('S15 1회성 — 만료 뒤 "다시 시도"는 카드를 유지하고(F1) 제한 시간을 다시 켜지 않는다', () => {
-      renderAndExpire();
-      expect(bootTimeoutTraces({ logSpy })).toBe(1);
-
-      fireEvent.press(screen.getByText(COPY.retry));
-      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
-      expect(screen.queryByTestId('map-status-spinner')).toBeNull();
-
-      advance({ ms: 3 * MAP_BOOT_TIMEOUT_MS });
-
-      expect(bootTimeoutTraces({ logSpy })).toBe(1);
-      expect(screen.getAllByTestId('map-status-overlay')).toHaveLength(1);
-    });
+    // 옛 S15(1회성 — 만료 뒤 "다시 시도"가 제한 시간을 다시 켜지 않음)는 map-webview-recovery MR5로 대체했다:
+    //   SDK 없는 페이지의 "다시 시도"는 이제 WebView를 새로 만들고, 그 세대에 10초가 다시 걸린다.
 
     it('S16 만료 전에 화면이 사라지면 타이머도 해제된다(만료 계측 0 · console.error 0)', () => {
       const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -2871,5 +2846,730 @@ describe('MapTabScreen — 위시 카드 "기록하기" → 먹로그 에디터(
     expect(screen.queryByTestId('wish-spot-card')).toBeNull();
     expect(screen.queryByRole('button', { name: /기록하기/ })).toBeNull();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
+
+// ── map-webview-recovery (plan §3.4·§5-1 B MR1~MR17·G, UX 백로그 U71·U62) ─────────────────────
+//   지도를 그리던 WebView가 OS에 의해 끝나거나(iOS 콘텐츠 프로세스·Android 렌더 프로세스 종료), SDK를 받지 못한 페이지
+//   (READY 전 ERROR·10초 만료)에서 "다시 시도"를 누르면 안쪽 WebView를 새로 만들어(재마운트) 지도를 되살린다.
+//   상한은 지도 탭 마운트당 3회, 넘으면 "앱을 껐다가 다시 켜 주세요"(버튼 없음). 화면 밖 종료는 돌아올 때 1회(Q1-B).
+//   seam(plan §3.5 ②): 중앙 안내 문구·스피너·버튼(map-status-spinner·map-status-action), 더블이 받은 webviewKey·
+//   webviewMounted, injectedScripts(INIT·SET_SELECTED), 훅 spy 호출 수, AccessibilityInfo 알림, 개발 계측 로그 줄 수,
+//   export 상수. 세대·떼어 냄 상태 변수 이름과 내부 함수 이름·호출 순서는 보지 않는다.
+//   더블은 key → 새 인스턴스 → ref 재연결을 흉내 내지 않는다 — 그 연결은 MapTabScreen.recovery.spec이 실물 MapWebView로 본다.
+describe('MapTabScreen — 지도 WebView 종료·로드 실패 복구(map-webview-recovery)', () => {
+  // 카피는 문자 그대로 적는다 — 상수를 import하면 상수 오타가 spec까지 따라와 잠금이 풀린다.
+  //   소진 안내의 줄바꿈(\n)은 RNTL 기본 정규화가 공백 하나로 바꾼다. 그래서 기존 지도 오류 문구와 전체가 달라 구분된다.
+  const COPY = {
+    loading: '지도를 불러오는 중이에요',
+    sdkError: '지도를 불러오지 못했어요',
+    restartApp: '지도를 불러오지 못했어요. 앱을 껐다가 다시 켜 주세요',
+    pinsError: '먹로그를 불러오지 못했어요',
+    retry: '다시 시도',
+    dismissPermission: '위치 안내 닫기',
+  } as const;
+
+  let logSpy: jest.SpyInstance;
+  beforeEach(() => {
+    logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  const readyPins = () =>
+    useMuklogPinsMock.mockReturnValue({ state: { status: 'ready', pins: [] }, refresh: muklogRefreshSpy });
+  const errorPins = () =>
+    useMuklogPinsMock.mockReturnValue({
+      state: { status: 'error', message: COPY.pinsError },
+      refresh: muklogRefreshSpy,
+    });
+  // 3종 핀 소스(saved pasta · wish cafe · nearby cafe) — 좌표를 떨어뜨려 dedup을 피한다(카테고리 필터 describe와 같은 구성).
+  const setupThreeKinds = () => {
+    useMuklogPinsMock.mockReturnValue({
+      state: {
+        status: 'ready',
+        pins: [pin({ muklogId: 'm-pasta', category: 'pasta', lat: 37.5, lng: 127.0 })],
+      },
+      refresh: muklogRefreshSpy,
+    });
+    setWishPins({ pins: [wishPin({ id: 'w-cafe', category: 'cafe', lat: 37.6, lng: 127.1 })] });
+    setNearby({
+      status: 'ready',
+      items: [
+        nearbyItem({
+          kakaoPlaceId: 'k-cafe',
+          categoryName: '음식점 > 카페 > 스페셜티커피',
+          lat: 37.7,
+          lng: 127.2,
+        }),
+      ],
+    });
+  };
+
+  const emitReady = () => emitMessage({ raw: JSON.stringify({ type: 'READY' }) });
+  const emitSdkError = () =>
+    emitMessage({ raw: JSON.stringify({ type: 'ERROR', reason: 'SDK_LOAD_FAILED' }) });
+  const webviewDouble = () => screen.getByTestId('map-webview-mock');
+  /** 더블이 노출한 onTerminated로 종료 신호 1건을 보낸다(플랫폼별 prop 합치기는 MapWebView.spec W1·W2 몫). */
+  const terminate = () => fireEvent(webviewDouble(), 'terminated');
+  const webviewKeyNow = (): unknown => webviewDouble().props.webviewKey;
+  const webviewMountedNow = (): unknown => webviewDouble().props.webviewMounted;
+  const initScripts = () => injectedScripts.filter((s) => s.includes('"type":"INIT"'));
+  const pressRetry = () => fireEvent.press(screen.getByText(COPY.retry));
+  /** 개발 계측 한 종류의 콘솔 줄(`[nearby] {event}`) — [0]은 라벨, [1]은 detail. */
+  const traceCalls = ({ event }: { event: string }) =>
+    logSpy.mock.calls.filter((call) => String(call[0]) === `[nearby] ${event}`);
+  const remountTraces = () => traceCalls({ event: 'map:webview-remount' });
+  const exhaustedTraces = () => traceCalls({ event: 'map:webview-exhausted' });
+  const bootTimeoutTraces = () => traceCalls({ event: 'map:boot-timeout' });
+
+  /**
+   * READY → (종료 → READY) × 3 → 종료. 상한 3회를 다 쓰고 4번째 종료에서 소진된다.
+   * @returns 지나간 webviewKey 목록(처음 + 재마운트 3번)
+   */
+  const exhaustByTerminations = () => {
+    const keys = [webviewKeyNow()];
+    emitReady();
+    for (let i = 0; i < 3; i += 1) {
+      terminate();
+      keys.push(webviewKeyNow());
+      emitReady();
+      expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+    }
+    terminate();
+    return keys;
+  };
+
+  it('MR1 READY 뒤 종료 → 로딩 안내 + 새 WebView(키 바뀜) · 그 순간 주입·재조회·알림 0 · 계측 1줄 → READY면 안내가 걷히고 INIT 1건', () => {
+    readyPins();
+    renderWithTheme(<MapTabScreen />);
+    emitReady();
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+    const keyBefore = webviewKeyNow();
+    const initBefore = initScripts().length;
+    const injectedBefore = injectedScripts.length;
+    const snapshotCalls = () => ({
+      muklogRefresh: muklogRefreshSpy.mock.calls.length,
+      wishRefresh: wishRefreshSpy.mock.calls.length,
+      preload: preloadSpy.mock.calls.length,
+      research: researchSpy.mock.calls.length,
+      setBounds: setBoundsSpy.mock.calls.length,
+    });
+    const callsBefore = snapshotCalls();
+
+    terminate();
+
+    expect(screen.getByText(COPY.loading)).toBeTruthy();
+    expect(screen.getByTestId('map-status-spinner')).toBeTruthy();
+    expect(webviewKeyNow()).not.toBe(keyBefore);
+    expect(webviewMountedNow()).toBe(true);
+    // 재마운트 순간에는 아무것도 주입하지 않는다 — READY가 오면 기존 경로가 INIT을 새 인스턴스에 넣는다.
+    expect(injectedScripts).toHaveLength(injectedBefore);
+    // 핀·위시·주변은 RN 상태에 있다 — 종료 복구는 조회를 만들지 않는다(비용 가드레일).
+    expect(snapshotCalls()).toEqual(callsBefore);
+    // 사용자 행동이 아니고 다른 화면에 있을 수도 있어 스크린리더에 알리지 않는다(D5).
+    expect(announceMock).not.toHaveBeenCalled();
+    expect(remountTraces()).toHaveLength(1);
+    expect(remountTraces()[0][1]).toEqual({ reason: 'terminated', count: 1 });
+
+    emitReady();
+
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+    expect(initScripts()).toHaveLength(initBefore + 1);
+  });
+
+  it('MR2 READY 전(부팅 중) 종료 → 키 바뀜 · 로딩 유지 · INIT 0 → READY면 INIT 정확히 1', () => {
+    readyPins();
+    renderWithTheme(<MapTabScreen />);
+    const keyBefore = webviewKeyNow();
+
+    terminate();
+
+    expect(webviewKeyNow()).not.toBe(keyBefore);
+    expect(screen.getByText(COPY.loading)).toBeTruthy();
+    expect(initScripts()).toHaveLength(0);
+
+    emitReady();
+
+    expect(initScripts()).toHaveLength(1);
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+  });
+
+  it('MR4 READY 전 SDK 로드 실패 → "다시 시도" → 새 WebView + 로딩(버튼 없음) · INIT 0 · 핀 재조회 1 · 알림 1 · 계측 1줄 → READY면 INIT 1', () => {
+    readyPins();
+    renderWithTheme(<MapTabScreen />);
+    emitSdkError();
+    expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+    const keyBefore = webviewKeyNow();
+
+    pressRetry();
+
+    expect(webviewKeyNow()).not.toBe(keyBefore);
+    expect(screen.getByText(COPY.loading)).toBeTruthy();
+    expect(screen.getByTestId('map-status-spinner')).toBeTruthy();
+    expect(screen.queryByTestId('map-status-action')).toBeNull();
+    // 누르는 순간 INIT을 넣지 않는다 — SDK가 없는 옛 페이지에 넣어 봐야 아무 일도 일어나지 않는다.
+    expect(initScripts()).toHaveLength(0);
+    expect(muklogRefreshSpy).toHaveBeenCalledTimes(1);
+    // 누른 버튼이 사라져 포커스를 잃으므로 무엇이 일어나는지 1회 알린다(D5).
+    expect(announceMock).toHaveBeenCalledTimes(1);
+    expect(announceMock).toHaveBeenCalledWith(COPY.loading);
+    expect(remountTraces()).toHaveLength(1);
+    expect(remountTraces()[0][1]).toEqual({ reason: 'retry', count: 1 });
+
+    emitReady();
+
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+    expect(initScripts()).toHaveLength(1);
+  });
+
+  it('MR6 READY 뒤 ERROR(SDK 생존)의 "다시 시도"는 WebView를 새로 만들지 않고(키 불변) INIT만 다시 넣는다 — 상한도 쓰지 않는다', () => {
+    readyPins();
+    renderWithTheme(<MapTabScreen />);
+    emitReady();
+    emitSdkError();
+    expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+    const keyBefore = webviewKeyNow();
+    const initBefore = initScripts().length;
+
+    pressRetry();
+
+    expect(webviewKeyNow()).toBe(keyBefore);
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+    expect(initScripts()).toHaveLength(initBefore + 1);
+    expect(remountTraces()).toHaveLength(0);
+
+    // 상한 소모 0 — 이어지는 종료 3번이 모두 재마운트된다(소진 안내 없음).
+    const keys = new Set([webviewKeyNow()]);
+    for (let i = 0; i < 3; i += 1) {
+      terminate();
+      expect(webviewMountedNow()).toBe(true);
+      keys.add(webviewKeyNow());
+    }
+    expect(keys.size).toBe(4);
+    expect(screen.queryByText(COPY.restartApp)).toBeNull();
+  });
+
+  it.each([
+    ['① READY 뒤', true],
+    ['② READY 전', false],
+  ] as const)('MR7 %s 핀 오류의 "다시 시도"는 WebView를 새로 만들지 않고(키 불변) 핀만 1번 재조회한다', (_label, afterReady) => {
+    errorPins();
+    renderWithTheme(<MapTabScreen />);
+    if (afterReady) emitReady();
+    expect(screen.getByText(COPY.pinsError)).toBeTruthy();
+    const keyBefore = webviewKeyNow();
+
+    pressRetry();
+
+    expect(webviewKeyNow()).toBe(keyBefore);
+    expect(muklogRefreshSpy).toHaveBeenCalledTimes(1);
+    expect(remountTraces()).toHaveLength(0);
+  });
+
+  it('MR8 종료 복구는 3번까지 — 4번째 종료면 WebView를 떼어 내고 소진 안내(버튼·스피너 없음) · 소진 계측 1줄', () => {
+    readyPins();
+    renderWithTheme(<MapTabScreen />);
+
+    const keys = exhaustByTerminations();
+
+    expect(new Set(keys).size).toBe(4);
+    expect(webviewMountedNow()).toBe(false);
+    expect(webviewKeyNow()).toBe(keys[3]);
+    expect(screen.getByText(COPY.restartApp)).toBeTruthy();
+    // 줄바꿈은 RNTL 정규화가 공백으로 바꿔 위 조회가 잡지 못한다 — 원문을 따로 잠근다(qa-visual QV-1 · plan §4.3).
+    expect(screen.getByText(COPY.restartApp).props.children).toBe(
+      '지도를 불러오지 못했어요.\n앱을 껐다가 다시 켜 주세요',
+    );
+    expect(screen.queryByTestId('map-status-action')).toBeNull();
+    expect(screen.queryByTestId('map-status-spinner')).toBeNull();
+    expect(remountTraces()).toHaveLength(3);
+    expect(exhaustedTraces()).toHaveLength(1);
+    expect(exhaustedTraces()[0][1]).toEqual({ reason: 'terminated' });
+  });
+
+  it('MR11 종료 복구 동안 선택(위시 카드)·카테고리 필터가 그대로고, READY 뒤 INIT은 필터된 마커를, SET_SELECTED는 같은 핀을 다시 넣는다', () => {
+    setupThreeKinds();
+    renderWithTheme(<MapTabScreen />);
+    emitReady();
+    fireEvent.press(screen.getByTestId('filter-chip-cafe'));
+    emitMessage({ raw: JSON.stringify({ type: 'MARKER_TAP', id: 'w-cafe', kind: 'wish' }) });
+    expect(screen.getByText('연남 파스타')).toBeTruthy(); // wishPin 기본 placeName
+
+    terminate();
+
+    expect(screen.getByText(COPY.loading)).toBeTruthy();
+    expect(screen.getByText('연남 파스타')).toBeTruthy();
+    expect(screen.getByTestId('filter-chip-cafe').props.accessibilityState?.selected).toBe(true);
+    const injectedBeforeReady = injectedScripts.length;
+
+    emitReady();
+
+    // READY 뒤에 새로 주입된 것만 본다 — 종료 전 INIT·SET_SELECTED가 대신 충족하지 않게.
+    const sinceReady = injectedScripts.slice(injectedBeforeReady);
+    const init = sinceReady.filter((s) => s.includes('"type":"INIT"'));
+    expect(init).toHaveLength(1);
+    expect(init[0]).toContain('"id":"w-cafe"');
+    expect(init[0]).toContain('"id":"k-cafe"');
+    expect(init[0]).not.toContain('"id":"m-pasta"');
+    const selected = sinceReady.filter((s) => s.includes('"type":"SET_SELECTED"'));
+    expect(selected.slice(-1)[0]).toContain('"selectedId":"w-cafe"');
+    expect(screen.getByText('연남 파스타')).toBeTruthy();
+  });
+
+  it('MR12 권한 배너를 닫은 뒤 종료 → READY여도 배너는 닫힌 채다(마운트 상태 보존)', () => {
+    setPermission({ status: LocationPermissionStatus.Denied, coords: null });
+    readyPins();
+    renderWithTheme(<MapTabScreen />);
+    emitReady();
+    expect(screen.getByTestId('map-permission-banner')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText(COPY.dismissPermission));
+    expect(screen.queryByTestId('map-permission-banner')).toBeNull();
+    const keyBefore = webviewKeyNow();
+
+    terminate();
+    expect(webviewKeyNow()).not.toBe(keyBefore);
+    emitReady();
+
+    // 가운데 안내가 없는데도 배너가 없다 = 닫힘이 살아 있다(안내에 가려 숨은 것이 아니다).
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+    expect(screen.queryByTestId('map-permission-banner')).toBeNull();
+  });
+
+  it('MR14 READY 없이 종료 5번 연속 — 키 변화 3번, 4번째부터 떼어 냄 · 재마운트 계측 3줄 · 소진 계측 1줄', () => {
+    readyPins();
+    renderWithTheme(<MapTabScreen />);
+    const keys = [webviewKeyNow()];
+    const mounted: unknown[] = [];
+
+    for (let i = 0; i < 5; i += 1) {
+      terminate();
+      keys.push(webviewKeyNow());
+      mounted.push(webviewMountedNow());
+    }
+
+    expect(new Set(keys).size).toBe(4);
+    expect(mounted).toEqual([true, true, true, false, false]);
+    expect(remountTraces()).toHaveLength(3);
+    expect(exhaustedTraces()).toHaveLength(1);
+    expect(screen.getByText(COPY.restartApp)).toBeTruthy();
+  });
+
+  it('MR15 같은 act 안에서 종료 신호가 2번 와도 한 세대는 1번만 재마운트한다 — 상한 1만 쓴다', () => {
+    readyPins();
+    renderWithTheme(<MapTabScreen />);
+    emitReady();
+    const keyBefore = webviewKeyNow();
+    const onTerminated = webviewDouble().props.onTerminated as () => void;
+
+    act(() => {
+      onTerminated();
+      onTerminated();
+    });
+
+    expect(webviewKeyNow()).not.toBe(keyBefore);
+    expect(remountTraces()).toHaveLength(1);
+
+    // 상한을 1만 썼으므로 종료 2번은 더 재마운트되고, 그다음 종료에서 소진된다.
+    terminate();
+    terminate();
+    expect(webviewMountedNow()).toBe(true);
+    expect(remountTraces()).toHaveLength(3);
+    terminate();
+    expect(webviewMountedNow()).toBe(false);
+    expect(screen.getByText(COPY.restartApp)).toBeTruthy();
+  });
+
+  it('MR16 소진 뒤 지도 탭이 다시 마운트되면(로그아웃·재시작) 상한을 처음부터 센다', () => {
+    readyPins();
+    const { unmount } = renderWithTheme(<MapTabScreen />);
+    exhaustByTerminations();
+    expect(screen.getByText(COPY.restartApp)).toBeTruthy();
+
+    unmount();
+    renderWithTheme(<MapTabScreen />);
+    emitReady();
+    const keyBefore = webviewKeyNow();
+
+    terminate();
+
+    expect(webviewKeyNow()).not.toBe(keyBefore);
+    expect(webviewMountedNow()).toBe(true);
+    expect(screen.getByText(COPY.loading)).toBeTruthy();
+    expect(screen.queryByText(COPY.restartApp)).toBeNull();
+  });
+
+  it('MR17 재마운트 상한은 지도 탭 마운트당 3회다', () => {
+    expect(MAP_WEBVIEW_REMOUNT_LIMIT).toBe(3);
+  });
+
+  it('MR18 상한을 다 쓴 세대가 READY 전에 SDK 로드 실패를 보내면 버튼 없는 소진 안내(WebView는 남김) · 소진 계측 1줄(retry) → 늦은 READY면 걷힌다', () => {
+    readyPins();
+    renderWithTheme(<MapTabScreen />);
+    for (let i = 0; i < 3; i += 1) {
+      terminate();
+    }
+    expect(remountTraces()).toHaveLength(3);
+
+    emitSdkError();
+
+    expect(screen.getByText(COPY.restartApp)).toBeTruthy();
+    expect(screen.queryByTestId('map-status-action')).toBeNull();
+    expect(webviewMountedNow()).toBe(true);
+    expect(exhaustedTraces()).toHaveLength(1);
+    expect(exhaustedTraces()[0][1]).toEqual({ reason: 'retry' });
+
+    emitReady();
+
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+  });
+
+  // ── qa-logic F-S2(부록 A P3·P4): 소진 계측은 소진 안내가 뜰 때만 남는다 — 디바이스 스모크가 이 줄로 소진을 판정한다.
+  //   상한을 다 쓴 세대라도 READY 뒤 ERROR(SDK 생존)는 소진이 아니다(AC4 "상한 무관").
+  it('MR19 상한이 남은 세대의 READY 전 SDK 오류는 "다시 시도"이고 소진 계측을 남기지 않는다 (qa P3)', () => {
+    readyPins();
+    renderWithTheme(<MapTabScreen />);
+
+    emitSdkError();
+
+    expect(screen.getByText(COPY.retry)).toBeTruthy();
+    expect(exhaustedTraces()).toHaveLength(0);
+  });
+
+  it('MR20 상한을 다 쓴 세대라도 READY 뒤 ERROR(SDK 생존)는 "다시 시도"로 복구된다 — 키 불변 · 소진 계측 0 (qa P4)', () => {
+    readyPins();
+    renderWithTheme(<MapTabScreen />);
+    emitReady();
+    for (let i = 0; i < 3; i += 1) {
+      terminate();
+      emitReady();
+    }
+    expect(remountTraces()).toHaveLength(3);
+    const keyBefore = webviewKeyNow();
+
+    // INIT 예외(mapHtml __muklogInit의 catch)는 READY 뒤에만 온다 — SDK는 살아 있다.
+    emitMessage({ raw: JSON.stringify({ type: 'ERROR', reason: 'TypeError: x' }) });
+
+    expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+    expect(exhaustedTraces()).toHaveLength(0);
+
+    pressRetry();
+
+    expect(webviewKeyNow()).toBe(keyBefore);
+    expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+  });
+
+  // ── qa-logic F-S3(부록 A P6): 소진 안내는 스크린리더에 알리지 않는다(plan §4.4 — 사용자 행동이 아니다).
+  it('MR21 상한을 다 써 떼어 내고 소진 안내를 띄워도 스크린리더 알림은 0이다 (qa P6)', () => {
+    readyPins();
+    renderWithTheme(<MapTabScreen />);
+
+    exhaustByTerminations();
+
+    expect(webviewMountedNow()).toBe(false);
+    expect(screen.getByText(COPY.restartApp)).toBeTruthy();
+    expect(announceMock).not.toHaveBeenCalled();
+  });
+
+  describe('가짜 시간 — 세대마다 다시 걸리는 10초 제한 시간', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    const advance = ({ ms }: { ms: number }) => {
+      act(() => {
+        jest.advanceTimersByTime(ms);
+      });
+    };
+
+    it('MR3 부팅 8초에 종료 → 옛 제한 시간은 10초에 울리지 않고, 새 세대의 10초가 처음부터 돈다(1ms 경계)', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      advance({ ms: 8_000 });
+
+      terminate();
+      advance({ ms: MAP_BOOT_TIMEOUT_MS - 1 });
+
+      expect(screen.getByText(COPY.loading)).toBeTruthy();
+      expect(bootTimeoutTraces()).toHaveLength(0);
+
+      advance({ ms: 1 });
+
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+      expect(screen.getByTestId('map-status-action')).toBeTruthy();
+      expect(bootTimeoutTraces()).toHaveLength(1);
+    });
+
+    it('MR5 제한 시간 만료 → "다시 시도" → 새 세대에 10초가 다시 걸린다(9,999ms 로딩 → 1ms 뒤 지도 오류 + 다시 시도, 만료 계측 2)', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      advance({ ms: MAP_BOOT_TIMEOUT_MS });
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+      expect(bootTimeoutTraces()).toHaveLength(1);
+
+      pressRetry();
+      advance({ ms: MAP_BOOT_TIMEOUT_MS - 1 });
+
+      expect(screen.getByText(COPY.loading)).toBeTruthy();
+      expect(bootTimeoutTraces()).toHaveLength(1);
+
+      advance({ ms: 1 });
+
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+      expect(screen.getByTestId('map-status-action')).toBeTruthy();
+      expect(bootTimeoutTraces()).toHaveLength(2);
+    });
+
+    it('MR9 소진 뒤 종료 신호가 또 와도 무시하고, 30초가 지나도 제한 시간·재조회가 없다(떼어 낸 뒤 타이머 0)', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      const keys = exhaustByTerminations();
+
+      terminate();
+      advance({ ms: 3 * MAP_BOOT_TIMEOUT_MS });
+
+      expect(webviewKeyNow()).toBe(keys[3]);
+      expect(webviewMountedNow()).toBe(false);
+      expect(screen.getByText(COPY.restartApp)).toBeTruthy();
+      expect(bootTimeoutTraces()).toHaveLength(0);
+      expect(exhaustedTraces()).toHaveLength(1);
+      expect(muklogRefreshSpy).not.toHaveBeenCalled();
+      expect(wishRefreshSpy).not.toHaveBeenCalled();
+    });
+
+    it('MR10 종료·만료·재시도로 상한을 다 쓰면 SDK 오류는 버튼 대신 소진 안내(WebView는 남김) → 늦은 READY면 스스로 복구 → 그 뒤 종료면 떼어 낸다', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      emitReady();
+      terminate(); // 재마운트 1
+      emitReady();
+      terminate(); // 재마운트 2
+      advance({ ms: MAP_BOOT_TIMEOUT_MS });
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+      pressRetry(); // 재마운트 3
+      advance({ ms: MAP_BOOT_TIMEOUT_MS });
+
+      expect(remountTraces()).toHaveLength(3);
+      expect(screen.getByText(COPY.restartApp)).toBeTruthy();
+      expect(screen.queryByTestId('map-status-action')).toBeNull();
+      expect(screen.queryByTestId('map-status-spinner')).toBeNull();
+      // D3: 눌러도 복구할 수 없는 버튼은 없애되, WebView는 남겨 늦은 READY로 스스로 복구될 길을 둔다.
+      expect(webviewMountedNow()).toBe(true);
+      expect(exhaustedTraces()).toHaveLength(1);
+      expect(exhaustedTraces()[0][1]).toEqual({ reason: 'retry' });
+      // 만료 뒤 늦게 온 SDK 오류는 같은 소진 상태다 — 계측을 한 줄 더 남기지 않는다.
+      emitSdkError();
+      expect(screen.getByText(COPY.restartApp)).toBeTruthy();
+      expect(exhaustedTraces()).toHaveLength(1);
+      const initBefore = initScripts().length;
+
+      emitReady();
+
+      expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+      expect(initScripts()).toHaveLength(initBefore + 1);
+
+      terminate();
+
+      expect(webviewMountedNow()).toBe(false);
+      expect(screen.getByText(COPY.restartApp)).toBeTruthy();
+      expect(exhaustedTraces()).toHaveLength(2);
+      expect(exhaustedTraces()[1][1]).toEqual({ reason: 'terminated' });
+    });
+
+    it('MR13 종료 뒤 READY 없이 30초 — 키는 종료 때 한 번만 바뀌고(만료는 재마운트하지 않는다) 만료 계측 1 · 지도 오류 + 다시 시도', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      emitReady();
+      const keyBefore = webviewKeyNow();
+
+      terminate();
+      const keyAfterTerminate = webviewKeyNow();
+      advance({ ms: 3 * MAP_BOOT_TIMEOUT_MS });
+
+      expect(keyAfterTerminate).not.toBe(keyBefore);
+      expect(webviewKeyNow()).toBe(keyAfterTerminate);
+      expect(remountTraces()).toHaveLength(1);
+      expect(bootTimeoutTraces()).toHaveLength(1);
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+      expect(screen.getByTestId('map-status-action')).toBeTruthy();
+    });
+
+    // ── qa-logic F-S1(부록 A P1·P2): 부팅 중(READY·ERROR 전)에 떼어 내도 그 세대의 타이머가 남지 않는다(plan I2).
+    //   부팅 중 떼어 냄은 세대·준비 상태를 바꾸지 않는다 — 떼어 냄 자체가 옛 타이머를 해제해야 한다.
+    it('MR22 READY 없이 상한을 다 써 부팅 중에 떼어 내면 30초가 지나도 만료 계측 0 · 소진 계측 1줄 그대로 (qa P1)', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      for (let i = 0; i < 4; i += 1) {
+        terminate();
+      }
+      expect(webviewMountedNow()).toBe(false);
+
+      advance({ ms: 3 * MAP_BOOT_TIMEOUT_MS });
+
+      expect(bootTimeoutTraces()).toHaveLength(0);
+      expect(exhaustedTraces()).toHaveLength(1);
+      expect(screen.getByText(COPY.restartApp)).toBeTruthy();
+    });
+
+    it('MR23 부팅 중 화면 밖에서 끝나 떼어 둔 동안은 30초가 지나도 만료 계측 0 · 로딩 안내 그대로 (qa P2)', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      focusMapTab();
+      blurMapTab();
+
+      terminate();
+      expect(webviewMountedNow()).toBe(false);
+      advance({ ms: 3 * MAP_BOOT_TIMEOUT_MS });
+
+      expect(bootTimeoutTraces()).toHaveLength(0);
+      expect(screen.getByText(COPY.loading)).toBeTruthy();
+    });
+  });
+
+  // Q1-B(리더 결정 2026-09-30): 화면 밖(다른 탭·상세·에디터·사진 선택 중)에서 끝난 WebView는 떼어 둔 채 기다렸다가
+  //   지도 탭이 다시 포커스될 때 1회 재마운트한다 — 화면 밖에서 상한·10초 제한 시간을 쓰지 않게.
+  //   포커스는 파일 상단 더블(focusMapTab·blurMapTab)로 흉내 낸다. 첫 포커스(마운트)를 먼저 흉내 내 이후 호출이 "복귀"가 된다.
+  describe('화면 밖 종료(Q1-B) — 지도 탭이 다시 보일 때 1회 재마운트', () => {
+    /** 마운트 포커스 → READY → 다른 화면으로 이동(지도 탭 blur). */
+    const renderReadyThenLeave = () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      focusMapTab();
+      emitReady();
+      blurMapTab();
+    };
+
+    it('G1 화면 밖에서 종료되면 키는 그대로 두고 WebView만 떼어 낸다 → 지도 탭 포커스 때 1회 재마운트 → READY면 INIT 1건', () => {
+      renderReadyThenLeave();
+      const keyBefore = webviewKeyNow();
+      const initBefore = initScripts().length;
+
+      terminate();
+
+      expect(webviewKeyNow()).toBe(keyBefore);
+      expect(webviewMountedNow()).toBe(false);
+      expect(remountTraces()).toHaveLength(0);
+      // 떼어 둔 동안은 로딩 안내다(소진 안내 아님) — 돌아오면 곧 다시 불러온다.
+      expect(screen.getByText(COPY.loading)).toBeTruthy();
+      expect(screen.queryByText(COPY.restartApp)).toBeNull();
+
+      focusMapTab();
+
+      expect(webviewKeyNow()).not.toBe(keyBefore);
+      expect(webviewMountedNow()).toBe(true);
+      expect(remountTraces()).toHaveLength(1);
+      expect(remountTraces()[0][1]).toEqual({ reason: 'terminated', count: 1 });
+      expect(screen.getByText(COPY.loading)).toBeTruthy();
+
+      emitReady();
+
+      expect(screen.queryByTestId('map-status-overlay')).toBeNull();
+      expect(initScripts()).toHaveLength(initBefore + 1);
+    });
+
+    it('G2 화면 밖 종료가 2번 와도 돌아올 때 재마운트는 1번이다 — 상한 1만 쓴다', () => {
+      renderReadyThenLeave();
+      const keyBefore = webviewKeyNow();
+
+      terminate();
+      terminate();
+      focusMapTab();
+
+      expect(webviewKeyNow()).not.toBe(keyBefore);
+      expect(remountTraces()).toHaveLength(1);
+
+      // 남은 상한 2 — 화면에서 종료 2번은 재마운트되고 그다음 종료에서 소진된다.
+      terminate();
+      terminate();
+      expect(webviewMountedNow()).toBe(true);
+      expect(remountTraces()).toHaveLength(3);
+      terminate();
+      expect(webviewMountedNow()).toBe(false);
+      expect(screen.getByText(COPY.restartApp)).toBeTruthy();
+    });
+
+    it('G3 화면에 있을 때 종료는 즉시 재마운트하고, 그 뒤 포커스 복귀만으로는 WebView를 새로 만들지 않는다', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      focusMapTab();
+      emitReady();
+      const keyBefore = webviewKeyNow();
+
+      terminate();
+
+      const keyAfterTerminate = webviewKeyNow();
+      expect(keyAfterTerminate).not.toBe(keyBefore);
+      expect(webviewMountedNow()).toBe(true);
+      expect(remountTraces()).toHaveLength(1);
+
+      emitReady();
+      blurMapTab();
+      focusMapTab();
+
+      expect(webviewKeyNow()).toBe(keyAfterTerminate);
+      expect(remountTraces()).toHaveLength(1);
+    });
+
+    it('G4 상한을 다 쓴 뒤 화면 밖에서 종료되면 소진이다 — 돌아와도 재마운트하지 않는다', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      focusMapTab();
+      emitReady();
+      for (let i = 0; i < 3; i += 1) {
+        terminate();
+        emitReady();
+      }
+      blurMapTab();
+      const keyBefore = webviewKeyNow();
+
+      terminate();
+      focusMapTab();
+
+      expect(webviewKeyNow()).toBe(keyBefore);
+      expect(webviewMountedNow()).toBe(false);
+      expect(screen.getByText(COPY.restartApp)).toBeTruthy();
+      expect(remountTraces()).toHaveLength(3);
+      expect(exhaustedTraces()).toHaveLength(1);
+    });
+
+    it('G5 지도 오류 카드가 떠 있던 채 화면 밖에서 끝나도 떼어 둔 동안은 로딩 안내다(누를 수 없는 오류 카드를 남기지 않는다)', () => {
+      readyPins();
+      renderWithTheme(<MapTabScreen />);
+      focusMapTab();
+      emitSdkError();
+      expect(screen.getByText(COPY.sdkError)).toBeTruthy();
+      blurMapTab();
+
+      terminate();
+
+      expect(webviewMountedNow()).toBe(false);
+      expect(screen.getByText(COPY.loading)).toBeTruthy();
+      expect(screen.queryByText(COPY.sdkError)).toBeNull();
+      expect(screen.queryByTestId('map-status-action')).toBeNull();
+
+      focusMapTab();
+
+      expect(webviewMountedNow()).toBe(true);
+      expect(remountTraces()).toHaveLength(1);
+      expect(screen.getByText(COPY.loading)).toBeTruthy();
+    });
+
+    // qa-logic F-S3(부록 A P5): 복귀 재마운트도 종료로 인한 재마운트라 알리지 않는다(plan D5).
+    it('G6 화면 밖 종료 뒤 복귀 재마운트는 스크린리더에 알리지 않는다 (qa P5)', () => {
+      renderReadyThenLeave();
+      terminate();
+      expect(webviewMountedNow()).toBe(false);
+
+      focusMapTab();
+
+      // 재마운트가 실제로 일어났다 — 없으면 아래 알림 0 단언이 공허하게 초록이다.
+      expect(webviewMountedNow()).toBe(true);
+      expect(remountTraces()).toHaveLength(1);
+      expect(announceMock).not.toHaveBeenCalled();
+    });
   });
 });
