@@ -30,7 +30,18 @@ export {
   INVITE_CODE_LENGTH,
   normalizeInviteCodeInput,
   isInviteCodeComplete,
+  extractInviteCode,
+  resolveInviteCodeInput,
 } from './code';
+// 초대 공유·붙여넣기(invite-share U72·U73) — 메시지·링크 해석·공유 결과 판정(순수) + 공유·복사 훅 + 클립보드 읽기.
+export { buildInviteMessage, resolveInviteStoreUrl, INVITE_STORE_URL_FALLBACK } from './inviteMessage';
+export {
+  resolveInviteShareFeedback,
+  INVITE_SHARE_COPY,
+  IOS_COPY_ACTIVITY_TYPE,
+} from './inviteShareFeedback';
+export { useInviteShare } from './useInviteShare';
+export { readInviteCodeFromClipboard } from './readInviteCodeFromClipboard';
 // 로그 이름(log-name) 진입 버튼 — 편집 표현부는 공용 RenameDialog(@/components)로 통일(기존 편집 시트 폐기, rename-dialog D-4).
 export { LogTitleButton, type LogTitleButtonProps } from './components/LogTitleButton';
 // 참여자 블록(members-display S5b, 킷 mk-log:79-103) — presentational. 데이터·RPC·배선은 developer 2단계.

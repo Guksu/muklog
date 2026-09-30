@@ -41,6 +41,8 @@ export const IconName = {
   Pencil: 'pencil',
   // 지도 현재위치 FAB(map-locate-button) — 킷 mk-home:298 I name="locate".
   Locate: 'locate',
+  // 초대코드 카드 "공유"(invite-share U72) — 킷 in-house share 글리프(mk-log:237 GlassBtn name="share").
+  Share: 'share',
 } as const;
 export type IconName = (typeof IconName)[keyof typeof IconName];
 

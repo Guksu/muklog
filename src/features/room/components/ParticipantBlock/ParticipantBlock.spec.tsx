@@ -4,7 +4,7 @@
 //   presentational — 데이터는 props 주입(useRoomMembers 호출 없음). 배선은 developer 2단계.
 import React from 'react';
 import { AccessibilityInfo, StyleSheet } from 'react-native';
-import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 
 import { renderWithTheme } from '@/test/renderWithTheme';
 import { defaultNickname } from '@/features/profile/defaultNickname';
@@ -82,6 +82,15 @@ describe('ParticipantBlock — 킷 mk-log:79-103', () => {
     renderBlock({ canInvite: true, onInvite, members: [member({ userId: meId, nickname: '민' })] });
     fireEvent.press(screen.getByTestId('participant-invite'));
     expect(onInvite).toHaveBeenCalledTimes(1);
+  });
+
+  // invite-share(U72·U37): 동작이 "복사"에서 "초대 메시지 공유"로 바뀐다. 글자·이름은 그대로 두고, 무엇이 일어나는지는 힌트로 알린다.
+  it('초대 버튼: 글자 "초대"·이름 "참여자 초대" 유지 + 힌트 "초대 메시지를 보낼 수 있어요" (AC12)', () => {
+    renderBlock({ canInvite: true });
+    const invite = screen.getByLabelText('참여자 초대');
+    expect(invite.props.testID).toBe('participant-invite');
+    expect(within(invite).getByText('초대')).toBeTruthy();
+    expect(invite.props.accessibilityHint).toBe('초대 메시지를 보낼 수 있어요');
   });
 
   it('canInvite=false(만석 5명) → 초대 버튼을 숨긴다 (킷 mk-log:93 length<5)', () => {

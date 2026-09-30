@@ -53,4 +53,9 @@ describe('Icon', () => {
     renderWithTheme(<Icon name={IconName.Locate} />);
     expect(screen.getByTestId('icon-locate')).toBeTruthy();
   });
+
+  it('share 글리프(초대코드 카드 "공유", invite-share)를 렌더한다', () => {
+    renderWithTheme(<Icon name={IconName.Share} />);
+    expect(screen.getByTestId('icon-share')).toBeTruthy();
+  });
 });

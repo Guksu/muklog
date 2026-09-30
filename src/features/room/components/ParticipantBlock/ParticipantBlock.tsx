@@ -7,6 +7,8 @@
 //   헤더 행(mk-log:82) alignItems baseline, gap 7, marginBottom 12 → "참여자 N"(800/14 mk-ink) + "· 최대 5명"(600/12 text-alternative)
 //   멤버 행(mk-log:86) gap 16, flexWrap → 각 항목 width 50, column, gap 6: Avatar 46 ring={userId===meId} + 닉(600/12 mk-ink2, maxWidth50, 1줄 ellipsis, center)
 //   초대 버튼(mk-log:93-100) canInvite일 때: dashed 원 46(accentLine 2px, radius full) + plus 20(accentStrong) + "초대"(700/12 accentStrong)
+//     invite-share(U72·U37): 동작만 "복사"→"초대 메시지 공유"로 바뀐다(킷 mk-log:94 이탈, 사용자 승인 2026-09-30). 비주얼·글자·이름은 그대로,
+//     무엇이 일어나는지는 accessibilityHint로 알린다(ui-spec §2-5).
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -23,7 +25,7 @@ export type ParticipantBlockProps = {
   meId: string;
   /** 초대 버튼 노출 여부(= members.length < 5). false면 초대 버튼 숨김(만석). */
   canInvite: boolean;
-  /** 초대 버튼 탭 콜백 — 클립보드 복사+토스트는 developer가 배선(초대코드는 상위 소유). */
+  /** 초대 버튼 탭 콜백 — 초대 메시지 공유(OS 공유 시트). 배선은 상위(LogScreen → useInviteShare.shareInvite, 초대코드는 상위 소유). */
   onInvite: () => void;
 };
 
@@ -35,6 +37,9 @@ const INVITE_PLUS_SIZE = 20;
 
 // 부여 판정: 46 아바타 sm/0.6 승계 — 같은 행에 나란히 서는 46 컨트롤(motion-press-c §2 C7)
 const INVITE_PRESSED_OPACITY = 0.6;
+
+// 초대 버튼 힌트(invite-share U37) — 글자 "초대"는 그대로 두고, 누르면 공유 시트가 뜬다는 사실을 화면 읽기 사용자에게 미리 알린다.
+const INVITE_ACCESSIBILITY_HINT = '초대 메시지를 보낼 수 있어요';
 
 /** 멤버 표시 닉 — nickname 우선, null/빈이면 결정적 defaultNickname(userId) (킷 mk-log:90 폴백). */
 const memberDisplayName = ({ member }: { member: RoomMember }): string =>
@@ -82,6 +87,7 @@ export const ParticipantBlock = ({ members, meId, canInvite, onInvite }: Partici
             testID="participant-invite"
             accessibilityRole="button"
             accessibilityLabel="참여자 초대"
+            accessibilityHint={INVITE_ACCESSIBILITY_HINT}
             onPress={onInvite}
             pressSize="sm"
             pressedOpacity={INVITE_PRESSED_OPACITY}
