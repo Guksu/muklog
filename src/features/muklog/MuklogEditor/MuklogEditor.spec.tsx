@@ -1201,11 +1201,12 @@ describe('MuklogEditor 키보드 회피', () => {
     renderWithTheme(
       <MuklogEditor roomId="r1" onBack={onBack} onSaved={onSaved} placeSearch={searchControl()} />,
     );
-  // 폼 ScrollView — 검색뷰(PlaceSearchView)의 ScrollView도 keyboardShouldPersistTaps="handled"라 자동 inset prop으로 구분한다.
+  // 폼 ScrollView = 메모 입력란을 품은 ScrollView — 메모를 키보드 위로 올려야 하는 스크롤 영역이다.
+  // 검색뷰(PlaceSearchView) ScrollView도 같은 키보드 prop(handled·자동 inset)을 쓰므로 prop이 아니라 메모 포함 여부로 식별한다.
   const formOf = ({ view }: { view: ReturnType<typeof renderEditor> }) =>
     view
       .UNSAFE_queryAllByType(ScrollView)
-      .find((node) => node.props.automaticallyAdjustKeyboardInsets !== undefined);
+      .find((node) => within(node).queryByLabelText('메모') !== null);
   // RN jest 목의 scrollToEnd(프로토타입 공유 jest.fn) — 어느 인스턴스에서 불렸는지는 mock.contexts로 본다.
   const scrollToEnd = () =>
     (ScrollView as unknown as { prototype: { scrollToEnd: jest.Mock } }).prototype.scrollToEnd;
@@ -1228,9 +1229,7 @@ describe('MuklogEditor 키보드 회피', () => {
   it.each(['ios', 'android'] as const)('%s는 플랫폼에 맞게 자동 키보드 inset을 적용한다', (os) => {
     setOS({ os });
     const view = renderEditor();
-    const form = view
-      .UNSAFE_getAllByType(ScrollView)
-      .find((node) => node.props.keyboardShouldPersistTaps === 'handled');
+    const form = formOf({ view });
     expect(form?.props.automaticallyAdjustKeyboardInsets).toBe(os === 'ios');
   });
 
