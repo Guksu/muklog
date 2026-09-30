@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-10-01 (스프린트 slug `sprint-20260930-invite-share`) |
 | 브랜치 | feat/invite-share |
-| PR | 미생성 |
+| PR | https://github.com/Guksu/muklog/pull/46 |
 | 관련 경로 | src/features/room/(inviteMessage·inviteShareFeedback·readInviteCodeFromClipboard·useInviteShare 신설, code·useJoinRoom·ParticipantBlock), src/features/appVersion/(appStoreLinks 신설, useAppVersionGate·AppVersionGate), src/components/InviteCodeCard·Icon, src/navigation/screens/(RoomCreatedScreen·RoomCreatedRoute·LogScreen·JoinLogScreen·CodeInput, CodeInputActions 신설), src/test/listViewFormingProps(신설), assets/icons/icons.ts, docs/design/architecture.md |
 
 ## 1. 개요
