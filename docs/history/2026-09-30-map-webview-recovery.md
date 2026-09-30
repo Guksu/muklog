@@ -4,7 +4,7 @@
 |------|------|
 | 날짜 | 2026-09-30 |
 | 브랜치 | fix/map-webview-recovery |
-| PR | 미생성 |
+| PR | https://github.com/Guksu/muklog/pull/45 |
 | 관련 경로 | src/features/map/components/MapWebView/, src/navigation/screens/MapTabScreen/(MapTabScreen.tsx·spec 3종, recovery.spec 신설), src/features/map/nearbyTrace/, docs/design/architecture.md(§4·§5·§6) |
 
 ## 1. 개요
