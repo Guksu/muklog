@@ -1,7 +1,7 @@
 // src/features/map/nearbyTrace/nearbyTrace.ts
 // nearby 로딩 계측 — 선로딩·캐시·invoke·첫 렌더 갭을 개발 번들에서만 관측한다 (map-pin-loading plan §4.6).
 //
-// 생산자: useNearbyPlaces(preload/cache/invoke) + MapTabScreen(map:ready·render:first).
+// 생산자: useNearbyPlaces(preload/cache/invoke) + MapTabScreen(map:ready·render:first·map:boot-timeout·map:webview-*).
 // 소비자: 개발자(Metro 콘솔)뿐 — 앱 로직은 이 모듈의 반환값에 의존하지 않는다(부수효과 전용).
 // 프로덕션 오버헤드 0(§10·B8): `__DEV__`가 아니면 첫 줄에서 return하고, 모듈 전역에 타이머·리스너·상태가 0이다.
 //   (계측이 자기 무게를 갖는 순간 "측정하려던 성능"을 측정이 바꾼다 — 그래서 폴링·버퍼링을 두지 않는다.)
@@ -18,8 +18,24 @@ export const NearbyTraceEvent = {
   FirstRender: 'render:first', // { kind, gapMs }
   // { ms } — 지도 준비 제한 시간 만료(READY·ERROR 무응답). SDK ERROR와 로그로 구분하기 위함(map-nearby-feedback).
   MapBootTimeout: 'map:boot-timeout',
+  // { reason, count } — 지도 WebView 재마운트(map-webview-recovery). 줄 수 = 카카오 SDK 페이지 재요청 수, count = 이번 탭 마운트의 누적.
+  MapWebViewRemount: 'map:webview-remount',
+  // { reason } — 재마운트 상한을 다 써서 "다시 시도" 대신 앱을 다시 켜 달라는 안내를 띄웠다(map-webview-recovery).
+  MapWebViewExhausted: 'map:webview-exhausted',
 } as const;
 export type NearbyTraceEvent = (typeof NearbyTraceEvent)[keyof typeof NearbyTraceEvent];
+
+/**
+ * 지도 WebView 재마운트 사유(enum-style) — map:webview-remount·map:webview-exhausted의 detail.reason.
+ * Terminated = OS가 WebView 프로세스를 끝냈다(iOS 콘텐츠 프로세스·Android 렌더 프로세스).
+ * Retry = SDK를 받지 못한 페이지(READY 전 ERROR·준비 제한 시간 만료)에서 사용자가 "다시 시도"를 눌렀다.
+ */
+export const MapWebViewRemountReason = {
+  Terminated: 'terminated',
+  Retry: 'retry',
+} as const;
+export type MapWebViewRemountReason =
+  (typeof MapWebViewRemountReason)[keyof typeof MapWebViewRemountReason];
 
 /** invoke 트리거 출처(enum-style) — 첫 진입 invoke가 어느 경로로 샜는지 로그만 보고 판별하기 위함. */
 export const NearbyInvokeTrigger = {
