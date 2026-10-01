@@ -5,12 +5,15 @@
 //   from('muklogs').insert(row).select('id').single(). RLS `with check (created_by=auth.uid())`가
 //   누락/위조를 거부(AC8). 트리거(enforce_muklog_fields)가 값 범위 최종 방어.
 // 소비자: MuklogEntrySheet(저장 버튼) → 성공 시 onSaved → MuklogList.refresh()(AC2·AC12).
+// 발송: 저장 성공 직후 triggerPush(send-muklog-push)를 기다리지 않고 부른다(join-push U28).
 //
 // 검증: normalizeMuklogInput으로 앱단 1차 차단(장소명 빈→insert 미호출, rating/미래일 차단).
 //   에러는 mapMuklogError로 한국어 메시지(error 상태) + 원본 throw(시트가 입력 보존).
 //   중복 저장은 loading 중 시트 버튼 비활성으로 방지(엣지 §9).
 import { useState } from 'react';
 
+// 발송 트리거는 알림 바렐이 아니라 직접 경로로(supabase 의존을 바렐 소비처에 전가하지 않는 notif 규칙).
+import { PushEvent, triggerPush } from '@/features/notif/triggerPush';
 import { supabase } from '@/lib/supabase';
 
 import { mapMuklogError } from '../errors';
@@ -19,29 +22,6 @@ import { uploadMuklogPhotos } from '../uploadMuklogPhotos';
 import { normalizeMuklogInput, toMuklogRow } from '../validate';
 
 export type CreateMuklogResult = { id: string };
-
-/**
- * 새 먹로그 발송 트리거(push-send §3) — send-muklog-push Edge Function 에 best-effort 발송 요청.
- *   fire-and-forget: invoke 실패(네트워크/함수 에러)를 흡수해 createMuklog 결과/에러에 절대 영향 주지 않는다.
- *   인증은 invoke 가 Authorization(JWT)을 자동 첨부 → 함수가 callerId 검증(클라는 userId 미전송).
- *   토큰/수신자 게이팅은 서버(RPC)가 전담 — 클라는 roomId/muklogId만 넘긴다.
- * @param roomId 새 먹로그가 속한 로그(방) id
- * @param muklogId 방금 생성된 먹로그 id(data/딥링크용)
- */
-const triggerMuklogPush = async ({
-  roomId,
-  muklogId,
-}: {
-  roomId: string;
-  muklogId: string;
-}): Promise<void> => {
-  try {
-    await supabase.functions.invoke('send-muklog-push', { body: { roomId, muklogId } });
-  } catch (error) {
-    // best-effort: 발송 실패는 저장 결과를 망치지 않는다(로그만).
-    console.warn('[useCreateMuklog] 푸시 발송 트리거 실패(무시):', error);
-  }
-};
 
 /**
  * 먹로그 생성 액션과 로딩/에러 상태를 제공하는 훅.
@@ -111,11 +91,14 @@ export const useCreateMuklog = () => {
         }
       }
 
-      // 발송 트리거(push-send §3) — 먹로그+사진 완료 직후 상대에게 푸시 발송 요청(send-muklog-push Edge Function).
-      //   fire-and-forget(best-effort): 발송 실패는 흡수 — 저장은 이미 끝났으므로 createMuklog 결과/에러에 영향 0.
-      //   본인 식별·멤버십·수신자 prefs 게이팅은 모두 서버(JWT callerId + RPC)가 판정(클라는 roomId/muklogId만 전달).
+      // 발송 트리거(push-send §3 → join-push U28) — 먹로그+사진 완료 직후 상대에게 푸시 발송 요청(send-muklog-push).
+      //   fire-and-forget: 기다리지 않는다(void) — 발송 응답이 늦어도 저장 완료가 늦어지지 않는다.
+      //   triggerPush 는 절대 reject 하지 않는다(실패는 경고만) → createMuklog 결과/에러에 영향 0.
+      //   본인 식별·위조 차단(내 기록인지)·멤버십·수신자 prefs 게이팅은 모두 서버(JWT callerId + 조회·RPC)가 판정.
       //   create 경로 전용(편집은 발송 안 함) — useUpdateMuklog는 이 트리거를 호출하지 않는다.
-      await triggerMuklogPush({ roomId: normalized.roomId, muklogId });
+      void triggerPush({
+        event: { type: PushEvent.MuklogCreated, roomId: normalized.roomId, muklogId },
+      });
 
       return { id: muklogId };
     } catch (err) {

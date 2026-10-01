@@ -2,7 +2,7 @@
 // 딥링크 목적지 결정 순수 유틸 단위 테스트 (push-receive-ux plan §3.2 · T1 · AC1~AC4).
 //   발송 payload data:{roomId, muklogId}를 소비 → MuklogDetail(muklogId 우선) / LogScreen(roomId) / null.
 //   muklogId=''(발송 폴백 빈값)은 "없음" 취급 → LogScreen 폴백. 비객체는 안전 흡수(null).
-import { resolveNotificationTarget } from './notificationTarget';
+import { NotificationType, resolveNotificationTarget } from './notificationTarget';
 
 describe('resolveNotificationTarget (T1)', () => {
   it('AC1: muklogId·roomId 모두 있으면 MuklogDetail(muklogId만, roomId 미전달)', () => {
@@ -56,5 +56,55 @@ describe('resolveNotificationTarget (T1)', () => {
     });
     // 둘 다 비문자열 → null.
     expect(resolveNotificationTarget({ data: { muklogId: 123, roomId: 456 } })).toBeNull();
+  });
+});
+
+// join-push(U74, plan AC18 · R4): 합류 알림 data { type: 'member_joined', roomId } → 로그 화면.
+//   모르는 type(구 앱이 새 알림을 받는 경우의 거울 — 미래 type)은 기존 규칙으로 안전하게 처리한다.
+describe('resolveNotificationTarget — member_joined (join-push)', () => {
+  it('NotificationType.MemberJoined 는 서버(send-join-push)와 같은 문자열 member_joined', () => {
+    expect(NotificationType.MemberJoined).toBe('member_joined');
+  });
+
+  it('{ type: member_joined, roomId } → LogScreen', () => {
+    expect(resolveNotificationTarget({ data: { type: 'member_joined', roomId: 'r1' } })).toEqual({
+      screen: 'LogScreen',
+      params: { roomId: 'r1' },
+    });
+  });
+
+  it('member_joined 에 muklogId 가 섞여 와도 LogScreen(muklogId 무시)', () => {
+    expect(
+      resolveNotificationTarget({ data: { type: 'member_joined', roomId: 'r1', muklogId: 'm1' } }),
+    ).toEqual({ screen: 'LogScreen', params: { roomId: 'r1' } });
+  });
+
+  it('member_joined 인데 roomId 가 없거나 빈 값이면 null(muklogId 가 있어도)', () => {
+    expect(resolveNotificationTarget({ data: { type: 'member_joined' } })).toBeNull();
+    expect(resolveNotificationTarget({ data: { type: 'member_joined', roomId: '' } })).toBeNull();
+    expect(
+      resolveNotificationTarget({ data: { type: 'member_joined', roomId: '', muklogId: 'm1' } }),
+    ).toBeNull();
+  });
+
+  it('모르는 type 은 기존 규칙(muklogId → 상세, roomId → 로그, 없으면 null)', () => {
+    expect(resolveNotificationTarget({ data: { type: 'weekly_recap', roomId: 'r1' } })).toEqual({
+      screen: 'LogScreen',
+      params: { roomId: 'r1' },
+    });
+    expect(
+      resolveNotificationTarget({ data: { type: 'weekly_recap', muklogId: 'm1', roomId: 'r1' } }),
+    ).toEqual({ screen: 'MuklogDetail', params: { muklogId: 'm1' } });
+    expect(resolveNotificationTarget({ data: { type: 'weekly_recap' } })).toBeNull();
+  });
+
+  it('type 이 문자열이 아니면 기존 규칙', () => {
+    expect(resolveNotificationTarget({ data: { type: 42, roomId: 'r1' } })).toEqual({
+      screen: 'LogScreen',
+      params: { roomId: 'r1' },
+    });
+    expect(
+      resolveNotificationTarget({ data: { type: 42, muklogId: 'm1', roomId: 'r1' } }),
+    ).toEqual({ screen: 'MuklogDetail', params: { muklogId: 'm1' } });
   });
 });

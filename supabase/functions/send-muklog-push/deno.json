@@ -1,6 +1,7 @@
 {
-  "//": "send-muklog-push Edge Function (Deno) — push-send S2. handleSendMuklogPush 는 deps 주입(테스트는 외부 의존 0). serve 진입점만 @supabase/supabase-js(esm.sh) 사용. 토큰은 service_role 경계 안에서만.",
+  "//": "send-muklog-push Edge Function (Deno) — push-send S2 · join-push. handler.ts 는 deps 주입(테스트는 외부 의존 0·서버 시작 없음 → --allow-env 만으로 돈다). index.ts(서버 시작)와 _shared/adminClient.ts 만 esm.sh supabase-js 를 쓰고 deno check 로 확인한다. --no-lock: 잠금 파일을 만들지 않는다(커밋 대상 아님). 토큰은 service_role 경계 안에서만.",
   "tasks": {
-    "test": "deno test --allow-env"
+    "test": "deno test --allow-env --no-lock",
+    "check": "deno check --no-lock index.ts"
   }
 }

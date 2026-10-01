@@ -36,7 +36,14 @@ export type MuklogEditorPrefill = {
 export type AppStackParamList = {
   [Routes.HomeTabs]: undefined;
   [Routes.Profile]: undefined;
-  [Routes.LogScreen]: { roomId: string };
+  [Routes.LogScreen]: {
+    roomId: string;
+    /**
+     * 알림 탭 시각(ms, deepLinkRouter 가 넣는다 — join-push). 같은 로그 화면이 이미 떠 있어 포커스 이벤트가 없을 때
+     * 멤버 재조회 신호로만 쓴다(useRefreshOnPushTap). 다른 진입(목록·입장·생성 완료)은 넣지 않는다.
+     */
+    pushTapAt?: number;
+  };
   [Routes.JoinLog]: undefined;
   // 상세는 muklogId만 받고 자체 조회(roomId는 조회 결과의 room_id로 충분, RLS가 권한 차단). plan §4.1.
   [Routes.MuklogDetail]: { muklogId: string };

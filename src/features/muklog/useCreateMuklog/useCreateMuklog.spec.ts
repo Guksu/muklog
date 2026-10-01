@@ -294,4 +294,22 @@ describe('useCreateMuklog', () => {
     });
     expect(invokeMock).not.toHaveBeenCalled();
   });
+
+  // join-push(U28, plan AC17 · R3): 저장 완료가 발송 응답을 기다리지 않는다 — 주석의 fire-and-forget 이 실제 동작과 맞는다.
+  it('U28: 발송 invoke 가 끝나지 않아도 createMuklog 는 {id} 로 끝나고 loading 은 false 다(발송을 기다리지 않음)', async () => {
+    wireInsert({ data: { id: 'new-id' }, error: null });
+    // 끝나지 않는 발송 — 기다리면 이 테스트는 시간 초과로 실패한다.
+    invokeMock.mockImplementationOnce(() => new Promise(() => {}));
+    const { result } = renderHook(() => useCreateMuklog());
+
+    let created: { id: string } | undefined;
+    await act(async () => {
+      created = await result.current.createMuklog({ input: validInput });
+    });
+
+    expect(created).toEqual({ id: 'new-id' });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+  });
 });
