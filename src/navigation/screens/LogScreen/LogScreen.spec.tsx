@@ -1,6 +1,8 @@
 // src/navigation/screens/LogScreen.spec.tsx
 // 로그 진입(B2) — useRoom 조회 → 헤더(아바타 겹침+로그명) + 초대영역(솔로 InviteCodeCard / 커플 컴팩트 코드행) 분기.
 //   로딩/에러/roomId 누락 방어 + MuklogList 마운트. (plan §5 B2 / §6.1). ⚠️ AC3: 커플도 코드 노출(plan §118).
+//   invite-share(U72·U37, plan R12 — AC12·AC13): 참여자 "초대"와 솔로 이름 변경 다이얼로그 카드는 useInviteShare로 배선한다
+//     (공유 = shareInvite, 복사 = copyInviteCode). 공유 시트·토스트 동작 자체는 useInviteShare.spec이 본다.
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { screen } from '@testing-library/react-native';
@@ -19,6 +21,9 @@ const mockLeaveRoom = jest.fn();
 const mockCancelRoomDeletion = jest.fn();
 const mockLeaveHookState: { loading: boolean; error: string | null } = { loading: false, error: null };
 const mockCancelHookState: { loading: boolean; error: string | null } = { loading: false, error: null };
+// invite-share(U72) — useInviteShare 더블(공유·복사 호출 인자만 본다).
+const mockShareInvite = jest.fn();
+const mockCopyInviteCode = jest.fn();
 // useFocusEffect 더블 — 실제 useFocusEffect(@react-navigation/core)처럼 ① 화면이 등록한 포커스 효과를 훅 자리마다 **전부**
 //   보관하고 ② 마운트(또는 효과가 바뀔 때) 화면이 포커스면 바로 발화해 반환된 정리 함수를 저장했다가(첫 포커스)
 //   ③ 로그 화면이 포커스를 잃을 때(blur = navigate) 부른다. 복귀는 focusLogScreen이 쉬던 효과를 다시 발화한다.
@@ -185,6 +190,7 @@ jest.mock('@/features/room', () => {
       loading: mockCancelHookState.loading,
       error: mockCancelHookState.error,
     }),
+    useInviteShare: () => ({ shareInvite: mockShareInvite, copyInviteCode: mockCopyInviteCode }),
     LogTitleButton,
     LeaveLogSheets,
     ScheduledDeletionBanner,
@@ -453,6 +459,11 @@ beforeEach(() => {
   mockLeaveHookState.error = null;
   mockCancelHookState.loading = false;
   mockCancelHookState.error = null;
+  // invite-share 더블 초기화.
+  mockShareInvite.mockReset();
+  mockShareInvite.mockResolvedValue(undefined);
+  mockCopyInviteCode.mockReset();
+  mockCopyInviteCode.mockResolvedValue(undefined);
 });
 
 describe('LogScreen', () => {
@@ -552,7 +563,8 @@ describe('LogScreen', () => {
     expect(screen.getByLabelText('muklog-list')).toBeTruthy();
   });
 
-  it('참여자 블록 "초대" 탭 → 초대코드 클립보드 복사 + positive 토스트("초대코드를 복사했어요 · {code}")', async () => {
+  // invite-share(U72·U37): 라벨 "초대"와 동작을 맞춘다 — 코드 복사가 아니라 초대 메시지 공유 시트(킷 mk-log:94 이탈, 사용자 승인).
+  it('참여자 블록 "초대" 탭 → shareInvite({ code: room.inviteCode }) 1회 — 클립보드 복사·복사 토스트는 없다 (AC12)', async () => {
     const Clipboard = require('expo-clipboard');
     setRoomState({
       status: 'ready',
@@ -563,8 +575,26 @@ describe('LogScreen', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('probe-invite'));
     });
-    expect(Clipboard.setStringAsync).toHaveBeenCalledWith('ABCDEF');
-    await waitFor(() => expect(screen.getByText('초대코드를 복사했어요 · ABCDEF')).toBeTruthy());
+    expect(mockShareInvite.mock.calls).toStrictEqual([[{ code: 'ABCDEF' }]]);
+    expect(mockCopyInviteCode).not.toHaveBeenCalled();
+    expect(Clipboard.setStringAsync).not.toHaveBeenCalled();
+    expect(screen.queryByText('초대코드를 복사했어요 · ABCDEF')).toBeNull();
+  });
+
+  it('커플 로그에서도 참여자 "초대"는 같은 공유로 이어진다(초대 가능 인원이 남은 동안)', async () => {
+    setRoomState({
+      status: 'ready',
+      room: { roomId: 'r1', inviteCode: 'QWERTY', memberCount: 2, mode: 'couple' },
+    });
+    setMembersState({
+      status: 'ready',
+      members: [memberRow('me-uid', '민지'), memberRow('p-uid', '지현')],
+    });
+    renderWithTheme(<LogScreen />);
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('probe-invite'));
+    });
+    expect(mockShareInvite.mock.calls).toStrictEqual([[{ code: 'QWERTY' }]]);
   });
 
   it('ready면 placeholder 대신 MuklogList(roomId·meId 전달)를 마운트한다 (T11 통합)', () => {
@@ -766,6 +796,43 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
     fireEvent.press(screen.getByLabelText('더보기'));
     fireEvent.press(screen.getByLabelText('probe-select-rename'));
     expect(screen.queryByLabelText('rename-extra')).toBeNull();
+  });
+
+  // invite-share(U72, AC13): 솔로 다이얼로그 안 카드(실 InviteCodeCard)의 두 버튼이 이 로그의 코드로 공유·복사를 부른다.
+  it('솔로 다이얼로그 카드 "초대 메시지 공유" → shareInvite({ code: room.inviteCode }) 1회 (AC13)', async () => {
+    setRoomState(readyRoom({ name: null, memberCount: 1 }));
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('초대 메시지 공유'));
+    });
+    expect(mockShareInvite.mock.calls).toStrictEqual([[{ code: 'ABCDEF' }]]);
+    expect(mockCopyInviteCode).not.toHaveBeenCalled();
+  });
+
+  it('솔로 다이얼로그 카드 "초대코드 복사" → copyInviteCode({ code: room.inviteCode }) 1회 (AC13)', async () => {
+    setRoomState(readyRoom({ name: null, memberCount: 1 }));
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('초대코드 복사'));
+    });
+    expect(mockCopyInviteCode.mock.calls).toStrictEqual([[{ code: 'ABCDEF' }]]);
+    expect(mockShareInvite).not.toHaveBeenCalled();
+  });
+
+  it('다이얼로그 카드의 공유·복사는 다이얼로그를 닫지 않는다(이름 입력 유지)', async () => {
+    setRoomState(readyRoom({ name: null, memberCount: 1 }));
+    renderWithTheme(<LogScreen />);
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
+    await act(async () => {
+      fireEvent.press(screen.getByLabelText('초대 메시지 공유'));
+      fireEvent.press(screen.getByLabelText('초대코드 복사'));
+    });
+    expect(screen.getByLabelText('로그 이름')).toBeTruthy();
   });
 
   it('취소하면 다이얼로그가 닫히고, 재오픈 시 현재 로그명으로 초기화한다 (AC2.6)', () => {

@@ -1,5 +1,6 @@
 // src/features/room/useJoinRoom.spec.ts
 // 방 입장 훅 — p_code 인자 계약, roomId 매핑, 토큰별 에러, error 리셋 (plan §5-1 (4), C1·C2).
+//   invite-share(U24 ①, plan R13 — AC20): clearError()로 실패 문구를 지운다(코드가 바뀌면 화면이 호출). rpc·loading 불변.
 import { act, renderHook } from '@testing-library/react-native';
 
 jest.mock('@/lib/supabase', () => ({ supabase: { rpc: jest.fn() } }));
@@ -92,5 +93,56 @@ describe('useJoinRoom', () => {
       await result.current.joinRoom({ code: 'ABCDEF' });
     });
     expect(result.current.error).toBeNull();
+  });
+});
+
+describe('useJoinRoom — clearError (invite-share AC20)', () => {
+  it('실패로 세팅된 error를 null로 되돌리고 rpc를 다시 부르지 않는다', async () => {
+    rpc.mockResolvedValueOnce({ data: { error: 'INVALID_CODE' }, error: null });
+    const { result } = renderHook(() => useJoinRoom());
+
+    await act(async () => {
+      await expect(result.current.joinRoom({ code: 'ZZZZZZ' })).rejects.toThrow('INVALID_CODE');
+    });
+    expect(result.current.error).toBe('초대코드를 다시 확인해 주세요.');
+
+    act(() => result.current.clearError());
+    expect(result.current.error).toBeNull();
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('loading을 바꾸지 않는다 — 입장 중에 불러도 loading은 true로 남는다', async () => {
+    let finishRpc: (value: { data: { room_id: string }; error: null }) => void = () => undefined;
+    rpc.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRpc = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useJoinRoom());
+
+    let pending: Promise<unknown> = Promise.resolve();
+    act(() => {
+      pending = result.current.joinRoom({ code: 'ABCDEF' });
+    });
+    expect(result.current.loading).toBe(true);
+
+    act(() => result.current.clearError());
+    expect(result.current.loading).toBe(true);
+    expect(result.current.error).toBeNull();
+
+    await act(async () => {
+      finishRpc({ data: { room_id: 'r1' }, error: null });
+      await pending;
+    });
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('error가 없을 때 불러도 아무 일이 없다(null 유지, rpc 0)', () => {
+    const { result } = renderHook(() => useJoinRoom());
+    act(() => result.current.clearError());
+    expect(result.current.error).toBeNull();
+    expect(result.current.loading).toBe(false);
+    expect(rpc).not.toHaveBeenCalled();
   });
 });

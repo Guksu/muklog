@@ -1,6 +1,7 @@
 // src/navigation/screens/RoomCreatedScreen.tsx
 // 로그 생성 완료 축하 화면(비주얼 셸) — 킷 mk-home.jsx:273-289 CreatedScreen 재현 (FLAG-3).
 //   SubBar "로그 만들기" + 🎉 + "우리 로그가 만들어졌어요" + 초대코드 카드 + "로그 열기"/"나중에".
+//   invite-share(U72): 카드 "공유"(주)·"복사"(보조)는 onShare·onCopy로 올려 보낸다 — 배선은 RoomCreatedRoute.
 //   순수 프리젠테이션 — props 계약만(developer가 멀티로그 생성 플로우·네비 배선).
 //   이모지 허용(킷 정책). 스타일은 토큰만(raw hex 0).
 import React, { useEffect, useRef } from 'react';
@@ -25,9 +26,13 @@ export type RoomCreatedScreenProps = {
   onEnter: () => void;
   /** "나중에" / 뒤로 — 홈으로 복귀. */
   onLater: () => void;
+  /** 카드 "공유"(주) — 초대 메시지 공유 시트. 배선은 RoomCreatedRoute(useInviteShare.shareInvite). */
+  onShare: () => void;
+  /** 카드 "복사"(보조) — 초대코드 복사 + 전역 토스트. 배선은 RoomCreatedRoute(useInviteShare.copyInviteCode). */
+  onCopy: () => void;
 };
 
-export const RoomCreatedScreen = ({ inviteCode, onEnter, onLater }: RoomCreatedScreenProps) => {
+export const RoomCreatedScreen = ({ inviteCode, onEnter, onLater, onShare, onCopy }: RoomCreatedScreenProps) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
@@ -92,7 +97,7 @@ export const RoomCreatedScreen = ({ inviteCode, onEnter, onLater }: RoomCreatedS
           {'아래 코드를 보내면\n함께 기록할 수 있어요.'}
         </Text>
 
-        <InviteCodeCard code={inviteCode} />
+        <InviteCodeCard code={inviteCode} onShare={onShare} onCopy={onCopy} />
 
         {/* 킷 mk-home:284 flex 1 스페이서로 버튼을 하단에 밀어냄. */}
         <View style={styles.spacer} />

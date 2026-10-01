@@ -4,6 +4,8 @@
 //   생산자: fetchAppConfig(app_config)·getCurrentAppVersion(expo-constants)·updateSuggestDismissal(AsyncStorage).
 //   소비자: AppVersionGate(상태별 렌더). fail-open: fetch null/current null/ok/unknown/dismiss됨 → none(막지 않음).
 //   폴링/Realtime 0 — 마운트 1회 조회만(비용 가드레일 §8). 재판정=앱 재시작.
+//   invite-share(U72): 같은 조회의 store_url_ios를 판정·플랫폼과 무관하게 storeUrlIos로 내놓는다 —
+//     AppVersionGate가 AppStoreLinksProvider로 내려 초대 메시지 링크에 재사용한다(추가 조회 0).
 import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
@@ -21,13 +23,16 @@ export type VersionGateState =
 
 /**
  * 콜드스타트 1회 원격 버전 확인으로 게이트 상태와 dismiss 핸들러를 제공하는 훅.
- * @returns state(게이트 상태)와 dismissSuggest(권유 "나중에" — 버전당 1회 기록 + none)
+ * @returns state(게이트 상태)·dismissSuggest(권유 "나중에" — 버전당 1회 기록 + none)·
+ *   storeUrlIos(조회 성공 시 app_config.store_url_ios — 판정·플랫폼 무관, 조회 전·실패면 null)
  */
 export const useAppVersionGate = (): {
   state: VersionGateState;
   dismissSuggest: () => void;
+  storeUrlIos: string | null;
 } => {
   const [state, setState] = useState<VersionGateState>({ status: 'checking' });
+  const [storeUrlIos, setStoreUrlIos] = useState<string | null>(null);
   const mountedRef = useRef(true);
   // 현재 suggest 대상 latest — dismissSuggest가 저장할 버전(state가 none으로 바뀐 뒤에도 참조 가능).
   const suggestLatestRef = useRef<string | null>(null);
@@ -41,6 +46,8 @@ export const useAppVersionGate = (): {
       setState({ status: 'none' });
       return;
     }
+    // 판정과 무관하게 iOS 링크를 남긴다(평상시 none에서도 초대 메시지가 재사용 — 조회 수 불변).
+    setStoreUrlIos(config.storeUrlIos);
 
     const current = getCurrentAppVersion();
     const decision = resolveVersionGate({
@@ -87,5 +94,5 @@ export const useAppVersionGate = (): {
     setState({ status: 'none' });
   };
 
-  return { state, dismissSuggest };
+  return { state, dismissSuggest, storeUrlIos };
 };

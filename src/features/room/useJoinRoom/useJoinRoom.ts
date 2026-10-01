@@ -15,6 +15,7 @@ export type JoinRoomResult = { roomId: string };
  * 방 입장 액션과 로딩/에러 상태를 제공하는 훅.
  * joinRoom({ code }) 호출 시 join_room RPC를 수행하고 { roomId }를 반환한다.
  * 실패 시 error에 토큰별 한국어 메시지를 세팅하고 원본 에러를 throw한다.
+ * clearError()는 실패 문구만 지운다(입장 화면이 코드가 바뀔 때 부른다 — invite-share U24 ①). loading·네트워크 불변.
  */
 export const useJoinRoom = () => {
   const [loading, setLoading] = useState(false);
@@ -46,5 +47,8 @@ export const useJoinRoom = () => {
     }
   };
 
-  return { joinRoom, loading, error };
+  // 실패 문구를 다음 제출까지 남기지 않는다 — 코드가 바뀌면 이전 코드의 실패는 더 이상 맞는 말이 아니다.
+  const clearError = () => setError(null);
+
+  return { joinRoom, loading, error, clearError };
 };

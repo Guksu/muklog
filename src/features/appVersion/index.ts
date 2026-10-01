@@ -31,3 +31,11 @@ export {
 
 // app-update-actions — 설정 화면 업데이트 상태 훅(dismissal 미참조, 항상 노출). ProfileScreen이 소비.
 export { useAppUpdateStatus, type AppUpdateStatus } from './useAppUpdateStatus';
+
+// invite-share — 게이트가 콜드스타트에 받은 스토어 링크 컨텍스트(additive). useInviteShare가 초대 메시지 링크로 소비.
+export {
+  AppStoreLinksProvider,
+  useAppStoreLinks,
+  type AppStoreLinks,
+  type AppStoreLinksProviderProps,
+} from './appStoreLinks';

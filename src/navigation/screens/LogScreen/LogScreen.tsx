@@ -1,7 +1,8 @@
 // src/navigation/screens/LogScreen.tsx
 // 로그 진입 화면 — 킷 mk-log.jsx:9-77 LogScreen 재현 (plan §5 B2 / §6.1).
 //   상단 헤더: 본인(+커플이면 익명 파트너) 아바타 겹침 + 로그명("{닉}의 기록"/"{닉} · 짝꿍"). 멤버 배지 없음(킷 헤더 정합).
-//   초대 영역: 솔로=InviteCodeCard 강조 / 커플=컴팩트 1줄(link + "초대코드 XXXXXX" + 복사). (기존 "둘이 함께 기록 중" 교체)
+//   초대 영역: 참여자 블록(리스트 스크롤 헤더)의 "초대" = 초대 메시지 공유 시트 / 솔로면 이름 변경 다이얼로그 안 InviteCodeCard
+//     (공유 주 + 복사 보조). 공유·복사는 useInviteShare(invite-share U72·U37). (옛 솔로 배너·커플 컴팩트 행은 참여자 블록으로 대체)
 //   하단: MuklogList(맛집 리스트 + 카테고리 필터 칩 + "우리 맛집 N" 섹션 + FAB) — 칩/필터/섹션 배선은 developer(MuklogList).
 //
 // 생산자(소비): useRoom(get_room)→RoomDetail / useProfile(본인 닉/아바타) / useAuth(meId). 스타일=토큰만(raw hex 0).
@@ -14,7 +15,6 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Clipboard from 'expo-clipboard';
 
 import {
   Button,
@@ -43,6 +43,7 @@ import {
   ParticipantBlock,
   ScheduledDeletionBanner,
   useCancelRoomDeletion,
+  useInviteShare,
   useLeaveRoom,
   useRenameRoom,
   useRoom,
@@ -82,9 +83,6 @@ const WISH_ADDED_TOAST = '위시리스트에 담았어요 📍';
 const WISH_DUPLICATE_TOAST = '이미 담은 곳이에요';
 // 담기 진행 중 카피(U6-b) — 같은 화면의 '검색 중…'(PlaceSearchView loading 행)과 같은 형태. 신규 어휘 0.
 const WISH_SUBMITTING_LABEL = '담는 중…';
-
-// 초대코드 복사 토스트 카피(킷 mk-log:94, tone positive). {code}는 배선 시 치환.
-const INVITE_COPIED_TOAST = (code: string) => `초대코드를 복사했어요 · ${code}`;
 
 // 위시 세그 본문 — useWishlist 상태 분기(loading/error/ready→WishlistView). 빈 상태는 WishlistView 내부 담당.
 //   데이터/핸들러는 LogScreen이 소유·주입(presentational). 비주얼은 WishlistView(ui-publisher).
@@ -199,6 +197,8 @@ export const LogScreen = () => {
   const [wishSubmitting, setWishSubmitting] = React.useState(false);
   // 위시 추가 성공/실패(U6)·예약취소 에러 토스트 — 전역 토스트 컨트롤러(루트 단일 <Toast>). 트리거만 호출(비주얼·타이머는 Toast 소유).
   const { showToast } = useToastController();
+  // 초대 공유·복사(invite-share U72) — 참여자 "초대"와 솔로 다이얼로그 카드가 쓴다. 조기 반환 위(훅 규칙).
+  const { shareInvite, copyInviteCode } = useInviteShare();
 
   // 재포커스(에디터/상세 복귀) 시 두 목록을 함께 1회 refresh(첫 포커스=마운트 로드와 겹쳐 가드). 폴링 아님(plan §6·§10).
   //   다녀왔어요 플로우(먹로그+1·위시-1)·삭제·편집 반영을 단일 포커스 훅으로 처리(두 소스는 콜백에서 조합).
@@ -419,12 +419,10 @@ export const LogScreen = () => {
     }
   };
 
-  // 참여자 블록 "초대" 버튼(members-display S5b, 킷 mk-log:94) — 초대코드 클립보드 복사 + positive 토스트.
+  // 참여자 블록 "초대" 버튼(members-display S5b · invite-share U72·U37) — 초대 메시지 공유 시트(라벨 "초대"와 동작 일치).
+  //   킷 mk-log:94(복사 + 토스트)에서의 이탈(사용자 승인 2026-09-30). 코드만 원하면 공유 시트의 "복사"로 메시지째 복사된다.
   //   초대코드는 상위(room.inviteCode) 소유. members<5일 때만 블록이 버튼을 렌더(canInvite).
-  const handleInvite = async () => {
-    await Clipboard.setStringAsync(room.inviteCode);
-    showToast({ message: INVITE_COPIED_TOAST(room.inviteCode), tone: 'positive' });
-  };
+  const handleInvite = () => shareInvite({ code: room.inviteCode });
 
   // 위시 추가 풀스크린 장소검색(MuklogEditor searching 스왑과 동일 패턴) — 메인 화면 대신 PlaceSearchView로 스왑.
   //   motion-coverage D1(백로그 U30·원칙 4): 즉시 교체 대신 SwapTransition으로 감싼다 — 검색 진입은 오른쪽에서(전진),
@@ -565,7 +563,17 @@ export const LogScreen = () => {
             placeholder={fallbackName}
             saving={renaming}
             error={renameError}
-            extra={isCouple ? undefined : <InviteCodeCard code={room.inviteCode} compact />}
+            extra={
+              isCouple ? undefined : (
+                // 솔로 초대 카드(invite-share U72) — 공유(주)·복사(보조). 공유 시트는 iOS에서 이 모달 위에 뜬다.
+                <InviteCodeCard
+                  code={room.inviteCode}
+                  compact
+                  onShare={() => void shareInvite({ code: room.inviteCode })}
+                  onCopy={() => void copyInviteCode({ code: room.inviteCode })}
+                />
+              )
+            }
           />
 
           {/* 나가기 메뉴 + 확인 시트(room-lifecycle, 킷 비종속·MuklogDetail 패턴) — open은 LogScreen 소유, RPC·nav는 handleLeave.

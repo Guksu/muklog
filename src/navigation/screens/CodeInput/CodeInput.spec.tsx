@@ -1,14 +1,18 @@
 // src/navigation/screens/CodeInput/CodeInput.spec.tsx
 // 6셀 코드 입력 — 셀 렌더·정규화(normalizeInviteCodeInput) 위임·글자별 셀 채움 (plan §6.5 / §5 T6, AC10·C6).
 //   code-input-a11y: 화면 읽기 기능에 "초대코드" 입력란 하나로 노출(셀 6개는 숨김), 셀 탭 포커스 유지.
+//   invite-share(U73, plan R15 — AC16): 숨김 입력란에 최대 길이가 없다 — 붙여넣은 문장이 정규화 전에 잘리지 않고,
+//     입력 변경은 resolveInviteCodeInput(prev = value)로 해석한다(붙여넣기는 통째 교체).
+//   invite-share(QA QV-3): 셀 줄 폭 계산(resolveCodeCellRowWidth)은 렌더된 셀 줄과 같아야 한다 — 입장 화면 버튼 줄이 이 폭으로 셀 줄 끝에 맞춘다.
 import React from 'react';
 import { StyleSheet, TextInput, type StyleProp, type TextStyle } from 'react-native';
 import { fireEvent, isHiddenFromAccessibility, screen, within } from '@testing-library/react-native';
 
 import { findAccessibleAncestors } from '@/test/findAccessibleAncestors';
 import { renderWithTheme } from '@/test/renderWithTheme';
+import { themes } from '@/theme';
 
-import { CodeInput } from './CodeInput';
+import { CodeInput, resolveCodeCellRowWidth } from './CodeInput';
 
 const CELL_COUNT = 6;
 const INPUT_LABEL = '초대코드';
@@ -130,6 +134,24 @@ const collectAncestorOpacities = ({ root }: { root: TreeNode }) => {
   return opacities;
 };
 
+/**
+ * 렌더된 6셀 줄의 폭 — 셀 폭의 합 + 셀 줄 간격 × (셀 수 − 1). 셀과 그 부모 줄(호스트)의 스타일 값에서 읽는다.
+ * @returns 셀 줄 폭(pt)
+ */
+const readRenderedCellRowWidth = (): number => {
+  const cells = Array.from(
+    { length: CELL_COUNT },
+    (_, index) => screen.getByTestId(`code-cell-${index}`, INCLUDE_HIDDEN) as TreeNode,
+  );
+  let row = cells[0].parent;
+  while (row !== null && typeof row.type !== 'string') row = row.parent;
+  if (row === null) throw new Error('셀을 품는 호스트 줄이 없다');
+  const rowStyle = flattenStyle({ node: row });
+  const gap = Number(rowStyle.columnGap ?? rowStyle.gap);
+  const cellWidthSum = cells.reduce((sum, cell) => sum + Number(flattenStyle({ node: cell }).width), 0);
+  return cellWidthSum + gap * (cells.length - 1);
+};
+
 describe('CodeInput', () => {
   // 셀은 화면 읽기 기능에서 숨겨져 있으므로(code-input-a11y) 셀 자체를 확인할 때는 숨김 요소까지 조회한다.
   it('6개의 코드 셀을 렌더한다', () => {
@@ -152,6 +174,53 @@ describe('CodeInput', () => {
     renderWithTheme(<CodeInput value="" onChangeText={onChangeText} />);
     fireEvent.changeText(screen.getByTestId('code-hidden-input'), '0O1I');
     expect(onChangeText).toHaveBeenCalledWith('');
+  });
+
+  // 셀 줄 끝에 맞춰야 하는 이웃 줄(입장 화면 "붙여넣기·지우기")이 쓰는 폭 — 셀 상수·간격 토큰에서 한 곳으로 파생한다(QA QV-3).
+  it('resolveCodeCellRowWidth는 렌더된 셀 줄 폭(셀 폭 합 + 셀 간격 × 5)과 같다 (QV-3)', () => {
+    renderWithTheme(<CodeInput value="" onChangeText={() => {}} />);
+    expect(resolveCodeCellRowWidth({ theme: themes.light })).toBe(readRenderedCellRowWidth());
+  });
+
+  // jest의 TextInput은 maxLength를 흉내 내지 않아 동작 테스트만으로는 "앞 6자에서 잘림" 회귀를 못 잡는다 — prop 자체를 잠근다.
+  //   (기기에서는 maxLength 6이 붙여넣은 "초대코드: K7P3AB"를 정규화 전에 "초대코드: "로 잘라 빈칸을 만들었다 — 감사 A2)
+  it('숨김 입력란에 최대 길이(maxLength)가 없다 (AC16)', () => {
+    renderWithTheme(<CodeInput value="" onChangeText={() => {}} />);
+    expect(screen.getByTestId('code-hidden-input').props.maxLength).toBeUndefined();
+  });
+
+  describe('붙여넣기 해석 (invite-share AC16)', () => {
+    const STORE_URL = 'https://apps.apple.com/kr/app/%EB%A8%B9%EB%A1%9C%EA%B7%B8-muklog/id6782955594';
+    const messageWith = ({ code }: { code: string }) =>
+      `먹로그에서 우리 맛집 같이 기록해요\n초대코드: ${code}\n앱 받기: ${STORE_URL}`;
+
+    it('빈 칸에 공유 메시지 전체를 붙이면 코드 6자를 넘긴다', () => {
+      const onChangeText = jest.fn();
+      renderWithTheme(<CodeInput value="" onChangeText={onChangeText} />);
+      fireEvent.changeText(screen.getByTestId('code-hidden-input'), messageWith({ code: 'K7P3AB' }));
+      expect(onChangeText.mock.calls).toStrictEqual([['K7P3AB']]);
+    });
+
+    it('6자가 찬 상태에서 새 메시지를 붙이면 새 코드로 통째 바꾼다', () => {
+      const onChangeText = jest.fn();
+      renderWithTheme(<CodeInput value="K7P3AB" onChangeText={onChangeText} />);
+      fireEvent.changeText(screen.getByTestId('code-hidden-input'), `K7P3AB초대코드: Q9W8E7`);
+      expect(onChangeText.mock.calls).toStrictEqual([['Q9W8E7']]);
+    });
+
+    it('두 글자 입력 뒤 붙여넣어도 이어 붙이지 않고 새 코드로 바꾼다', () => {
+      const onChangeText = jest.fn();
+      renderWithTheme(<CodeInput value="K7" onChangeText={onChangeText} />);
+      fireEvent.changeText(screen.getByTestId('code-hidden-input'), 'K7초대코드: Q9W8E7');
+      expect(onChangeText.mock.calls).toStrictEqual([['Q9W8E7']]);
+    });
+
+    it('6자가 찬 뒤 한 글자를 더 치면 무시한다(기존 동작)', () => {
+      const onChangeText = jest.fn();
+      renderWithTheme(<CodeInput value="K7P3AB" onChangeText={onChangeText} />);
+      fireEvent.changeText(screen.getByTestId('code-hidden-input'), 'K7P3ABX');
+      expect(onChangeText.mock.calls).toStrictEqual([['K7P3AB']]);
+    });
   });
 
   it('value의 글자를 각 셀에 표시한다', () => {
@@ -271,6 +340,36 @@ describe('CodeInput', () => {
       focusSpy.mockClear();
       fireEvent.press(screen.getByTestId('code-cell-3', INCLUDE_HIDDEN));
       expect(focusSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // invite-share(U24 ② "지우기"): 부모가 코드를 비운 뒤 키보드를 다시 올리려면 숨김 입력란에 포커스를 요청할 수단이 필요하다.
+  //   inputRef는 그 수단만 노출한다 — 포커스를 언제 요청할지는 부모(JoinLogScreen handleClear) 몫이다.
+  describe('부모 ref로 포커스 요청 (inputRef)', () => {
+    let focusSpy: jest.SpyInstance;
+    beforeEach(() => {
+      focusSpy = jest.spyOn(TextInput.prototype, 'focus');
+    });
+    afterEach(() => {
+      focusSpy.mockRestore();
+    });
+
+    it('inputRef를 넘기면 그 ref가 숨김 입력란을 가리킨다 — ref로 요청한 포커스가 입력란에 닿는다', () => {
+      const inputRef = React.createRef<TextInput>();
+      renderWithTheme(<CodeInput value="" onChangeText={() => {}} inputRef={inputRef} />);
+      focusSpy.mockClear();
+      inputRef.current?.focus();
+      expect(focusSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('inputRef를 넘겨도 셀 영역 탭은 같은 입력란(그 ref의 인스턴스)에 포커스를 요청한다', () => {
+      const inputRef = React.createRef<TextInput>();
+      renderWithTheme(<CodeInput value="" onChangeText={() => {}} inputRef={inputRef} />);
+      focusSpy.mockClear();
+      fireEvent.press(screen.getByTestId('code-cell-3', INCLUDE_HIDDEN));
+      expect(focusSpy).toHaveBeenCalledTimes(1);
+      expect(inputRef.current).not.toBeNull();
+      expect(focusSpy.mock.contexts[0]).toBe(inputRef.current);
     });
   });
 });
