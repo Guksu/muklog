@@ -42,3 +42,6 @@ yarn-error.*
 # claude
 .claude/skills/ui-design/*
 _workspace/
+
+# Supabase CLI 로컬 상태(link가 프로젝트 ref 저장 — 커밋 금지)
+supabase/.temp/
