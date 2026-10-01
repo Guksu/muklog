@@ -37,8 +37,11 @@ describe('app.json OTA 설정 계약 (T1)', () => {
   // 2026-08-30: 1.2.0 → 1.3.0. expo-updates를 심은 첫 릴리스라 §7 (C)가 요구한 bump이며,
   //   ASC가 1.2.0 트레인을 닫아(90062·90186) 재제출 자체가 불가능했다.
   //   runtimeVersion 정책이 appVersion이므로 이 값이 곧 OTA 런타임 문자열이다.
-  it('version은 1.3.0이다(expo-updates 최초 탑재 릴리스 — architecture §7 (C))', () => {
-    expect(expo.version).toBe('1.3.0');
+  // 2026-10-01: 1.3.0 → 1.4.0. 지도 WebView 복구·초대 공유·합류 알림 등 33커밋 스토어 릴리스.
+  //   app.json 위치 권한 키(locationAlways* false) 변경이 네이티브 설정이라 §7 (B)상 version을 올려야 한다.
+  //   구 아키텍처(newArchEnabled false) 유지 — 새 아키텍처 전환은 1.5.0(SDK 업그레이드·Android 출시와 함께).
+  it('version은 1.4.0이다(architecture §7 (B) — 네이티브 설정 변경 뒤 첫 스토어 릴리스)', () => {
+    expect(expo.version).toBe('1.4.0');
   });
 
   // expo-updates 플러그인은 app.json에 추가하지 않는다 — @expo/prebuild-config의 versionedExpoSDKPackages에
