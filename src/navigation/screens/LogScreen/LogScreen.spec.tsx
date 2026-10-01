@@ -261,6 +261,9 @@ jest.mock('@/components', () => {
 });
 
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn().mockResolvedValue(true) }));
+// 외부 SDK 경계(supabase) 대역 — join-push V3 테스트만 실제 useRoomMembers 를 써서 이 대역의 rpc 로 멤버를 받는다.
+//   그 밖의 테스트는 데이터 훅을 통째로 대역하므로 supabase 를 부르지 않는다(실 클라이언트 생성 0).
+jest.mock('@/lib/supabase', () => ({ supabase: { rpc: jest.fn() } }));
 
 // auth: meId 제공(작성자 라벨 파생용). MuklogList는 더블로 대체(supabase 비유입, 자체 spec에서 검증).
 jest.mock('@/features/auth', () => ({
@@ -388,6 +391,7 @@ import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { SWAP_TRANSITION_TEST_ID } from '@/components/SwapTransition';
 import { useRoom, useRoomMembers, useRenameRoom } from '@/features/room';
 import { useProfileContext } from '@/features/profile';
+import { supabase } from '@/lib/supabase';
 import { LogScreen } from './LogScreen';
 
 const useRoomMock = useRoom as jest.Mock;
@@ -792,6 +796,11 @@ describe('LogScreen — 로그 이름(log-name, T6)', () => {
 
   it('커플(memberCount>=2)이면 다이얼로그에 초대코드(extra)를 노출하지 않는다 (AC2.5)', () => {
     setRoomState(readyRoom({ name: null, memberCount: 2 }));
+    // join-push: 커플 판정이 멤버 목록 수를 따르므로 대역을 room.memberCount 와 맞춘다(2명).
+    setMembersState({
+      status: 'ready',
+      members: [memberRow('me-uid', '민지'), memberRow('p-uid', '지현')],
+    });
     renderWithTheme(<LogScreen />);
     fireEvent.press(screen.getByLabelText('더보기'));
     fireEvent.press(screen.getByLabelText('probe-select-rename'));
@@ -1322,16 +1331,19 @@ describe('LogScreen — 위시리스트 세그먼트(wishlist, TC-6/B7 · TC-1·
     });
   });
 
-  it('재포커스(에디터/상세 복귀) 시 먹로그·위시 목록을 함께 refresh (다녀왔어요/삭제 반영, 폴링 아님)', () => {
+  it('재포커스(에디터/상세 복귀) 시 먹로그·위시·멤버 목록을 함께 refresh (다녀왔어요/삭제/합류 반영, 폴링 아님)', () => {
     renderWithTheme(<LogScreen />);
     // 첫 포커스(마운트)는 가드 → refresh 미호출.
     expect(refreshMuklogs).not.toHaveBeenCalled();
     expect(refreshWishlist).not.toHaveBeenCalled();
+    expect(membersRefresh).not.toHaveBeenCalled();
     act(() => {
       refireFocus();
     });
     expect(refreshMuklogs).toHaveBeenCalledTimes(1);
     expect(refreshWishlist).toHaveBeenCalledTimes(1);
+    // join-push(AC21): 멤버 목록도 포커스당 1회(참여자 블록·커플 판정이 새 멤버를 반영).
+    expect(membersRefresh).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1387,6 +1399,11 @@ describe('LogScreen — room-lifecycle 나가기/예약삭제 배선 (T9~T11)', 
 
   it('커플(memberCount>=2)이면 isCouple=true 로 시트에 전달한다 (24h 유예 카피 분기 근거)', () => {
     setRoomState(readyCouple());
+    // join-push: 커플 판정이 멤버 목록 수를 따르므로 대역을 room.memberCount 와 맞춘다(2명).
+    setMembersState({
+      status: 'ready',
+      members: [memberRow('me-uid', '민지'), memberRow('p-uid', '지현')],
+    });
     renderWithTheme(<LogScreen />);
     expect(sheetsText()).toContain('couple:true');
   });
@@ -1518,6 +1535,209 @@ describe('LogScreen — room-lifecycle 나가기/예약삭제 배선 (T9~T11)', 
       expect(screen.getByText('이미 삭제 예약이 해제됐거나 없는 로그예요.')).toBeTruthy(),
     );
     expect(refresh).toHaveBeenCalled();
+  });
+});
+
+// ── 합류 알림 → 로그 화면 멤버 갱신(join-push U74 · plan AC21·AC22 · R8) ─────────────────────────────
+//   seam = 화면이 쓰는 멤버 refresh 호출 횟수(재포커스·같은 화면 알림 탭) + 나가기 시트 couple 값 + 이름 변경 다이얼로그.
+//   같은 로그 화면이 맨 위일 때 알림을 누르면 React Navigation 은 params(pushTapAt)만 바꾼다 — rerender 로 흉내 낸다.
+describe('LogScreen — 합류 알림 멤버 갱신(join-push U74)', () => {
+  const readyRoom = (over?: Record<string, unknown>) => ({
+    status: 'ready',
+    room: {
+      roomId: 'r1',
+      inviteCode: 'ABCDEF',
+      memberCount: 1,
+      mode: 'couple',
+      name: null,
+      deleteScheduledAt: null,
+      deleteRequestedBy: null,
+      ...over,
+    },
+  });
+  const twoMembers = [memberRow('me-uid', '민지'), memberRow('p-uid', '지현')];
+  // 나가기 시트 probe 문자열에서 couple 값만 정확히 꺼낸다(다른 필드가 대신 만족시키지 못하게).
+  const coupleValue = (): string | undefined =>
+    /\|couple:(true|false)\|/.exec(screen.getByText(/^menu:/).props.children as string)?.[1];
+
+  it('AC21: 재포커스마다 멤버 refresh 1회씩(첫 포커스 = 마운트 조회와 겹쳐 0)', () => {
+    setRoomState(readyRoom());
+    renderWithTheme(<LogScreen />);
+    expect(membersRefresh).not.toHaveBeenCalled();
+    act(() => {
+      refireFocus();
+    });
+    expect(membersRefresh).toHaveBeenCalledTimes(1);
+    act(() => {
+      refireFocus();
+    });
+    expect(membersRefresh).toHaveBeenCalledTimes(2);
+    // plan D6-3: get_room(useRoom 의 refresh)은 재포커스 때 다시 부르지 않는다 — 실패하면 화면 전체가 ErrorRetryView 로 바뀐다.
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('AC21: 같은 로그 화면에서 알림 탭(params.pushTapAt 새 값) → 멤버만 1회 다시 불러온다', () => {
+    setRoomState(readyRoom());
+    mockParams.current = { roomId: 'r1' };
+    const { rerender } = renderWithTheme(<LogScreen />);
+    expect(membersRefresh).not.toHaveBeenCalled();
+
+    mockParams.current = { roomId: 'r1', pushTapAt: 111 };
+    rerender(<LogScreen />);
+    expect(membersRefresh).toHaveBeenCalledTimes(1);
+    // 비용 상한: 알림 탭 1번 = 멤버 조회 1번(기록·위시·get_room 은 다시 부르지 않는다 — plan D6-3).
+    expect(refreshMuklogs).not.toHaveBeenCalled();
+    expect(refreshWishlist).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+
+    // 같은 값으로 다시 렌더 → 그대로 1회. 새 탭 → 1회 더.
+    rerender(<LogScreen />);
+    expect(membersRefresh).toHaveBeenCalledTimes(1);
+    mockParams.current = { roomId: 'r1', pushTapAt: 222 };
+    rerender(<LogScreen />);
+    expect(membersRefresh).toHaveBeenCalledTimes(2);
+  });
+
+  it('AC21: pushTapAt 을 안고 마운트하면(콜드스타트·새로 쌓임) 멤버 refresh 0 — 마운트 조회가 이미 있다', () => {
+    setRoomState(readyRoom());
+    mockParams.current = { roomId: 'r1', pushTapAt: 111 };
+    renderWithTheme(<LogScreen />);
+    expect(membersRefresh).not.toHaveBeenCalled();
+  });
+
+  // QA F-S1: 화면이 훅에 실제 roomId 를 넘기는지(상수·빈 값이면 다른 로그 알림 탭 1번에 멤버 조회가 2번이 된다 — AC20 상한).
+  it('AC20·AC21: 다른 로그 알림 탭(roomId·pushTapAt 함께 바뀜) → 멤버 refresh 0(roomId 재조회가 이미 있다)', () => {
+    setRoomState(readyRoom());
+    mockParams.current = { roomId: 'r1' };
+    const { rerender } = renderWithTheme(<LogScreen />);
+    mockParams.current = { roomId: 'r2', pushTapAt: 111 };
+    rerender(<LogScreen />);
+    expect(membersRefresh).not.toHaveBeenCalled();
+
+    // 바뀐 로그(r2)에서 다시 알림을 누르면 그때는 1회 — 훅이 꺼진 것이 아니라 roomId 를 보고 건너뛴 것이다.
+    mockParams.current = { roomId: 'r2', pushTapAt: 222 };
+    rerender(<LogScreen />);
+    expect(membersRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC22: room.memberCount 가 1 이어도 멤버 2명이 준비되면 커플로 판단한다(나가기 시트·다이얼로그 카드·이름 폴백)', () => {
+    setRoomState(readyRoom({ memberCount: 1 }));
+    setMembersState({ status: 'ready', members: twoMembers });
+    renderWithTheme(<LogScreen />);
+    expect(coupleValue()).toBe('true');
+
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
+    expect(screen.queryByLabelText('rename-extra')).toBeNull();
+    // 이름 폴백(placeholder)도 같은 멤버 수 — 2명 기준 "{닉} · 짝꿍".
+    expect(screen.getByLabelText('로그 이름').props.placeholder).toBe('민지 · 짝꿍');
+  });
+
+  it('AC22: room.memberCount 가 2 여도 멤버 목록이 1명으로 준비되면 솔로로 판단한다(멤버 목록 우선)', () => {
+    setRoomState(readyRoom({ memberCount: 2 }));
+    setMembersState({ status: 'ready', members: [memberRow('me-uid', '민지')] });
+    renderWithTheme(<LogScreen />);
+    expect(coupleValue()).toBe('false');
+  });
+
+  it('AC22: 멤버가 error 면 room.memberCount 로 돌아간다(2 → 커플)', () => {
+    setRoomState(readyRoom({ memberCount: 2 }));
+    setMembersState({ status: 'error', message: '연결에 실패했어요. 다시 시도해 주세요.' });
+    renderWithTheme(<LogScreen />);
+    expect(coupleValue()).toBe('true');
+  });
+
+  it('AC22: 멤버가 loading 이면 room.memberCount 로 판단한다(1 → 솔로, 다이얼로그 카드 있음)', () => {
+    setRoomState(readyRoom({ memberCount: 1 }));
+    setMembersState({ status: 'loading' });
+    renderWithTheme(<LogScreen />);
+    expect(coupleValue()).toBe('false');
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
+    expect(screen.getByLabelText('rename-extra')).toBeTruthy();
+  });
+
+  // QA F-S2: 위 1명 케이스만으로는 "loading 이면 0명" 구현도 같은 답(솔로)을 낸다 — 2명으로 갈래를 잠근다.
+  //   틀어지면 커플 로그의 나가기 시트가 솔로 문구(즉시 삭제)를 보인다(서버는 24시간 뒤 삭제 예약).
+  it('AC22: 멤버가 loading 이고 room.memberCount 가 2 면 커플로 판단한다(다이얼로그 카드 없음·이름 폴백 2명 꼴)', () => {
+    setRoomState(readyRoom({ memberCount: 2 }));
+    setMembersState({ status: 'loading' });
+    renderWithTheme(<LogScreen />);
+    expect(coupleValue()).toBe('true');
+    fireEvent.press(screen.getByLabelText('더보기'));
+    fireEvent.press(screen.getByLabelText('probe-select-rename'));
+    expect(screen.queryByLabelText('rename-extra')).toBeNull();
+    expect(screen.getByLabelText('로그 이름').props.placeholder).toBe('민지 · 짝꿍');
+  });
+
+  // ── join-push V3(리더 결정 2026-10-01) — 멤버 재조회가 실패해도 이미 보이던 화면을 바꾸지 않는다 ─────────────
+  //   ① 한 번도 멤버를 불러오지 못했으면(loading·error) 제목은 get_room memberCount 기반 폴백(홈 카드와 같은 displayLogName 꼴).
+  //   ② 이미 ready 였으면 재조회가 실패해도 직전 목록 유지 — 제목·참여자 블록·나가기 시트 판정이 같은 목록을 따른다.
+  it('V3: 멤버 첫 조회가 실패하면(error) 제목은 room.memberCount 기반 폴백 — 2명이면 "{닉} · 짝꿍"(솔로 꼴 아님)', () => {
+    setRoomState(readyRoom({ memberCount: 2 }));
+    setMembersState({ status: 'error', message: '연결에 실패했어요. 다시 시도해 주세요.' });
+    renderWithTheme(<LogScreen />);
+    expect(screen.getByText('민지 · 짝꿍')).toBeTruthy();
+    expect(screen.queryByText('민지의 기록')).toBeNull();
+    expect(screen.queryByLabelText('participant-block')).toBeNull();
+  });
+
+  it('V3: 멤버를 아직 불러오는 중(loading)이어도 같은 폴백 — 2명이면 "{닉} · 짝꿍"', () => {
+    setRoomState(readyRoom({ memberCount: 2 }));
+    setMembersState({ status: 'loading' });
+    renderWithTheme(<LogScreen />);
+    expect(screen.getByText('민지 · 짝꿍')).toBeTruthy();
+  });
+
+  it('V3: 멤버를 불러오지 못해도 로그 이름이 있으면 그 이름이 제목이다', () => {
+    setRoomState(readyRoom({ memberCount: 2, name: '을지로 투어' }));
+    setMembersState({ status: 'error', message: '연결에 실패했어요. 다시 시도해 주세요.' });
+    renderWithTheme(<LogScreen />);
+    expect(screen.getByText('을지로 투어')).toBeTruthy();
+    expect(screen.queryByText('민지 · 짝꿍')).toBeNull();
+  });
+
+  // 실제 useRoomMembers(+ useOneShotQuery keepLastReady)를 쓰고 외부 SDK 경계(supabase.rpc)만 대역으로 둔다.
+  //   훅 대역이 상태를 정하면 화면은 무엇이든 통과하므로, "재조회 실패 → 직전 목록 유지"는 실제 훅이 하중을 지는 이 테스트로 본다.
+  it('V3: 재포커스 재조회가 실패해도 참여자 블록·제목·나가기 시트 판정이 그대로다(실제 멤버 훅 — rpc 만 대역)', async () => {
+    const rpcMock = supabase.rpc as jest.Mock;
+    rpcMock.mockReset();
+    const { useRoomMembers: actualUseRoomMembers } = jest.requireActual(
+      '@/features/room/useRoomMembers',
+    );
+    useRoomMembersMock.mockImplementation(actualUseRoomMembers);
+    // 합류 알림을 눌러 들어온 직후처럼: get_room 은 아직 1명(마운트 때 값), 멤버 목록은 2명.
+    setRoomState(readyRoom({ memberCount: 1 }));
+    rpcMock.mockResolvedValueOnce({
+      data: [
+        { user_id: 'me-uid', nickname: '민지', avatar_url: null },
+        { user_id: 'p-uid', nickname: '지현', avatar_url: null },
+      ],
+      error: null,
+    });
+    renderWithTheme(<LogScreen />);
+    expect(await screen.findByText('참여자 2|canInvite:true|meId:me-uid')).toBeTruthy();
+    expect(screen.getByText('민지 · 지현')).toBeTruthy();
+    expect(coupleValue()).toBe('true');
+
+    // 재포커스 → 멤버 재조회 1회가 실패한다(신호 약한 곳에서 상세에 다녀옴 등).
+    rpcMock.mockResolvedValueOnce({ data: null, error: new Error('NETWORK') });
+    act(() => {
+      refireFocus();
+    });
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(2));
+    // 실패 응답이 훅에 도착할 때까지 한 틱 정착시킨다(useCachedQuery.spec H8 과 같은 방식).
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(screen.getByText('참여자 2|canInvite:true|meId:me-uid')).toBeTruthy();
+    expect(screen.getByText('민지 · 지현')).toBeTruthy();
+    expect(coupleValue()).toBe('true');
+    expect(rpcMock.mock.calls).toEqual([
+      ['list_room_members', { p_room_id: 'r1' }],
+      ['list_room_members', { p_room_id: 'r1' }],
+    ]);
   });
 });
 

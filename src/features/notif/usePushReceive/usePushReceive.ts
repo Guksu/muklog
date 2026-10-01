@@ -3,7 +3,8 @@
 //   (a) setNotificationHandler로 포그라운드 배너 표시, (b) 탭 응답 리스너(백그라운드), (c) 콜드스타트 응답 1회 조회.
 //   각 응답 → resolveNotificationTarget → navigateToTarget(nav 준비 전이면 대기 큐).
 //
-// 생산자: send-muklog-push 발송 payload data:{roomId, muklogId}. 소비자: 이 훅 → deepLinkRouter → navigationRef.
+// 생산자: send-muklog-push 발송 payload data:{roomId, muklogId} · send-join-push data:{type:'member_joined', roomId}(join-push).
+// 소비자: 이 훅 → deepLinkRouter → navigationRef.
 // 정책(비용 가드레일 §8): 폴링/Realtime/상시연결 0. 리스너·콜드스타트는 이벤트 기반. getLastNotificationResponseAsync는 1회.
 // 네이티브 안전(S1 준용): requireOptionalNativeModule probe → 미탑재(Dev Client 재빌드 전)면 SDK 미접촉·no-op·throw 0.
 import { useEffect, useRef } from 'react';

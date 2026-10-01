@@ -7,6 +7,9 @@
 //
 // 정책: 진입(roomId 변경) 1회 조회 + 명시적 refresh()만. 폴링/Realtime 미도입(비용 가드레일 §8).
 //   로딩/에러/마운트 가드/refresh 는 useOneShotQuery 가 소유(진입 1회 + 명시적 refresh).
+//   join-push V3: 재조회(LogScreen 재포커스·같은 화면 알림 탭)가 실패해도 이미 ready 였던 목록을 그대로 둔다(keepLastReady).
+//     목록 하나로 참여자 블록·로그 제목·나가기 시트 커플 판정이 함께 정해지므로, 재조회 1회 실패로 그 셋이 솔로 꼴로 바뀌지 않게 한다.
+//     roomId 가 바뀐 뒤의 실패는 이전 로그의 멤버를 남기지 않고 error(다른 로그 화면에 섞이지 않게).
 //
 // ⚠️ RoomMember 타입은 logName.ts 정의를 re-export(중복 정의 금지 — ui-spec §7-1 계약 단일 출처).
 import { supabase } from '@/lib/supabase';
@@ -60,5 +63,6 @@ export const useRoomMembers = ({ roomId }: { roomId: string }): {
     deps: [roomId],
     fetch: fetchMembers,
     mapError: (error) => mapRoomError({ error }),
+    keepLastReady: true,
   });
 };

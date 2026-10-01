@@ -87,6 +87,19 @@ describe('usePushReceive (T4)', () => {
     });
   });
 
+  // join-push(U74, plan AC18 · R6): 합류 알림 탭 → 로그 화면(muklogId 가 섞여 와도).
+  it('합류 알림(member_joined) 탭 → navigateToTarget(LogScreen)', async () => {
+    renderHook(() => usePushReceive());
+    await flush();
+    const listener = notif.addNotificationResponseReceivedListener.mock.calls[0][0] as (
+      r: unknown,
+    ) => void;
+    act(() => listener(responseWith({ data: { type: 'member_joined', roomId: 'r1', muklogId: 'm1' } })));
+    expect(navigateMock.mock.calls).toEqual([
+      [{ target: { screen: 'LogScreen', params: { roomId: 'r1' } } }],
+    ]);
+  });
+
   it('AC13: 콜드스타트 응답 있으면 동일 라우팅', async () => {
     notif.getLastNotificationResponseAsync.mockResolvedValue(
       responseWith({ data: { muklogId: 'm2' } }),

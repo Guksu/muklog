@@ -6,6 +6,10 @@
 //   하단: MuklogList(맛집 리스트 + 카테고리 필터 칩 + "우리 맛집 N" 섹션 + FAB) — 칩/필터/섹션 배선은 developer(MuklogList).
 //
 // 생산자(소비): useRoom(get_room)→RoomDetail / useProfile(본인 닉/아바타) / useAuth(meId). 스타일=토큰만(raw hex 0).
+// join-push(U74): 멤버 목록은 재포커스마다 + 같은 화면 알림 탭(params.pushTapAt)마다 1회 다시 불러온다(폴링 0).
+//   커플 판정·이름 폴백의 멤버 수는 멤버 목록이 준비되면 그 수, 아니면 get_room 의 memberCount.
+//   V3: 재조회가 실패해도 useRoomMembers 가 직전 목록을 유지한다(제목·참여자 블록·나가기 시트가 같은 목록). 한 번도 불러오지
+//     못했으면(loading·error) 제목은 get_room memberCount 기반 폴백(홈 카드와 같은 displayLogName 꼴).
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import {
@@ -70,6 +74,7 @@ import { useTheme } from '@/theme';
 import { pickEditorPrefill } from '../../pickEditorPrefill';
 import { Routes, type AppStackParamList } from '../../routes';
 import { useRefreshOnFocus } from '../../useRefreshOnFocus';
+import { useRefreshOnPushTap } from '../../useRefreshOnPushTap';
 
 // 로그 내부 세그먼트 키(enum-style 단일 출처) — 'log'(기록)/'wish'(위시리스트). 기본 'log'.
 const LogSeg = { Log: 'log', Wish: 'wish' } as const;
@@ -153,9 +158,9 @@ export const LogScreen = () => {
 
   // ⚠️ 훅은 조건부 호출 불가 → roomId/meId 없을 때도 안전한 값으로 호출하고 렌더에서 분기.
   const { state, refresh } = useRoom({ roomId: roomId ?? '' });
-  // 참여자 블록/제목 파생용 멤버 목록(members-display S5b, list_room_members). 진입 1회(비용 §8, 폴링 0).
+  // 참여자 블록/제목 파생용 멤버 목록(members-display S5b, list_room_members). 진입 1회 + 재포커스·알림 탭 재조회(폴링 0).
   //   loading/error는 best-effort — 리스트/화면을 막지 않고 참여자 블록만 미렌더(plan §4.1).
-  const { state: membersState } = useRoomMembers({ roomId: roomId ?? '' });
+  const { state: membersState, refresh: refreshMembers } = useRoomMembers({ roomId: roomId ?? '' });
   // #2: 공유 프로필 context — ProfileScreen 변경이 이 화면 헤더/이름 폴백에도 즉시 전파.
   const { state: profileState } = useProfileContext();
   const { renameRoom, loading: renaming, error: renameError } = useRenameRoom();
@@ -200,13 +205,23 @@ export const LogScreen = () => {
   // 초대 공유·복사(invite-share U72) — 참여자 "초대"와 솔로 다이얼로그 카드가 쓴다. 조기 반환 위(훅 규칙).
   const { shareInvite, copyInviteCode } = useInviteShare();
 
-  // 재포커스(에디터/상세 복귀) 시 두 목록을 함께 1회 refresh(첫 포커스=마운트 로드와 겹쳐 가드). 폴링 아님(plan §6·§10).
-  //   다녀왔어요 플로우(먹로그+1·위시-1)·삭제·편집 반영을 단일 포커스 훅으로 처리(두 소스는 콜백에서 조합).
+  // 재포커스(에디터/상세 복귀) 시 세 목록을 함께 1회 refresh(첫 포커스=마운트 로드와 겹쳐 가드). 폴링 아님(plan §6·§10).
+  //   다녀왔어요 플로우(먹로그+1·위시-1)·삭제·편집 반영을 단일 포커스 훅으로 처리(소스는 콜백에서 조합).
+  //   join-push(U74): 멤버 목록도 함께 — 다른 화면에 있다가 돌아오면 그사이 들어온 사람이 참여자 블록에 보인다.
+  //   get_room 은 다시 부르지 않는다(실패하면 화면 전체가 ErrorRetryView 로 바뀐다) — 커플 판정은 아래 memberCount 가 멤버 목록을 따른다.
   useRefreshOnFocus({
     refresh: () => {
       void refreshMuklogs();
       void refreshWishlist();
+      void refreshMembers();
     },
+  });
+  // 같은 로그 화면이 맨 위에 있을 때 그 로그의 알림을 누르면 params(pushTapAt)만 바뀌고 포커스 이벤트가 없다(join-push).
+  //   그 탭마다 멤버만 1회 다시 불러온다 — 초대 공유 → 카카오톡 → 상대 입장 → 합류 알림 탭이 바로 이 경로다. 조기 반환 위(훅 규칙).
+  useRefreshOnPushTap({
+    roomId: roomId ?? '',
+    pushTapAt: route.params?.pushTapAt,
+    refresh: refreshMembers,
   });
 
   if (!roomId) {
@@ -346,23 +361,26 @@ export const LogScreen = () => {
   };
 
   const { room } = state;
-  const isCouple = room.memberCount >= 2;
 
   // 멤버 목록(members-display S5b) — ready면 실 멤버, 아니면 빈 배열(제목/블록 폴백 회귀).
   const members = membersState.status === 'ready' ? membersState.members : [];
+  // 멤버 수 기준 통일(join-push D6-3): 멤버 목록이 준비되면 그 수, 아니면 get_room 값. 멤버만 다시 불러와도
+  //   참여자 블록·나가기 시트 문구(커플=24시간 뒤 삭제 예약 / 솔로=즉시 삭제)·다이얼로그 초대 카드·이름 폴백이 함께 맞는다.
+  const memberCount = membersState.status === 'ready' ? members.length : room.memberCount;
+  const isCouple = memberCount >= 2;
 
   // 헤더 표시명 — name 우선(현행), 없으면 멤버-기반 파생(logTitleFromMembers, 킷 mkLogTitle).
-  //   멤버 미로드(빈 배열)면 유틸 내부에서 displayLogName 폴백으로 회귀(회귀 0, plan §4.2).
-  const title = logTitleFromMembers({
-    name: room.name,
-    members,
-    meId,
-    selfNickname: meNickname,
-  });
+  //   멤버를 한 번도 불러오지 못했으면(loading·error) get_room 멤버 수로 폴백한다(join-push V3 — 홈 카드와 같은
+  //   displayLogName 꼴). 멤버 목록 없이 logTitleFromMembers 를 쓰면 커플 로그도 솔로 꼴 "{닉}의 기록"이 된다.
+  //   재조회 실패는 useRoomMembers 가 직전 ready 를 유지하므로 여기까지 오지 않는다(첫 조회 로딩·실패만).
+  const title =
+    membersState.status === 'ready'
+      ? logTitleFromMembers({ name: room.name, members, meId, selfNickname: meNickname })
+      : displayLogName({ name: room.name, memberCount, selfNickname: meNickname });
   // 시트 placeholder = 이름 없을 때의 폴백명(displayLogName name:null). 입력 초기값은 이름 있으면 name·없으면 빈 문자열.
   const fallbackName = displayLogName({
     name: null,
-    memberCount: room.memberCount,
+    memberCount,
     selfNickname: meNickname,
   });
 

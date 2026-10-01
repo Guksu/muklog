@@ -1,1 +1,5 @@
-export { resolveNotificationTarget, type NotificationTarget } from './notificationTarget';
+export {
+  NotificationType,
+  resolveNotificationTarget,
+  type NotificationTarget,
+} from './notificationTarget';

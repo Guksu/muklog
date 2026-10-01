@@ -10,6 +10,8 @@
 //   - fetch 는 성공 시 ready payload 를 반환하고, 실패(에러/BAD_RESPONSE)는 throw 한다(mapError 로 메시지화).
 //   - refresh() 는 재조회하되 의도적으로 loading 으로 되돌리지 않는다(기존 정책 계승).
 //   - deps 변경 시에만 재조회(마운트 포함). 매 렌더 새 fetch 참조여도 재조회 루프 없음(ref 로 최신 클로저 유지).
+//   - 재조회 실패는 기본으로 error(기존 계약). 선택 옵션 keepLastReady 를 켠 소비처만 "같은 deps 에서 이미 ready 였으면
+//     직전 ready 유지"(join-push V3 — useRoomMembers 만 켠다). 기본값을 바꾸는 것은 U14 범위라 옵션으로만 둔다.
 import React, { useEffect, useRef, useState } from 'react';
 
 /** 조회 상태 판별유니온 — ready 는 payload(T)의 named 필드를 그대로 펼친다. */
@@ -23,16 +25,20 @@ export type OneShotState<T> =
  * @param deps 재조회 트리거(마운트 + 변경 시). roomId 등 — 폴링 방지용으로 좁게 유지.
  * @param fetch 조회+매핑. 성공 시 ready payload(객체) 반환, 실패 시 throw.
  * @param mapError throw 된 에러를 사용자 메시지로 변환(각 도메인 mapXxxError).
+ * @param keepLastReady 선택 옵션(기본 false = 재조회 실패면 error). true 면 같은 deps 에서 이미 ready 였을 때 재조회 실패를
+ *   삼키고 직전 ready 를 그대로 둔다. deps 가 바뀐 뒤 아직 ready 가 없으면(이전 deps 의 값만 있으면) 기본과 같이 error.
  * @returns state(판별유니온)와 refresh(재조회).
  */
 export const useOneShotQuery = <T extends object>({
   deps,
   fetch,
   mapError,
+  keepLastReady = false,
 }: {
   deps: React.DependencyList;
   fetch: () => Promise<T>;
   mapError: (error: unknown) => string;
+  keepLastReady?: boolean;
 }): { state: OneShotState<T>; refresh: () => Promise<void> } => {
   const [state, setState] = useState<OneShotState<T>>({ status: 'loading' });
   const mountedRef = useRef(true);
@@ -41,14 +47,23 @@ export const useOneShotQuery = <T extends object>({
   fetchRef.current = fetch;
   const mapErrorRef = useRef(mapError);
   mapErrorRef.current = mapError;
+  // deps 세대 — deps 가 바뀔 때마다(마운트 포함) 1 늘린다. 지금 ready 가 "지금 deps 의 값"인지 가리는 데 쓴다(keepLastReady).
+  const depsGenerationRef = useRef(0);
+  // 지금 ready 를 만든 조회가 속했던 deps 세대(아직 ready 가 없으면 null).
+  const readyGenerationRef = useRef<number | null>(null);
 
   const refresh = async (): Promise<void> => {
+    const generation = depsGenerationRef.current;
     try {
       const data = await fetchRef.current();
       if (!mountedRef.current) return;
+      readyGenerationRef.current = generation;
       setState({ status: 'ready', ...data });
     } catch (error) {
       if (!mountedRef.current) return;
+      // 직전 ready 유지(선택 옵션) — 지금 deps 에서 이미 ready 였으면 실패를 삼키고 마지막 값을 그대로 둔다.
+      //   deps 가 바뀐 뒤 아직 ready 가 없으면 남은 값은 이전 deps 의 것(다른 로그의 멤버 등)이라 기본과 같이 error 로 간다.
+      if (keepLastReady && readyGenerationRef.current === depsGenerationRef.current) return;
       setState({ status: 'error', message: mapErrorRef.current(error) });
     }
   };
@@ -56,6 +71,7 @@ export const useOneShotQuery = <T extends object>({
   useEffect(
     function loadOnDeps() {
       mountedRef.current = true;
+      depsGenerationRef.current += 1;
       void refresh();
       return function cleanup() {
         mountedRef.current = false;

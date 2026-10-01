@@ -1,16 +1,21 @@
 // src/features/room/useJoinRoom.spec.ts
 // 방 입장 훅 — p_code 인자 계약, roomId 매핑, 토큰별 에러, error 리셋 (plan §5-1 (4), C1·C2).
 //   invite-share(U24 ①, plan R13 — AC20): clearError()로 실패 문구를 지운다(코드가 바뀌면 화면이 호출). rpc·loading 불변.
+//   join-push(U74, plan AC16 · R2): 입장 성공 직후 send-join-push 를 1회 부른다(기다리지 않음). 실패 경로는 0회.
+//     대역은 외부 SDK 경계(supabase.rpc · supabase.functions.invoke)에만 둔다.
 import { act, renderHook } from '@testing-library/react-native';
 
-jest.mock('@/lib/supabase', () => ({ supabase: { rpc: jest.fn() } }));
+jest.mock('@/lib/supabase', () => ({ supabase: { rpc: jest.fn(), functions: { invoke: jest.fn() } } }));
 import { supabase } from '@/lib/supabase';
 import { useJoinRoom } from './useJoinRoom';
 
 const rpc = supabase.rpc as jest.Mock;
+const invokeMock = supabase.functions.invoke as jest.Mock;
 
 beforeEach(() => {
   rpc.mockReset();
+  invokeMock.mockReset();
+  invokeMock.mockResolvedValue({ data: { sent: 0 }, error: null });
 });
 
 describe('useJoinRoom', () => {
@@ -144,5 +149,68 @@ describe('useJoinRoom — clearError (invite-share AC20)', () => {
     expect(result.current.error).toBeNull();
     expect(result.current.loading).toBe(false);
     expect(rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe('useJoinRoom — 합류 알림 요청(join-push U74 · AC16)', () => {
+  it('입장 성공 → send-join-push 를 { roomId: 응답 room_id } 로 정확히 1회 부른다', async () => {
+    rpc.mockResolvedValueOnce({ data: { room_id: 'r1' }, error: null });
+    const { result } = renderHook(() => useJoinRoom());
+
+    await act(async () => {
+      await result.current.joinRoom({ code: 'ABCDEF' });
+    });
+
+    expect(invokeMock.mock.calls).toEqual([['send-join-push', { body: { roomId: 'r1' } }]]);
+  });
+
+  it.each([
+    ['INVALID_CODE 반환(jsonb { error })', { data: { error: 'INVALID_CODE' }, error: null }],
+    ['ROOM_FULL', { data: null, error: new Error('ROOM_FULL') }],
+    ['TOO_MANY_ATTEMPTS', { data: null, error: new Error('TOO_MANY_ATTEMPTS') }],
+    ['rpc 오류', { data: null, error: new Error('Network request failed') }],
+    ['room_id 없음', { data: {}, error: null }],
+  ])('입장 실패(%s) → 합류 알림 요청 0회', async (_label, response) => {
+    rpc.mockResolvedValueOnce(response);
+    const { result } = renderHook(() => useJoinRoom());
+
+    await act(async () => {
+      await expect(result.current.joinRoom({ code: 'ABCDEF' })).rejects.toBeTruthy();
+    });
+
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it('알림 요청이 끝나지 않아도 joinRoom 은 { roomId } 로 끝나고 loading 은 false 다(기다리지 않음)', async () => {
+    rpc.mockResolvedValueOnce({ data: { room_id: 'r1' }, error: null });
+    // 끝나지 않는 발송 — 기다리면 이 테스트는 시간 초과로 실패한다.
+    invokeMock.mockImplementationOnce(() => new Promise(() => {}));
+    const { result } = renderHook(() => useJoinRoom());
+
+    let res: { roomId: string } | undefined;
+    await act(async () => {
+      res = await result.current.joinRoom({ code: 'ABCDEF' });
+    });
+
+    expect(res).toEqual({ roomId: 'r1' });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('알림 요청이 reject 해도 입장 결과는 그대로다({ roomId }, error null)', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    rpc.mockResolvedValueOnce({ data: { room_id: 'r1' }, error: null });
+    invokeMock.mockRejectedValueOnce(new Error('Network request failed'));
+    const { result } = renderHook(() => useJoinRoom());
+
+    let res: { roomId: string } | undefined;
+    await act(async () => {
+      res = await result.current.joinRoom({ code: 'ABCDEF' });
+    });
+
+    expect(res).toEqual({ roomId: 'r1' });
+    expect(result.current.error).toBeNull();
+    expect(result.current.loading).toBe(false);
+    warn.mockRestore();
   });
 });

@@ -3,6 +3,9 @@
 //   navigateToTarget: nav 준비됐으면 즉시 이동, 아니면 대기 큐 저장(콜드스타트/미인증 타이밍 가드).
 //   consumePendingDeepLink: authenticated+nav ready 시점에 대기 목적지를 1회 소비·이동.
 //   생산자: usePushReceive(수신 응답)·AuthGate onReady(nav ready 게이트). 소비자: navigationRef.navigate.
+//   join-push: LogScreen 으로 갈 때 params 에 pushTapAt(이동하는 순간의 Date.now())을 싣는다. 같은 이름 화면이 맨 위면
+//     React Navigation 7 이 그 화면을 그대로 두고 params 만 바꿔(포커스 이벤트 없음) — LogScreen 이 이 값 변화로 멤버를 1회
+//     다시 불러온다(useRefreshOnPushTap). 대기 큐에는 목적지만 두고, 시각은 꺼내 이동하는 순간에 붙인다.
 import { Routes } from '@/navigation/routes';
 import { navigationRef } from '@/navigation/navigationRef';
 
@@ -17,7 +20,10 @@ const navigateNow = ({ target }: { target: NotificationTarget }): void => {
       navigationRef.navigate(target.screen, target.params);
       return;
     case Routes.LogScreen:
-      navigationRef.navigate(target.screen, target.params);
+      navigationRef.navigate(target.screen, {
+        roomId: target.params.roomId,
+        pushTapAt: Date.now(),
+      });
       return;
   }
 };

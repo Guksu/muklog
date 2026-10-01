@@ -1,15 +1,11 @@
-// src/features/profile/defaultNickname.ts
-// 닉네임 미설정 시 표시 폴백 — userId 기반 결정적 기본 닉네임(동물명 + 4자리 숫자) (#3).
-//   nickname null/빈 화면 폴백("나" 등)을 전부 이 값으로 교체해 화면 간 일관된 신원을 부여한다.
-//   ⚠️ 표시 폴백일 뿐 persist 아님(DB 저장/복원 없음). 같은 userId는 항상 같은 값 → 화면 간 드리프트 0.
-//   예) defaultNickname({ userId: 'u1' }) → "코알라3788".
-//   ⚠️ 서버 이식본: supabase/functions/_shared/defaultNickname.ts(푸시 문구 닉네임 폴백, join-push). 상수·알고리즘을 바꾸면
-//      이식본도 같이 바꾸고 `deno test --allow-env --no-lock supabase/functions/_shared`(이식 일치 테스트)를 돌린다.
-//
-// 소비자: useSelfDisplay(LogList)·HomeHeader·displayLogName·ProfileScreen·LogScreen 등 닉 폴백 지점.
-//   결정적 해시는 avatarDefault.hashKey 와 동일 계열(31진 다항·|0·Math.abs) — 플랫폼 무관·안정.
+// supabase/functions/_shared/defaultNickname.ts
+// 앱 defaultNickname 의 서버 이식본 (join-push plan §5.4 · AC11). 푸시 문구의 닉네임 폴백을 앱 화면 표기와 같게 만든다.
+//   원본: src/features/profile/defaultNickname/defaultNickname.ts — 상수·알고리즘을 글자 그대로 옮겼다.
+//   ⚠️ 한쪽을 바꾸면 다른 쪽도 같이 바꾸고 이식 일치 테스트(defaultNickname.test.ts)를 돌린다.
+//      테스트가 원본을 직접 import 해 고정 표본·무작위 UUID 1,000개에서 두 값이 같은지 비교한다.
+//   순수 함수(import 0) — Deno·앱 어느 쪽에서도 같은 결과(31진 다항 해시·|0·Math.abs).
 
-/** 기본 닉네임 동물명 팔레트(한국어). 결정적 인덱스로 선택. */
+/** 기본 닉네임 동물명 팔레트(한국어). 결정적 인덱스로 선택. 원본과 순서까지 같아야 한다. */
 export const ANIMAL_NAMES = [
   '수달',
   '너구리',
@@ -39,7 +35,7 @@ const NUMBER_BASE = 1000;
 
 /**
  * 문자열 키를 결정적 32비트 해시로 변환한다(비음수). 같은 키 → 같은 값.
- * @param key 해시 대상 문자열(userId 등). 빈/null/undefined는 빈 문자열로 폴백.
+ * @param key 해시 대상 문자열(userId 등)
  * @returns 0 이상의 정수 해시
  */
 const hashKey = ({ key }: { key: string }): number => {
@@ -54,7 +50,7 @@ const hashKey = ({ key }: { key: string }): number => {
 /**
  * userId를 결정적으로 기본 닉네임(동물명 + 4자리 숫자)에 매핑한다. throw 없음(빈/null도 안전).
  * @param userId 안정 키(userId). 빈/null/undefined면 빈 문자열 키로 폴백.
- * @returns 예) "코알라3788"(userId 'u1') — 같은 userId면 항상 동일
+ * @returns 예) defaultNickname({ userId: 'u1' }) → "코알라3788" — 같은 userId면 항상 동일
  */
 export const defaultNickname = ({ userId }: { userId?: string | null }): string => {
   const key = userId ?? '';
